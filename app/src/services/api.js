@@ -74,6 +74,12 @@ export const api = {
   getConversationMessages: (id) => apiClient.get(`/agents/conversations/${id}/messages/`),
   deleteConversation: (id) => apiClient.delete(`/agents/conversations/${id}/`),
   getAgentConversations: (agentId) => apiClient.get(`/agents/${agentId}/conversations/`),
+  // Ramificar: copia el hilo hasta ese mensaje a una conversación nueva.
+  branchConversation: (id, messageId) =>
+    apiClient.post(`/agents/conversations/${id}/ramificar/`, { message_id: messageId }),
+  // Editar la propia pregunta. Borra lo que venía después (devuelve cuántos).
+  editMessage: (convId, messageId, content) =>
+    apiClient.patch(`/agents/conversations/${convId}/messages/${messageId}/`, { content }),
 
   // ── Agents ──
   getAgents: () => apiClient.get('/agents/'),

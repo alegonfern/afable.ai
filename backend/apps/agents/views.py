@@ -14,7 +14,7 @@ from .models import (
 )
 from .serializers import (
     AgentSerializer, AgentTemplateSerializer, ChatRequestSerializer,
-    ConversationSerializer, ConversationListSerializer, DocumentSerializer,
+    ConversationSerializer, ConversationListSerializer, DocumentSerializer, MessageSerializer,
     AutomationSerializer, SkillSerializer, SkillWriteSerializer, RoutineSerializer,
 )
 from apps.organizations.models import Organization
@@ -101,7 +101,7 @@ def _get_user_role_context(user):
     return (' '.join(parts) + '\n\n') if parts else ''
 
 
-def _get_org_context(org, allowed_doc_ids=None):
+def _get_org_context(org, allowed_doc_ids=None, inyectados=None):
     """Contexto de EMPRESA (no del usuario): formulario + índice de documentos
     subidos. Se inyecta siempre, en todos los modos — es lo que no está en
     ninguna tabla conectada (mission, tono, glosario, políticas).
@@ -109,7 +109,13 @@ def _get_org_context(org, allowed_doc_ids=None):
     `allowed_doc_ids` es el alcance del agente según sus Espacios: `None` es sin
     restricción, una lista limita a esos documentos, y una lista vacía deja el
     índice vacío a propósito (un agente encerrado en un Espacio sin documentos
-    no tiene que ver los del resto de la empresa)."""
+    no tiene que ver los del resto de la empresa).
+
+    `inyectados`, si viene, es una lista que se llena con los títulos de los
+    documentos cuyo texto entró completo al prompt. Sirve para citar: cuando el
+    agente responde con el contenido que ya venía en el prompt no llama a ninguna
+    herramienta, así que no queda rastro de procedencia y la respuesta salía sin
+    fuente — justo en el camino más común."""
     from apps.organizations.models import OrganizationContext, CompanyDocument, ContextCubicle
 
     parts = []
@@ -158,6 +164,8 @@ def _get_org_context(org, allowed_doc_ids=None):
             if texto and gastado + min(len(texto), TOPE_POR_DOC) <= PRESUPUESTO_DOCS:
                 recorte = texto[:TOPE_POR_DOC]
                 gastado += len(recorte)
+                if inyectados is not None:
+                    inyectados.append({'id': d.id, 'title': d.title})
                 completos.append(
                     f"### [id={d.id}] {d.title}\n{recorte}"
                     + ('\n[…documento recortado, usa read_company_document({}) para el resto]'.format(d.id)
@@ -247,7 +255,10 @@ Acciones adicionales disponibles:
     # "sin restricción": un agente que no está en ningún Espacio sigue viendo todo
     # lo de su empresa (ver `alcance_de_agente`).
     espacio_conns, espacio_docs = alcance_de_agente(agent)
-    org_ctx = _get_org_context(org, allowed_doc_ids=espacio_docs)
+    docs_en_prompt = []
+    org_ctx = _get_org_context(
+        org, allowed_doc_ids=espacio_docs, inyectados=docs_en_prompt,
+    )
 
     # Primero intenta SystemConnection (arquitectura nueva)
     from apps.organizations.models import SystemConnection
@@ -320,6 +331,7 @@ Acciones adicionales disponibles:
             'org': org,
             'allowed_ids': allowed_ids,
             'allowed_doc_ids': espacio_docs,
+            'docs_en_prompt': docs_en_prompt,
             'agent_model': agent_model,
             'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
 {perm_ctx}{agent_block}
@@ -353,6 +365,7 @@ Responde siempre en español, conciso. Usa markdown para respuestas largas.{ACTI
         if dj_ctx:
             return {
                 'mode': 'dummyjson',
+                'docs_en_prompt': docs_en_prompt,
                 'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
 {perm_ctx}
 {org_ctx}Tienes acceso en tiempo real a los datos de la tienda conectada via DummyJSON.
@@ -364,6 +377,7 @@ Responde siempre en español. Usa markdown para estructurar respuestas largas.{A
             }
         return {
             'mode': 'no_integration',
+            'docs_en_prompt': docs_en_prompt,
             'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
 {perm_ctx}
 {org_ctx}La empresa está creada pero aún no hay sistemas conectados.
@@ -383,6 +397,7 @@ Responde siempre en español, sé conciso y orientado a la acción.{ACTIONS_PROM
     ai_ctx = scan.ai_context[:800] if scan.ai_context else 'Sin contexto de escaneo.'
     return {
         'mode': 'full',
+        'docs_en_prompt': docs_en_prompt,
         'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
 {perm_ctx}
 {org_ctx}Tienes acceso al contexto de datos escaneado de {scan.system_name}:
@@ -470,6 +485,37 @@ def _espacio_del_pedido(request):
         return require_space(membership, espacio_slug)
     except NotFound:
         return None
+
+
+def citar_documentos_del_prompt(texto, docs_en_prompt):
+    """Agrega a la respuesta la línea de fuente de los documentos que la sustentan.
+
+    El agente responde con el contenido de los documentos que ya venían dentro del
+    prompt, sin llamar a ninguna herramienta, así que no hay `provenance` y la
+    respuesta salía sin fuente. Acá se mira qué documentos nombra la respuesta y se
+    citan esos.
+
+    Es deliberadamente conservador: solo cita lo que la respuesta menciona por su
+    título. Preferimos no citar de más — una fuente que el agente en realidad no
+    usó es peor que ninguna, porque invita a confiar en un respaldo que no existe.
+    """
+    if not texto or not docs_en_prompt:
+        return texto
+    if '[Fuente' in texto:  # ya viene citado (por herramientas o por el modelo)
+        return texto
+
+    bajo = texto.lower()
+    nombrados = [d['title'] for d in docs_en_prompt if d['title'] and d['title'].lower() in bajo]
+    if not nombrados:
+        return texto
+
+    # Sin repetir, y conservando el orden en que se inyectaron.
+    vistos, limpios = set(), []
+    for t in nombrados:
+        if t not in vistos:
+            vistos.add(t)
+            limpios.append(t)
+    return f"{texto}\n\n_[Fuente: {', '.join(limpios)}]_"
 
 
 def _agente_inicial(request, message, espacio, default_agent):
@@ -724,7 +770,9 @@ class DirectChatView(APIView):
         else:
             response_text = chat_direct(full_history, system_prompt, model)
 
-        clean_response = _strip_action(response_text)
+        clean_response = citar_documentos_del_prompt(
+            _strip_action(response_text), context.get('docs_en_prompt'),
+        )
         Message.objects.create(
             conversation=conversation, role='assistant', content=clean_response,
             agent=agent, model_used=resolved_model,
@@ -781,10 +829,13 @@ class DirectChatStreamView(APIView):
         context = _build_onboarding_context(request.user, agent, mention_system_id)
         system_prompt = context['system_prompt']
 
-        Message.objects.create(conversation=conversation, role='user', content=message)
+        mensaje_usuario = Message.objects.create(
+            conversation=conversation, role='user', content=message,
+        )
         full_history = list(conversation.messages.values('role', 'content').order_by('created_at'))
 
         conv_id = conversation.id
+        user_message_id = mensaje_usuario.id
         agent_id = agent.id if agent else None
         user = request.user
         mode = context.get('mode')
@@ -793,6 +844,7 @@ class DirectChatStreamView(APIView):
         _, resolved_model = resolve_model(model)
         allowed_ids = context.get('allowed_ids')
         allowed_doc_ids = context.get('allowed_doc_ids')
+        docs_en_prompt = context.get('docs_en_prompt')
         # Quien va a contestar viaja en el primer evento: si la mencion cambio el
         # agente, la pantalla tiene que enterarse antes de que empiece el texto.
         agente_payload = (
@@ -838,18 +890,28 @@ class DirectChatStreamView(APIView):
                     pass
 
             # Clean response before saving
-            clean_response = _strip_action(full_response)
+            clean_response = citar_documentos_del_prompt(
+                _strip_action(full_response), docs_en_prompt,
+            )
             if not clean_response and action_result:
                 # El modelo a veces responde SOLO con la acción; que el historial
                 # no quede con un mensaje vacío.
                 clean_response = action_result.get('message', '')
-            Message.objects.create(
+            respuesta = Message.objects.create(
                 conversation_id=conv_id, role='assistant', content=clean_response,
                 agent_id=agent_id, model_used=resolved_model,
             )
             Conversation.objects.filter(pk=conv_id).update()
 
-            done_payload = {'done': True, 'model': resolved_model}
+            # Los ids REALES de los dos mensajes. Sin esto la pantalla se queda con
+            # los provisorios que inventó al enviar, y todo lo que apunta a un
+            # mensaje concreto — ramificar, corregir — apunta a algo que no existe.
+            done_payload = {
+                'done': True,
+                'model': resolved_model,
+                'user_message_id': user_message_id,
+                'message_id': respuesta.id,
+            }
 
             if action_result:
                 done_payload['action'] = action_result
@@ -1151,10 +1213,12 @@ class AutomationListCreateView(APIView):
 
     def get(self, request):
         autos = Automation.objects.filter(user=request.user)
-        return Response(AutomationSerializer(autos, many=True).data)
+        return Response(
+            AutomationSerializer(autos, many=True, context={'request': request}).data
+        )
 
     def post(self, request):
-        serializer = AutomationSerializer(data=request.data)
+        serializer = AutomationSerializer(data=request.data, context={'request': request})
         serializer.is_valid(raise_exception=True)
         try:
             org = _user_org(request.user, request.data.get('organization'))
@@ -1194,7 +1258,9 @@ class AutomationDetailView(APIView):
 
     def patch(self, request, pk):
         auto = get_object_or_404(Automation, pk=pk, user=request.user)
-        serializer = AutomationSerializer(auto, data=request.data, partial=True)
+        serializer = AutomationSerializer(
+            auto, data=request.data, partial=True, context={'request': request},
+        )
         serializer.is_valid(raise_exception=True)
         conn = serializer.validated_data.get('connection')
         if conn and conn.organization_id != auto.organization_id:
@@ -1222,7 +1288,7 @@ class AutomationRunNowView(APIView):
         auto = get_object_or_404(Automation, pk=pk, user=request.user)
         from services.automation_runner import execute_automation
         out = execute_automation(auto)
-        data = AutomationSerializer(auto).data
+        data = AutomationSerializer(auto, context={'request': request}).data
         data['run_ok'] = out['ok']
         data['fired'] = out.get('fired')  # None en programadas; True/False en eventos
         return Response(data)
@@ -1335,3 +1401,140 @@ class SkillDetailView(SkillListCreateView):
         _, habilidad = self._get(request, pk)
         habilidad.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Ramificar y editar una conversación
+# ---------------------------------------------------------------------------
+
+
+class ConversationBranchView(APIView):
+    """Ramifica una conversación desde un mensaje: POST /conversations/<id>/ramificar/
+
+    Copia el hilo HASTA ese mensaje (incluido) a una conversación nueva. Sirve para
+    probar otro camino sin perder el que ya funcionaba: el original queda intacto y
+    la rama arranca con todo el contexto que había hasta ahí.
+
+    Nace en el mismo Espacio que la original: una rama de un hilo del equipo sigue
+    siendo del equipo.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, conv_id):
+        original = get_object_or_404(Conversation, pk=conv_id, user=request.user)
+
+        desde_id = request.data.get('message_id')
+        mensajes = list(original.messages.order_by('created_at', 'id'))
+        if desde_id:
+            corte = next((i for i, m in enumerate(mensajes) if m.id == int(desde_id)), None)
+            if corte is None:
+                raise NotFound('Ese mensaje no es de esta conversación.')
+            mensajes = mensajes[:corte + 1]
+
+        if not mensajes:
+            return Response(
+                {'detail': 'No hay nada que ramificar todavía.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        rama = Conversation.objects.create(
+            agent=original.agent, user=request.user, space=original.space,
+            title=f'{original.title or "Conversación"} (rama)'[:500],
+        )
+        Message.objects.bulk_create([
+            Message(
+                conversation=rama, role=m.role, content=m.content,
+                agent=m.agent, model_used=m.model_used,
+            )
+            for m in mensajes
+        ])
+        return Response(
+            ConversationSerializer(rama, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class MessageEditView(APIView):
+    """Corregir una pregunta propia: PATCH /conversations/<id>/messages/<message_id>/
+
+    Solo mensajes del usuario, nunca respuestas del agente: cambiar lo que el
+    agente dijo convertiría el historial en algo que no pasó.
+
+    Corta el hilo DESDE ese mensaje inclusive: se borra la pregunta vieja y todo lo
+    que vino después, que respondía a esa pregunta. Después el cliente manda la
+    versión corregida como mensaje nuevo y el agente contesta.
+
+    Se borra también el mensaje editado, y no solo lo posterior, porque si no
+    quedaría la pregunta corregida guardada Y la reenviada: la misma pregunta dos
+    veces seguidas en el historial. Quien quiera conservar el camino viejo, ramifica
+    antes de corregir.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, conv_id, message_id):
+        conversation = get_object_or_404(Conversation, pk=conv_id, user=request.user)
+        mensaje = conversation.messages.filter(pk=message_id).first()
+        if mensaje is None:
+            raise NotFound('Ese mensaje no es de esta conversación.')
+        if mensaje.role != 'user':
+            return Response(
+                {'detail': 'Solo puede editar sus propios mensajes, no las respuestas del agente.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        contenido = (request.data.get('content') or '').strip()
+        if not contenido:
+            return Response(
+                {'detail': 'El mensaje no puede quedar vacío.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        desde = conversation.messages.filter(created_at__gte=mensaje.created_at)
+        borrados = desde.count()
+        desde.delete()
+
+        return Response({'contenido': contenido, 'borrados': borrados})
+
+
+class AutomationWebhookView(APIView):
+    """El disparador por webhook: POST /api/v1/agents/webhooks/<token>/
+
+    Lo llama un sistema de afuera — un formulario, un ERP, Zapier — y eso corre la
+    automatización con lo que vino en el cuerpo como contexto.
+
+    Sin autenticación de sesión a propósito: quien llama es una máquina que no tiene
+    usuario en Afable. **El token es la credencial**, así que sale de
+    `secrets.token_urlsafe(32)` y hay que tratarlo como una contraseña. De ahí que
+    un token que no existe y una automatización apagada devuelvan lo mismo (404):
+    quien prueba tokens al azar no aprende nada de la respuesta.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request, token):
+        automation = Automation.objects.filter(
+            webhook_token=token, trigger_type='webhook', is_active=True,
+        ).first()
+        if automation is None:
+            raise NotFound('No hay ninguna automatización activa con ese token.')
+
+        cuerpo = request.data if isinstance(request.data, (dict, list)) else {}
+        automation.webhook_last_payload = cuerpo if isinstance(cuerpo, dict) else {'datos': cuerpo}
+        automation.save(update_fields=['webhook_last_payload'])
+
+        # Se le pasa el cuerpo tal cual, recortado: el modelo lee JSON sin problema y
+        # cualquier normalización nuestra sería adivinar la forma que manda el otro.
+        contexto = json.dumps(cuerpo, ensure_ascii=False, indent=2)[:8000]
+
+        from services.automation_runner import execute_automation
+        resultado = execute_automation(automation, contexto_extra=contexto)
+
+        # Se contesta al sistema que llamó, no a una persona: lo que le importa es si
+        # se recibió. El resultado del agente va por correo, como en las demás.
+        return Response(
+            {'recibido': True, 'automatizacion': automation.name, 'ok': resultado.get('ok')},
+            status=status.HTTP_202_ACCEPTED,
+        )

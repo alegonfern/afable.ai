@@ -39,6 +39,7 @@ def _run_prompt(user, organization, prompt: str, agent=None) -> str:
         return run_agent_live(
             [{'role': 'user', 'content': prompt}], organization, system_prompt,
             model=ctx.get('agent_model'), allowed_ids=ctx.get('allowed_ids'),
+            allowed_doc_ids=ctx.get('allowed_doc_ids'),
         )
     return chat_direct([{'role': 'user', 'content': prompt}], system_prompt)
 
@@ -53,17 +54,28 @@ def _send_result_email(to_email: str, subject: str, body: str):
     )
 
 
-def execute_automation(automation) -> dict:
+def execute_automation(automation, contexto_extra: str = '') -> dict:
     """
     Corre una Automation y persiste el resultado.
     Devuelve {ok, result|error} y, en las de evento, 'fired' (si disparó o no).
+
+    `contexto_extra` es lo que trae el disparador cuando trae algo: hoy, el cuerpo
+    que mandó el sistema externo por webhook. Va antes del prompt para que el agente
+    conteste SOBRE ese aviso y no en abstracto.
     """
     if automation.trigger_type == 'event':
         return _execute_event_automation(automation)
     automation.last_run_at = timezone.now()
     automation.run_count += 1
     try:
-        result = _run_prompt(automation.user, automation.organization, automation.prompt)
+        prompt = automation.prompt
+        if contexto_extra:
+            prompt = (
+                'Otro sistema avisó de algo y esto es lo que mandó:\n\n'
+                f'{contexto_extra}\n\n'
+                f'Con eso a la vista: {automation.prompt}'
+            )
+        result = _run_prompt(automation.user, automation.organization, prompt)
         automation.last_result = result[:_MAX_RESULT_CHARS]
         automation.last_error = ''
         try:

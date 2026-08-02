@@ -9,9 +9,10 @@ import {
   Send, Paperclip, AtSign, Bot, User, Sparkles,
   Database, FileText, TrendingUp, BarChart2, Users,
   Copy, ThumbsUp, ChevronDown, AlertCircle, RefreshCw,
-  ArrowUpRight, X, Plug,
+  ArrowUpRight, X, Plug, GitBranch, Pencil,
 } from 'lucide-react';
 import { useNavigate, useLocation, useOutletContext } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import { api } from '../services/api';
 import AgentesGaleria from './trabajo/AgentesGaleria';
 import SelectorAgente from './trabajo/SelectorAgente';
@@ -138,17 +139,72 @@ function AttachmentBadge({ content }) {
 }
 
 // ── Message bubble ────────────────────────────────────────────────────────────
-function MessageBubble({ msg, onReintentar }) {
+function MessageBubble({ msg, onReintentar, onRamificar, onEditar }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const [copied, setCopied] = useState(false);
+  const [editando, setEditando] = useState(false);
+  const [borrador, setBorrador] = useState('');
   const isUser = msg.role === 'user';
 
   // Strip source citation from visible content
   const cleanContent = stripAttachment((msg.content || '').replace(/\n?\[Fuente:[^\]]+\]/g, '')).trim();
 
+  // Corregir en el lugar: la burbuja se convierte en el campo. Un prompt del
+  // navegador encima de la app se ve como un error, no como una función.
+  if (isUser && editando) return (
+    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+      <Box sx={{ width: '72%', minWidth: 260 }}>
+        <TextField
+          value={borrador} onChange={(e) => setBorrador(e.target.value)}
+          multiline fullWidth autoFocus size="small"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              if (borrador.trim()) onEditar(borrador.trim());
+              setEditando(false);
+            }
+            if (e.key === 'Escape') setEditando(false);
+          }}
+          sx={{ '& .MuiInputBase-root': { fontSize: '0.88rem', borderRadius: '14px' } }}
+        />
+        <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', mt: 0.75 }}>
+          <Button size="small" onClick={() => setEditando(false)} sx={{ textTransform: 'none', fontSize: '0.78rem' }}>
+            Cancelar
+          </Button>
+          <Button
+            size="small" variant="contained" disabled={!borrador.trim()}
+            onClick={() => { onEditar(borrador.trim()); setEditando(false); }}
+            sx={{ textTransform: 'none', fontSize: '0.78rem' }}
+          >
+            Corregir y volver a preguntar
+          </Button>
+        </Box>
+        <Typography sx={{ fontSize: '0.7rem', color: 'text.disabled', textAlign: 'right', mt: 0.4 }}>
+          Lo que viene después se borra: respondía a la pregunta anterior.
+        </Typography>
+      </Box>
+    </Box>
+  );
+
   if (isUser) return (
-    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2, gap: 1.25, alignItems: 'flex-start' }}>
+    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2, gap: 1.25, alignItems: 'flex-start',
+      '&:hover .acciones-usuario': { opacity: 1 } }}>
+      {/* Corregir la propia pregunta. Aparece al pasar por encima para no
+          ensuciar el hilo con botones que casi nunca se usan. */}
+      {onEditar && (
+        <Box className="acciones-usuario" sx={{ opacity: 0, transition: 'opacity .15s', alignSelf: 'center' }}>
+          <Tooltip title="Corregir esta pregunta y volver a preguntar" placement="top">
+            <IconButton
+              size="small"
+              onClick={() => { setBorrador(stripAttachment(msg.content)); setEditando(true); }}
+              sx={{ color: 'text.disabled', '&:hover': { color: '#9BA6E3' }, p: 0.4 }}
+            >
+              <Pencil size={11} />
+            </IconButton>
+          </Tooltip>
+        </Box>
+      )}
       <Box sx={{ maxWidth: '72%', bgcolor: '#586AD0', color: '#fff',
         px: 2, py: 1.25, borderRadius: '14px 14px 4px 14px', fontSize: '0.88rem', lineHeight: 1.65 }}>
         {stripAttachment(msg.content)}
@@ -213,6 +269,14 @@ function MessageBubble({ msg, onReintentar }) {
                   <IconButton size="small" onClick={onReintentar}
                     sx={{ color: 'text.disabled', '&:hover': { color: '#9BA6E3' }, p: 0.4 }}>
                     <RefreshCw size={11} />
+                  </IconButton>
+                </Tooltip>
+              )}
+              {onRamificar && (
+                <Tooltip title="Seguir por otro camino desde acá, sin perder este" placement="top">
+                  <IconButton size="small" onClick={onRamificar}
+                    sx={{ color: 'text.disabled', '&:hover': { color: '#9BA6E3' }, p: 0.4 }}>
+                    <GitBranch size={11} />
                   </IconButton>
                 </Tooltip>
               )}
@@ -439,7 +503,12 @@ export default function ChatPage() {
   }, [systems]);
 
   useEffect(() => {
-    const cid = location.state?.conversationId;
+    // Por `state` cuando se navega desde dentro de la app, y por `?conversation=`
+    // para que la conversación tenga una URL que se pueda enlazar y pegar. Sin lo
+    // segundo, el link desde las conversaciones de un Espacio abría un chat vacío.
+    const params = new URLSearchParams(location.search);
+    const deLaUrl = parseInt(params.get('conversation'), 10);
+    const cid = location.state?.conversationId || (Number.isFinite(deLaUrl) ? deLaUrl : null);
     if (cid && cid !== convId) {
       api.getConversationMessages(cid)
         .then(r => {
@@ -474,7 +543,7 @@ export default function ChatPage() {
         })
         .catch(() => { setMessages([]); setConvId(null); });
     }
-  }, [location.state]);
+  }, [location.state, location.search]);
 
   const scrollToBottom = useCallback(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), []);
   useEffect(() => { scrollToBottom(); }, [messages.length]);
@@ -577,8 +646,20 @@ export default function ChatPage() {
               // Si el modelo respondió solo con la acción, muestra su mensaje
               // (mismo fallback que aplica el backend al guardar el historial).
               const fallback = !accumulated.trim() && data.action?.message ? data.action.message : null;
-              setMessages(prev => prev.map(m => m.id === aid
-                ? { ...m, ...(fallback ? { content: fallback } : {}), streaming: false } : m));
+              // Se cambian los ids provisorios (Date.now()) por los de la base.
+              // Sin esto, ramificar o corregir apuntan a un mensaje que no existe.
+              setMessages(prev => prev.map(m => {
+                if (m.id === aid) {
+                  return {
+                    ...m, ...(fallback ? { content: fallback } : {}), streaming: false,
+                    ...(data.message_id ? { id: data.message_id } : {}),
+                  };
+                }
+                if (m.id === uid && data.user_message_id) {
+                  return { ...m, id: data.user_message_id };
+                }
+                return m;
+              }));
               if (data.action?.type === 'navigate') navigate(data.action.path);
               if (data.action?.type === 'save_document' && data.action?.success) {
                 setSavedDoc({ title: data.action.document_title });
@@ -618,6 +699,42 @@ export default function ChatPage() {
     });
     setTimeout(() => sendMessage(stripAttachment(ultimaPregunta.content)), 0);
   }, [messages, loading, sendMessage]);
+
+  // Ramificar: el hilo original queda intacto y la rama arranca con todo el
+  // contexto que habia hasta ese mensaje. Sirve para probar otro camino sin
+  // perder el que ya funcionaba.
+  const ramificar = useCallback(async (mensaje) => {
+    if (!convId || loading) return;
+    try {
+      const { data } = await api.branchConversation(convId, mensaje.id);
+      setConvId(data.id);
+      setMessages(data.messages || []);
+      toast.success('Rama nueva: siga por acá sin perder la conversación original.');
+    } catch {
+      toast.error('No se pudo ramificar la conversación.');
+    }
+  }, [convId, loading]);
+
+  // Corregir la propia pregunta. Lo que venia despues se borra: respondia a la
+  // version anterior. Quien quiera conservarlo, ramifica primero.
+  const editar = useCallback(async (mensaje, texto) => {
+    if (!convId || loading) return;
+    const limpio = (texto || '').trim();
+    if (!limpio) return;
+    try {
+      // El backend corta el hilo DESDE ese mensaje (inclusive) y devuelve el texto
+      // corregido; la versión nueva se manda como mensaje nuevo. Si el editado
+      // sobreviviera, la misma pregunta quedaría dos veces seguidas.
+      await api.editMessage(convId, mensaje.id, limpio);
+      setMessages((previos) => {
+        const corte = previos.findIndex((m) => m.id === mensaje.id);
+        return corte < 0 ? previos : previos.slice(0, corte);
+      });
+      setTimeout(() => sendMessage(limpio), 0);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'No se pudo corregir el mensaje.');
+    }
+  }, [convId, loading, sendMessage]);
 
   // Mensaje escrito en la home de Trabajo: se manda apenas se abre el chat, una
   // sola vez (se limpia el state para que recargar no lo repita).
@@ -718,6 +835,18 @@ export default function ChatPage() {
                 onReintentar={
                   msg.role === 'assistant' && idx === messages.length - 1 && !loading
                     ? reintentar
+                    : undefined
+                }
+                onRamificar={
+                  // Solo desde una respuesta ya guardada, y no desde la última:
+                  // ahí ramificar no agregaría nada, es donde ya se está.
+                  msg.role === 'assistant' && msg.id && !loading && idx < messages.length - 1
+                    ? () => ramificar(msg)
+                    : undefined
+                }
+                onEditar={
+                  msg.role === 'user' && msg.id && !loading
+                    ? (texto) => editar(msg, texto)
                     : undefined
                 }
               />
@@ -858,6 +987,7 @@ export default function ChatPage() {
             }}>
               <AgentesGaleria
                 embebida
+                filtrarPorEspacio
                 onElegir={(a) => { setActiveAgent(a); setGaleriaAbierta(false); }}
               />
             </Box>

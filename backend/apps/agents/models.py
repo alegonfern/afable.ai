@@ -1,5 +1,8 @@
+import secrets
+
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 from django.utils.text import slugify
 
 
@@ -186,8 +189,17 @@ class Automation(models.Model):
     La corre el comando `run_automations`.
     """
     TRIGGER_TYPES = [
-        ('interval', 'Programado'),
+        ('interval', 'Cada tanto'),
+        ('schedule', 'A una hora fija'),
+        ('webhook', 'Cuando avisa otro sistema'),
         ('event', 'Por evento'),
+    ]
+
+    # Los días como los escribe la gente, no como los numera Python. El lunes es 0
+    # igual que en `weekday()`, así que la conversión es directa.
+    DIAS = [
+        (0, 'Lunes'), (1, 'Martes'), (2, 'Miércoles'), (3, 'Jueves'),
+        (4, 'Viernes'), (5, 'Sábado'), (6, 'Domingo'),
     ]
     EVENT_TYPES = [
         ('new_table', 'Nueva tabla o base de datos'),
@@ -216,6 +228,19 @@ class Automation(models.Model):
     event_config = models.JSONField(default=dict, blank=True)  # ej: {"table": "sale_order"}
     event_state = models.JSONField(default=dict, blank=True)   # snapshot de la última revisión
 
+    # Disparador 'schedule': "los lunes a las 8". `interval_minutes` no puede
+    # expresar eso — con 10080 minutos se corre cada 7 días desde cuando se creó,
+    # que no es lo mismo que un día y una hora fijos.
+    schedule_config = models.JSONField(
+        default=dict, blank=True,
+        help_text='{"dias": [0,1,2,3,4], "hora": 8, "minuto": 0}. Sin días = todos los días.',
+    )
+
+    # Disparador 'webhook': el token ES la autenticación, así que se genera al azar
+    # y no se muestra más que a quien administra la automatización.
+    webhook_token = models.CharField(max_length=64, blank=True, db_index=True)
+    webhook_last_payload = models.JSONField(default=dict, blank=True)
+
     last_run_at = models.DateTimeField(null=True, blank=True)
     last_result = models.TextField(blank=True)
     last_error = models.CharField(max_length=500, blank=True)
@@ -229,12 +254,67 @@ class Automation(models.Model):
     def __str__(self):
         return f'{self.name} (cada {self.interval_minutes} min)'
 
+    def save(self, *args, **kwargs):
+        if self.trigger_type == 'webhook' and not self.webhook_token:
+            self.webhook_token = secrets.token_urlsafe(32)
+        super().save(*args, **kwargs)
+
     def is_due(self, now) -> bool:
+        """Si le toca correr ahora. Lo consulta `run_automations` en cada pasada."""
         if not self.is_active:
             return False
+        # El webhook no se pregunta si le toca: lo dispara el sistema de afuera.
+        if self.trigger_type == 'webhook':
+            return False
+        if self.trigger_type == 'schedule':
+            return self._toca_por_horario(now)
         if self.last_run_at is None:
             return True
         return (now - self.last_run_at).total_seconds() >= self.interval_minutes * 60
+
+    def _toca_por_horario(self, now):
+        """"Los lunes a las 8": el día tiene que coincidir y la hora ya haber pasado.
+
+        La ventana es de una hora, no de un minuto: el corredor no pasa exactamente
+        al minuto y con una ventana angosta la automatización se saltearía el día.
+        Y se exige que no haya corrido ya hoy, para que dentro de la ventana no
+        salgan dos ejecuciones.
+        """
+        config = self.schedule_config or {}
+        dias = config.get('dias') or []
+        if dias and now.weekday() not in dias:
+            return False
+
+        hora = int(config.get('hora', 8))
+        minuto = int(config.get('minuto', 0))
+        objetivo = now.replace(hour=hora, minute=minuto, second=0, microsecond=0)
+        if now < objetivo:
+            return False
+        if (now - objetivo).total_seconds() > 3600:
+            return False
+
+        if self.last_run_at is not None:
+            ultima = timezone.localtime(self.last_run_at)
+            if ultima.date() == timezone.localtime(now).date():
+                return False
+        return True
+
+    def descripcion_del_disparador(self):
+        """Cómo se le cuenta al usuario cuándo corre. Lo lee la pantalla."""
+        if self.trigger_type == 'webhook':
+            return 'Cuando otro sistema avisa'
+        if self.trigger_type == 'event':
+            return f'Cuando pasa algo (revisa cada {self.interval_minutes} min)'
+        if self.trigger_type == 'schedule':
+            config = self.schedule_config or {}
+            hora = f"{int(config.get('hora', 8)):02d}:{int(config.get('minuto', 0)):02d}"
+            dias = config.get('dias') or []
+            if not dias:
+                return f'Todos los días a las {hora}'
+            nombres = [dict(self.DIAS)[d] for d in sorted(dias) if d in dict(self.DIAS)]
+            return f"{', '.join(nombres)} a las {hora}"
+        return f'Cada {self.interval_minutes} min'
+
 
 
 class Routine(models.Model):

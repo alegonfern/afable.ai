@@ -105,14 +105,29 @@ class DocumentSerializer(serializers.ModelSerializer):
 
 
 class AutomationSerializer(serializers.ModelSerializer):
+    # La URL completa, no el token pelado: lo que el usuario tiene que pegar en el
+    # otro sistema es la dirección, y armarla a mano es una fuente de errores.
+    webhook_url = serializers.SerializerMethodField()
+    # Cuándo corre, en castellano, para no tener que interpretar el JSON en la pantalla.
+    disparador = serializers.CharField(source='descripcion_del_disparador', read_only=True)
+
+    def get_webhook_url(self, obj):
+        if obj.trigger_type != 'webhook' or not obj.webhook_token:
+            return None
+        ruta = f'/api/v1/agents/webhooks/{obj.webhook_token}/'
+        request = self.context.get('request')
+        return request.build_absolute_uri(ruta) if request else ruta
+
     connection_name = serializers.CharField(source='connection.name', read_only=True)
 
     class Meta:
         model = Automation
         fields = ['id', 'organization', 'name', 'prompt', 'interval_minutes', 'notify_email',
+                  'schedule_config', 'webhook_url', 'disparador',
                   'is_active', 'trigger_type', 'connection', 'connection_name', 'event_type',
                   'event_config', 'last_run_at', 'last_result', 'last_error', 'run_count', 'created_at']
-        read_only_fields = ['id', 'connection_name', 'last_run_at', 'last_result', 'last_error',
+        read_only_fields = ['id', 'connection_name', 'webhook_url', 'disparador',
+                            'last_run_at', 'last_result', 'last_error',
                             'run_count', 'created_at']
 
     def validate_interval_minutes(self, value):

@@ -1,6 +1,7 @@
 from django.urls import path
 from .views import (
     SkillDetailView, SkillListCreateView,
+    ConversationBranchView, MessageEditView, AutomationWebhookView,
     AgentListCreateView, AgentDetailView, AvailableModelsView,
     AgentTemplateListView, AgentTemplateUseView,
     ChatView, DirectChatView, DirectChatStreamView, ChatAttachmentView,
@@ -28,6 +29,8 @@ urlpatterns = [
     path('documents/<int:pk>/', DocumentDetailView.as_view(), name='document-detail'),
     path('habilidades/', SkillListCreateView.as_view(), name='skill-list'),
     path('habilidades/<int:pk>/', SkillDetailView.as_view(), name='skill-detail'),
+    # Lo llama un sistema de afuera; el token es la credencial (ver la vista).
+    path('webhooks/<str:token>/', AutomationWebhookView.as_view(), name='automation-webhook'),
     path('automations/', AutomationListCreateView.as_view(), name='automation-list'),
     path('automations/<int:pk>/', AutomationDetailView.as_view(), name='automation-detail'),
     path('automations/<int:pk>/run/', AutomationRunNowView.as_view(), name='automation-run'),
@@ -40,6 +43,14 @@ urlpatterns = [
     path('conversations/', UserConversationListView.as_view(), name='user-conversations'),
     path('conversations/<int:conv_id>/', UserConversationDetailView.as_view(), name='user-conversation-detail'),
     path('conversations/<int:conv_id>/messages/', UserConversationDetailView.as_view(), name='user-conversation-messages'),
+    path(
+        'conversations/<int:conv_id>/ramificar/',
+        ConversationBranchView.as_view(), name='conversation-branch',
+    ),
+    path(
+        'conversations/<int:conv_id>/messages/<int:message_id>/',
+        MessageEditView.as_view(), name='message-edit',
+    ),
     path('<int:pk>/', AgentDetailView.as_view(), name='agent-detail'),
     path('<int:pk>/chat/', ChatView.as_view(), name='agent-chat'),
     path('<int:pk>/conversations/', ConversationListView.as_view(), name='conversation-list'),

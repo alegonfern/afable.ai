@@ -2,7 +2,11 @@ import { useState, useEffect } from 'react';
 import {
   Box, Typography, TextField, CircularProgress, useTheme, Collapse, Switch, MenuItem,
 } from '@mui/material';
-import { Timer, Plus, Play, Trash2, ChevronDown, ChevronRight, Mail, Clock, Zap, ArrowRight, MessageSquare, Database } from 'lucide-react';
+import { Timer, Plus, Play, Trash2, ChevronDown, ChevronRight, Mail, Clock, Zap, ArrowRight,
+  MessageSquare, Database, CalendarClock, Webhook, Copy } from 'lucide-react';
+
+// Lunes = 0, igual que `weekday()` en el backend: la conversión es directa.
+const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { toast } from 'react-toastify';
@@ -65,6 +69,8 @@ export default function AutomationsPage() {
   const emptyForm = {
     name: '', prompt: '', interval_minutes: 60, notify_email: '',
     trigger_type: 'interval', connection: '', event_type: 'new_table', event_table: '',
+    // Disparador a hora fija. Sin dias = todos los dias.
+    schedule_dias: [0, 1, 2, 3, 4], schedule_hora: 8, schedule_minuto: 0,
   };
   const [autos, setAutos] = useState([]);
   const [connections, setConnections] = useState([]);
@@ -89,6 +95,10 @@ export default function AutomationsPage() {
   }, [currentUser]);
 
   const isEvent = form.trigger_type === 'event';
+  const isHorario = form.trigger_type === 'schedule';
+  const isWebhook = form.trigger_type === 'webhook';
+  // El intervalo solo aplica a los disparadores que miran el reloj o vigilan.
+  const usaIntervalo = !isHorario && !isWebhook;
 
   const handleCreate = async () => {
     if (!form.name.trim() || !form.notify_email.trim()) {
@@ -127,13 +137,23 @@ export default function AutomationsPage() {
         payload.event_type = form.event_type;
         payload.event_config = form.event_type === 'new_rows' ? { table: form.event_table.trim() } : {};
       }
+      if (isHorario) {
+        payload.schedule_config = {
+          dias: form.schedule_dias,
+          hora: form.schedule_hora,
+          minuto: form.schedule_minuto,
+        };
+      }
       const res = await api.createAutomation(payload);
       setAutos(prev => [res.data, ...prev]);
       setForm({ ...emptyForm, notify_email: currentUser?.email || '' });
       setShowForm(false);
-      toast.success(isEvent
-        ? 'Automatización creada. Afable vigilará el evento según el intervalo de revisión.'
-        : 'Automatización creada. Se ejecutará según su intervalo.');
+      toast.success(
+        isEvent ? 'Automatización creada. Afable vigilará el evento según el intervalo de revisión.'
+          : isWebhook ? 'Automatización creada. Copie la dirección y péguela en el otro sistema.'
+            : isHorario ? `Automatización creada. Corre ${res.data.disparador.toLowerCase()}.`
+              : 'Automatización creada. Se ejecutará según su intervalo.',
+      );
     } catch (e) {
       const d = e.response?.data || {};
       toast.error(d.interval_minutes?.[0] || d.connection?.[0] || d.event_type?.[0]
@@ -239,11 +259,13 @@ export default function AutomationsPage() {
 
             {/* ── 2. Disparador ── */}
             <Box>
-              <FieldLabel textMuted={textMuted}>2. Elegí el disparador</FieldLabel>
+              <FieldLabel textMuted={textMuted}>2. Elija el disparador</FieldLabel>
               <Box sx={{ display: 'flex', gap: 1 }}>
                 {[
-                  { value: 'interval', label: 'Programado (cada X)', icon: <Clock size={14} /> },
-                  { value: 'event', label: 'Cuando pase algo (evento)', icon: <Zap size={14} /> },
+                  { value: 'interval', label: 'Cada tanto', icon: <Clock size={14} /> },
+                  { value: 'schedule', label: 'A una hora fija', icon: <CalendarClock size={14} /> },
+                  { value: 'webhook', label: 'Cuando avisa otro sistema', icon: <Webhook size={14} /> },
+                  { value: 'event', label: 'Cuando pasa algo', icon: <Zap size={14} /> },
                 ].map(opt => (
                   <Box
                     key={opt.value} component="button" onClick={() => setForm(prev => ({ ...prev, trigger_type: opt.value }))}
@@ -270,7 +292,7 @@ export default function AutomationsPage() {
                     select label="Conexión a vigilar" value={form.connection} sx={{ ...inputSx, flex: 1, minWidth: 220 }}
                     onChange={e => setForm(prev => ({ ...prev, connection: e.target.value }))}
                   >
-                    {connections.length === 0 && <MenuItem value="" disabled>No tienes conexiones</MenuItem>}
+                    {connections.length === 0 && <MenuItem value="" disabled>No tiene conexiones</MenuItem>}
                     {connections.map(c => (
                       <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
                     ))}
@@ -294,16 +316,90 @@ export default function AutomationsPage() {
               </Box>
             )}
 
+            {/* ── 3 bis. A qué hora, cuando el disparador es el reloj ── */}
+            {isHorario && (
+              <Box>
+                <FieldLabel textMuted={textMuted}>3. Qué días y a qué hora</FieldLabel>
+                <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mb: 1.5 }}>
+                  {DIAS.map((dia, i) => {
+                    const puesto = form.schedule_dias.includes(i);
+                    return (
+                      <Box
+                        key={i} component="button"
+                        onClick={() => setForm(prev => ({
+                          ...prev,
+                          schedule_dias: puesto
+                            ? prev.schedule_dias.filter(x => x !== i)
+                            : [...prev.schedule_dias, i],
+                        }))}
+                        sx={{
+                          px: 1.25, py: 0.6, borderRadius: '8px', cursor: 'pointer',
+                          fontSize: '0.78rem', fontWeight: 600, minWidth: 44,
+                          border: `1px solid ${puesto ? '#586AD0' : borderColor}`,
+                          bgcolor: puesto ? 'rgba(88,106,208,0.12)' : 'transparent',
+                          color: puesto ? (d ? '#9BA6E3' : '#586AD0') : textSemi,
+                        }}
+                      >
+                        {dia}
+                      </Box>
+                    );
+                  })}
+                </Box>
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <TextField
+                    label="Hora" type="number" value={form.schedule_hora} sx={{ ...inputSx, width: 130 }}
+                    inputProps={{ min: 0, max: 23 }}
+                    onChange={e => setForm(prev => ({
+                      ...prev, schedule_hora: Math.min(23, Math.max(0, parseInt(e.target.value) || 0)),
+                    }))}
+                  />
+                  <TextField
+                    label="Minuto" type="number" value={form.schedule_minuto} sx={{ ...inputSx, width: 130 }}
+                    inputProps={{ min: 0, max: 59 }}
+                    onChange={e => setForm(prev => ({
+                      ...prev, schedule_minuto: Math.min(59, Math.max(0, parseInt(e.target.value) || 0)),
+                    }))}
+                  />
+                  <Typography sx={{ fontSize: '0.8rem', color: textMuted }}>
+                    {form.schedule_dias.length === 0
+                      ? 'Sin días marcados corre todos los días.'
+                      : `Corre ${form.schedule_dias.length === 7 ? 'todos los días' : 'los días marcados'} a las `
+                        + `${String(form.schedule_hora).padStart(2, '0')}:${String(form.schedule_minuto).padStart(2, '0')}.`}
+                  </Typography>
+                </Box>
+              </Box>
+            )}
+
+            {isWebhook && (
+              <Box sx={{
+                p: 1.75, borderRadius: '10px',
+                border: `1px dashed ${borderColor}`, bgcolor: 'rgba(88,106,208,0.05)',
+              }}>
+                <Typography sx={{ fontSize: '0.8rem', color: textSemi, fontWeight: 600, mb: 0.4 }}>
+                  Se crea con una dirección propia
+                </Typography>
+                <Typography sx={{ fontSize: '0.78rem', color: textMuted }}>
+                  Al guardar aparece la dirección para pegar en el otro sistema. Cuando ese
+                  sistema la llame, esto se ejecuta con lo que haya mandado. La dirección es
+                  la credencial: quien la tenga puede disparar esta automatización.
+                </Typography>
+              </Box>
+            )}
+
             {/* ── 4. Cuándo revisar + a quién avisar ── */}
             <Box>
-              <FieldLabel textMuted={textMuted}>4. Frecuencia y aviso</FieldLabel>
+              <FieldLabel textMuted={textMuted}>
+                {usaIntervalo ? '4. Frecuencia y aviso' : '4. A quién avisar'}
+              </FieldLabel>
               <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                <TextField
-                  label={isEvent ? 'Revisar cada cuántos minutos' : 'Cada cuántos minutos'}
-                  type="number" value={form.interval_minutes} sx={{ ...inputSx, width: 220 }}
-                  inputProps={{ min: 5 }}
-                  onChange={e => setForm(prev => ({ ...prev, interval_minutes: Math.max(1, parseInt(e.target.value) || 0) }))}
-                />
+                {usaIntervalo && (
+                  <TextField
+                    label={isEvent ? 'Revisar cada cuántos minutos' : 'Cada cuántos minutos'}
+                    type="number" value={form.interval_minutes} sx={{ ...inputSx, width: 220 }}
+                    inputProps={{ min: 5 }}
+                    onChange={e => setForm(prev => ({ ...prev, interval_minutes: Math.max(1, parseInt(e.target.value) || 0) }))}
+                  />
+                )}
                 <TextField
                   label="Correo de notificación" value={form.notify_email} sx={{ ...inputSx, flex: 1, minWidth: 240 }}
                   onChange={e => setForm(prev => ({ ...prev, notify_email: e.target.value }))}
@@ -364,7 +460,8 @@ export default function AutomationsPage() {
                         </Typography>
                       )}
                       <Typography sx={{ fontSize: '0.72rem', color: textMuted, display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
-                        <Clock size={11} /> {auto.trigger_type === 'event' ? 'revisa cada' : 'cada'} {auto.interval_minutes} min
+                        <Clock size={11} /> {auto.disparador
+                          || `${auto.trigger_type === 'event' ? 'revisa cada' : 'cada'} ${auto.interval_minutes} min`}
                       </Typography>
                       <Typography sx={{ fontSize: '0.72rem', color: textMuted, display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
                         <Mail size={11} /> {auto.notify_email}
@@ -373,6 +470,33 @@ export default function AutomationsPage() {
                         última: {fmtDate(auto.last_run_at)} · {auto.run_count} ejecuciones
                       </Typography>
                     </Box>
+                    {auto.webhook_url && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.5 }}>
+                        <Typography sx={{
+                          fontSize: '0.7rem', fontFamily: '"JetBrains Mono", monospace',
+                          color: textMuted, overflow: 'hidden', textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap', maxWidth: 420,
+                        }}>
+                          {auto.webhook_url}
+                        </Typography>
+                        <Box
+                          component="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(auto.webhook_url);
+                            toast.success('Dirección copiada. Péguela en el otro sistema.');
+                          }}
+                          title="Copiar la dirección"
+                          sx={{
+                            display: 'inline-flex', alignItems: 'center', border: 'none',
+                            bgcolor: 'transparent', cursor: 'pointer', color: textMuted, p: 0.25,
+                            '&:hover': { color: d ? '#9BA6E3' : '#586AD0' },
+                          }}
+                        >
+                          <Copy size={11} />
+                        </Box>
+                      </Box>
+                    )}
                     {auto.last_error && (
                       <Typography sx={{ fontSize: '0.72rem', color: '#e57373', mt: 0.25 }}>{auto.last_error}</Typography>
                     )}

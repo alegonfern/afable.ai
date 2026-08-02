@@ -35,11 +35,17 @@ const ORDENES = [
  *                      "Chatear con…", sin Crear/Gestionar (que sacan de la
  *                      pantalla) y sin el margen superior de página.
  */
-export default function AgentesGaleria({ onElegir, embebida = false }) {
+export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorEspacio = false }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const navigate = useNavigate();
-  const { slug, espacioSlug } = useWorkspace();
+  const { slug, espacio, espacioSlug } = useWorkspace();
+  // Ver todos, sin salir del Espacio: el filtro es de esta vitrina, no del Workspace.
+  const [ignorarEspacio, setIgnorarEspacio] = useState(false);
+  // El Espacio SOLO acota donde se está trabajando (el compositor del chat). La
+  // galería completa es el catálogo de la empresa: filtrarla ahí hacía desaparecer
+  // agentes en pantallas que nunca hablaron de Espacios.
+  const espacioAplicado = filtrarPorEspacio && !ignorarEspacio ? espacioSlug : null;
 
   const textMuted = d ? 'rgba(255,255,255,0.66)' : 'rgba(0,0,0,0.62)';
   const bgSuave = d ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)';
@@ -68,7 +74,7 @@ export default function AgentesGaleria({ onElegir, embebida = false }) {
         workspace: slug, tab: pestana, orden, q: busqueda.trim(), page: nuevaPagina,
         // Con un Espacio activo se ofrecen SOLO sus agentes: es la mitad visible
         // de que el Espacio decida qué datos alcanza cada agente.
-        espacio: espacioSlug || undefined,
+        espacio: espacioAplicado || undefined,
       });
       setAgentes((previos) => (nuevaPagina === 1 ? data.results : [...previos, ...data.results]));
       setHayMas(data.has_next);
@@ -79,7 +85,7 @@ export default function AgentesGaleria({ onElegir, embebida = false }) {
     } finally {
       setCargando(false);
     }
-  }, [slug, pestana, orden, busqueda, espacioSlug]);
+  }, [slug, pestana, orden, busqueda, espacioAplicado]);
 
   // Cada cambio de pestaña, orden o búsqueda vuelve a la primera página.
   useEffect(() => {
@@ -291,6 +297,32 @@ export default function AgentesGaleria({ onElegir, embebida = false }) {
           </>
         )}
       </Box>
+
+      {/* Que la lista venga acotada tiene que decirse, y tiene que poder deshacerse:
+          una lista corta sin explicación se lee como "faltan agentes". */}
+      {filtrarPorEspacio && espacio && (
+        <Box sx={{
+          display: 'flex', alignItems: 'center', gap: 1, mt: 1,
+          fontSize: '0.78rem', color: textMuted,
+        }}>
+          <span>
+            {ignorarEspacio
+              ? `Mostrando todos los agentes de la empresa.`
+              : `Solo los agentes de ${espacio.name}.`}
+          </span>
+          <Box
+            component="button"
+            onClick={() => setIgnorarEspacio((v) => !v)}
+            sx={{
+              border: 'none', bgcolor: 'transparent', p: 0, cursor: 'pointer',
+              fontFamily: 'inherit', fontSize: 'inherit', fontWeight: 600,
+              color: '#9BA6E3', '&:hover': { textDecoration: 'underline' },
+            }}
+          >
+            {ignorarEspacio ? `Volver a ${espacio.name}` : 'Ver todos'}
+          </Box>
+        </Box>
+      )}
 
       {/* Pestañas + orden */}
       <Box sx={{

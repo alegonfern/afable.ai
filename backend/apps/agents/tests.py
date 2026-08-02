@@ -467,3 +467,275 @@ class EspacioEnElChatTests(TestCase):
         suelto = Agent.objects.create(organization=self.org, name='Por omisión')
         pedido = PedidoFalso(self.duena, {})
         self.assertEqual(_agente_inicial(pedido, 'hola', pelado, suelto), suelto)
+
+
+class CitaDeDocumentosTests(TestCase):
+    """Citar el documento que sustenta la respuesta.
+
+    El agente contesta con el contenido que ya venía en el prompt, sin llamar
+    herramientas, así que no hay `provenance` y la respuesta salía sin fuente.
+    """
+
+    def setUp(self):
+        from apps.agents.views import citar_documentos_del_prompt
+
+        self.citar = citar_documentos_del_prompt
+        self.docs = [
+            {'id': 1, 'title': 'Política de vacaciones'},
+            {'id': 2, 'title': 'Catálogo 2026'},
+        ]
+
+    def test_cita_el_documento_que_la_respuesta_nombra(self):
+        texto = 'Según la Política de vacaciones, son 15 días hábiles.'
+        self.assertIn('_[Fuente: Política de vacaciones]_', self.citar(texto, self.docs))
+
+    def test_no_cita_lo_que_la_respuesta_no_nombra(self):
+        texto = 'Según la Política de vacaciones, son 15 días hábiles.'
+        self.assertNotIn('Catálogo 2026', self.citar(texto, self.docs))
+
+    def test_cita_varios_sin_repetir(self):
+        texto = 'La Política de vacaciones y el Catálogo 2026. Insisto: Catálogo 2026.'
+        salida = self.citar(texto, self.docs)
+        self.assertIn('_[Fuente: Política de vacaciones, Catálogo 2026]_', salida)
+        # En la línea de fuente aparece una sola vez, aunque el texto lo repita.
+        linea = salida.split('_[Fuente: ')[1]
+        self.assertEqual(linea.count('Catálogo 2026'), 1)
+
+    def test_no_pisa_una_cita_que_ya_existe(self):
+        """Si las herramientas ya citaron, no se duplica la línea."""
+        texto = 'Ahí va.\n\n_[Fuente: Odoo·sale_order · consultado 10:00]_'
+        self.assertEqual(self.citar(texto, self.docs), texto)
+
+    def test_sin_documentos_no_agrega_nada(self):
+        texto = 'Una respuesta cualquiera.'
+        self.assertEqual(self.citar(texto, []), texto)
+        self.assertEqual(self.citar(texto, None), texto)
+
+    def test_no_inventa_una_fuente_cuando_no_hay_coincidencia(self):
+        """Una fuente que el agente no usó es peor que ninguna."""
+        texto = 'No tengo ese dato.'
+        self.assertEqual(self.citar(texto, self.docs), texto)
+
+
+class RamificarYEditarTests(TestCase):
+    """Ramificar un hilo desde un mensaje, y corregir la propia pregunta."""
+
+    def setUp(self):
+        from apps.agents.models import Conversation, Message
+
+        self.Conversation = Conversation
+        self.Message = Message
+
+        self.duena = User.objects.create_user(
+            username='duena@afable.test', email='duena@afable.test', password='afable123',
+        )
+        self.ajena = User.objects.create_user(
+            username='ajena@afable.test', email='ajena@afable.test', password='afable123',
+        )
+        self.org = Organization.objects.create(owner=self.duena, name='Cocinas SpA')
+        self.agente = Agent.objects.create(organization=self.org, name='Ventas')
+
+        self.conv = Conversation.objects.create(
+            agent=self.agente, user=self.duena, title='Cierre de mes',
+        )
+        self.m1 = Message.objects.create(conversation=self.conv, role='user', content='¿Cómo vamos?')
+        self.m2 = Message.objects.create(
+            conversation=self.conv, role='assistant', content='Vamos bien.', agent=self.agente,
+        )
+        self.m3 = Message.objects.create(conversation=self.conv, role='user', content='¿Y el margen?')
+
+        self.client_duena = APIClient()
+        self.client_duena.force_authenticate(user=self.duena)
+
+    def test_ramificar_copia_el_hilo_hasta_ese_mensaje(self):
+        resp = self.client_duena.post(
+            f'/api/v1/agents/conversations/{self.conv.id}/ramificar/',
+            {'message_id': self.m2.id}, format='json',
+        )
+        self.assertEqual(resp.status_code, 201)
+        rama = self.Conversation.objects.get(pk=resp.json()['id'])
+        self.assertEqual(
+            [m.content for m in rama.messages.order_by('id')],
+            ['¿Cómo vamos?', 'Vamos bien.'],
+        )
+
+    def test_ramificar_no_toca_la_conversacion_original(self):
+        self.client_duena.post(
+            f'/api/v1/agents/conversations/{self.conv.id}/ramificar/',
+            {'message_id': self.m2.id}, format='json',
+        )
+        self.assertEqual(self.conv.messages.count(), 3)
+
+    def test_la_rama_conserva_el_espacio_de_la_original(self):
+        from apps.workspaces.models import ROLE_ADMIN, Space, Workspace
+
+        workspace = Workspace.objects.create(name='Cocinas SpA', organization=self.org)
+        workspace.add_member(self.duena, ROLE_ADMIN)
+        espacio = Space.objects.create(workspace=workspace, name='Ventas')
+        self.conv.space = espacio
+        self.conv.save()
+
+        resp = self.client_duena.post(
+            f'/api/v1/agents/conversations/{self.conv.id}/ramificar/', {}, format='json',
+        )
+        rama = self.Conversation.objects.get(pk=resp.json()['id'])
+        self.assertEqual(rama.space, espacio)
+
+    def test_no_se_puede_ramificar_una_conversacion_ajena(self):
+        client = APIClient()
+        client.force_authenticate(user=self.ajena)
+        resp = client.post(
+            f'/api/v1/agents/conversations/{self.conv.id}/ramificar/', {}, format='json',
+        )
+        self.assertEqual(resp.status_code, 404)
+
+    def test_corregir_corta_el_hilo_desde_ese_mensaje(self):
+        """Se borra la pregunta vieja y todo lo posterior; el cliente reenvía.
+
+        Si el mensaje editado sobreviviera, quedaría la pregunta corregida guardada
+        Y la reenviada: la misma pregunta dos veces seguidas en el historial.
+        """
+        resp = self.client_duena.patch(
+            f'/api/v1/agents/conversations/{self.conv.id}/messages/{self.m1.id}/',
+            {'content': '¿Cómo vamos con el margen?'}, format='json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()['borrados'], 3)
+        self.assertEqual(resp.json()['contenido'], '¿Cómo vamos con el margen?')
+        self.assertEqual(self.conv.messages.count(), 0)
+
+    def test_no_se_puede_editar_la_respuesta_del_agente(self):
+        resp = self.client_duena.patch(
+            f'/api/v1/agents/conversations/{self.conv.id}/messages/{self.m2.id}/',
+            {'content': 'Vamos pésimo.'}, format='json',
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.m2.refresh_from_db()
+        self.assertEqual(self.m2.content, 'Vamos bien.')
+        self.assertEqual(self.conv.messages.count(), 3)
+
+    def test_un_mensaje_no_puede_quedar_vacio(self):
+        resp = self.client_duena.patch(
+            f'/api/v1/agents/conversations/{self.conv.id}/messages/{self.m1.id}/',
+            {'content': '   '}, format='json',
+        )
+        self.assertEqual(resp.status_code, 400)
+
+
+class DisparadoresTests(TestCase):
+    """Los disparadores nuevos: a una hora fija y cuando avisa otro sistema."""
+
+    def setUp(self):
+        from apps.agents.models import Automation
+
+        self.Automation = Automation
+        self.user = User.objects.create_user(
+            username='duena@afable.test', email='duena@afable.test', password='afable123',
+        )
+        self.org = Organization.objects.create(owner=self.user, name='Cocinas SpA')
+
+    def _horario(self, **config):
+        return self.Automation.objects.create(
+            user=self.user, organization=self.org, name='Reporte',
+            prompt='Resumen de ventas', notify_email='a@b.cl',
+            trigger_type='schedule', schedule_config=config,
+        )
+
+    def test_los_lunes_a_las_ocho_no_corre_un_martes(self):
+        from datetime import datetime
+
+        from django.utils import timezone as tz
+
+        auto = self._horario(dias=[0], hora=8, minuto=0)
+        martes = tz.make_aware(datetime(2026, 8, 4, 8, 5))
+        self.assertFalse(auto.is_due(martes))
+
+    def test_los_lunes_a_las_ocho_corre_el_lunes(self):
+        from datetime import datetime
+
+        from django.utils import timezone as tz
+
+        auto = self._horario(dias=[0], hora=8, minuto=0)
+        lunes = tz.make_aware(datetime(2026, 8, 3, 8, 5))
+        self.assertTrue(auto.is_due(lunes))
+
+    def test_todavia_no_es_la_hora(self):
+        from datetime import datetime
+
+        from django.utils import timezone as tz
+
+        auto = self._horario(dias=[0], hora=8, minuto=0)
+        lunes_temprano = tz.make_aware(datetime(2026, 8, 3, 7, 30))
+        self.assertFalse(auto.is_due(lunes_temprano))
+
+    def test_la_ventana_se_cierra_pasada_la_hora(self):
+        """Sin tope, una automatización de las 8 correría a las 23."""
+        from datetime import datetime
+
+        from django.utils import timezone as tz
+
+        auto = self._horario(dias=[0], hora=8, minuto=0)
+        lunes_tarde = tz.make_aware(datetime(2026, 8, 3, 23, 0))
+        self.assertFalse(auto.is_due(lunes_tarde))
+
+    def test_no_corre_dos_veces_el_mismo_dia(self):
+        from datetime import datetime
+
+        from django.utils import timezone as tz
+
+        auto = self._horario(dias=[0], hora=8, minuto=0)
+        lunes = tz.make_aware(datetime(2026, 8, 3, 8, 5))
+        auto.last_run_at = lunes
+        auto.save()
+        self.assertFalse(auto.is_due(tz.make_aware(datetime(2026, 8, 3, 8, 40))))
+
+    def test_sin_dias_corre_todos_los_dias(self):
+        from datetime import datetime
+
+        from django.utils import timezone as tz
+
+        auto = self._horario(hora=8, minuto=0)
+        for dia in (3, 4, 5):  # lunes, martes, miércoles de esa semana
+            self.assertTrue(auto.is_due(tz.make_aware(datetime(2026, 8, dia, 8, 10))))
+
+    def test_el_horario_se_explica_en_castellano(self):
+        auto = self._horario(dias=[0, 4], hora=8, minuto=30)
+        self.assertEqual(auto.descripcion_del_disparador(), 'Lunes, Viernes a las 08:30')
+
+    def test_el_webhook_nace_con_token_y_nunca_le_toca_por_reloj(self):
+        from datetime import datetime
+
+        from django.utils import timezone as tz
+
+        auto = self.Automation.objects.create(
+            user=self.user, organization=self.org, name='Aviso',
+            prompt='Resume el aviso', notify_email='a@b.cl', trigger_type='webhook',
+        )
+        self.assertTrue(auto.webhook_token)
+        self.assertFalse(auto.is_due(tz.make_aware(datetime(2026, 8, 3, 8, 5))))
+
+    def test_el_token_no_se_regenera_al_guardar(self):
+        auto = self.Automation.objects.create(
+            user=self.user, organization=self.org, name='Aviso',
+            prompt='x', notify_email='a@b.cl', trigger_type='webhook',
+        )
+        token = auto.webhook_token
+        auto.name = 'Aviso renombrado'
+        auto.save()
+        auto.refresh_from_db()
+        self.assertEqual(auto.webhook_token, token)
+
+    def test_un_token_inventado_es_404(self):
+        client = APIClient()
+        resp = client.post('/api/v1/agents/webhooks/no-existe/', {'a': 1}, format='json')
+        self.assertEqual(resp.status_code, 404)
+
+    def test_una_automatizacion_apagada_responde_igual_que_una_inexistente(self):
+        """Quien prueba tokens al azar no puede aprender nada de la respuesta."""
+        client = APIClient()
+        auto = self.Automation.objects.create(
+            user=self.user, organization=self.org, name='Aviso',
+            prompt='x', notify_email='a@b.cl', trigger_type='webhook', is_active=False,
+        )
+        resp = client.post(f'/api/v1/agents/webhooks/{auto.webhook_token}/', {'a': 1}, format='json')
+        self.assertEqual(resp.status_code, 404)
