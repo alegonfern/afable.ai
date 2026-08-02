@@ -184,18 +184,67 @@ export default function AgentesGaleria({ onElegir, embebida = false }) {
     </Box>
   );
 
-  const Grilla = ({ items }) => (
+  // En el selector del compositor no hacen falta tarjetas: lo que se necesita es
+  // reconocer al agente y elegirlo. Una fila por agente entra en el alto del panel
+  // sin scrollear, que es justamente lo que hacía aparecer la barra.
+  const Fila = ({ agente }) => (
+    <Box
+      onClick={() => chatear(agente)}
+      sx={{
+        display: 'flex', alignItems: 'center', gap: 1.25,
+        px: 1, py: 0.75, borderRadius: '8px', cursor: 'pointer',
+        '&:hover': { bgcolor: bgSuave },
+      }}
+    >
+      <Box sx={{
+        width: 26, height: 26, borderRadius: '7px', flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        bgcolor: 'rgba(88, 106, 208, 0.14)', color: '#9BA6E3',
+      }}>
+        <Bot size={14} />
+      </Box>
+      <Typography sx={{
+        fontSize: '0.875rem', fontWeight: 600, flexShrink: 0, maxWidth: 190,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {agente.name}
+      </Typography>
+      <Typography sx={{
+        fontSize: '0.8125rem', color: textMuted, flex: 1, minWidth: 0,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>
+        {agente.description || 'Sin descripción.'}
+      </Typography>
+      <Box
+        onClick={(e) => alternarFavorito(agente, e)}
+        title={agente.is_favorite ? 'Quitar de favoritos' : 'Marcar como favorito'}
+        sx={{
+          display: 'flex', p: 0.4, borderRadius: '6px', flexShrink: 0, cursor: 'pointer',
+          color: agente.is_favorite ? '#f0b429' : textMuted,
+          '&:hover': { bgcolor: bgSuave },
+        }}
+      >
+        <Star size={14} fill={agente.is_favorite ? '#f0b429' : 'none'} />
+      </Box>
+    </Box>
+  );
+
+  const Grilla = ({ items }) => (embebida ? (
+    <Box sx={{ display: 'flex', flexDirection: 'column', mt: 0.5 }}>
+      {items.map((a) => <Fila key={a.id} agente={a} />)}
+    </Box>
+  ) : (
     <Box sx={{
       display: 'grid', gap: 1.5, mt: 1.5,
       gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: 'repeat(3, 1fr)' },
     }}>
       {items.map((a) => <Tarjeta key={a.id} agente={a} />)}
     </Box>
-  );
+  ));
 
-  const Grupo = ({ titulo }) => (
+  const Grupo = ({ titulo }) => (embebida ? null : (
     <Typography sx={{ fontSize: '1rem', fontWeight: 600, mt: 3.5 }}>{titulo}</Typography>
-  );
+  ));
 
   return (
     <Box sx={{ mt: embebida ? 0 : 6 }}>
@@ -243,7 +292,7 @@ export default function AgentesGaleria({ onElegir, embebida = false }) {
       {/* Pestañas + orden */}
       <Box sx={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        gap: 2, mt: 2.5, borderBottom: `1px solid ${borde}`,
+        gap: 2, mt: embebida ? 1.25 : 2.5, borderBottom: `1px solid ${borde}`,
       }}>
         <Box sx={{ display: 'flex', gap: 0.5 }}>
           {PESTANAS.map((p) => {
@@ -268,13 +317,15 @@ export default function AgentesGaleria({ onElegir, embebida = false }) {
             );
           })}
         </Box>
-        <Button
-          onClick={(e) => setMenuOrden(e.currentTarget)}
-          endIcon={<ChevronDown size={14} />}
-          sx={{ ...botonSx, mb: 1, fontWeight: 500 }}
-        >
-          {(ORDENES.find((o) => o.value === orden) || ORDENES[0]).label}
-        </Button>
+        {!embebida && (
+          <Button
+            onClick={(e) => setMenuOrden(e.currentTarget)}
+            endIcon={<ChevronDown size={14} />}
+            sx={{ ...botonSx, mb: 1, fontWeight: 500 }}
+          >
+            {(ORDENES.find((o) => o.value === orden) || ORDENES[0]).label}
+          </Button>
+        )}
       </Box>
 
       {/* Grilla */}
@@ -303,7 +354,7 @@ export default function AgentesGaleria({ onElegir, embebida = false }) {
       )}
 
       {/* Centinela del scroll infinito */}
-      <Box ref={centinela} sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+      <Box ref={centinela} sx={{ display: 'flex', justifyContent: 'center', py: embebida ? 0.5 : 3 }}>
         {cargando && <CircularProgress size={22} sx={{ color: '#586AD0' }} />}
       </Box>
 
