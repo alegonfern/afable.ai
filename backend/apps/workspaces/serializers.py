@@ -1,7 +1,10 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import ROLE_CHOICES, ROLE_MEMBER, SECTOR_CHOICES, Invitation, Membership, Workspace
+from .models import (
+    ROLE_CHOICES, ROLE_MEMBER, SECTOR_CHOICES, VISIBILITY_CHOICES,
+    Invitation, Membership, Space, Workspace,
+)
 
 User = get_user_model()
 
@@ -142,3 +145,74 @@ class InvitationPreviewSerializer(serializers.Serializer):
             'invited_by_name': (invited_by.get_full_name() or invited_by.email) if invited_by else None,
             'status': invitation.status,
         })
+
+
+class SpaceListSerializer(serializers.ModelSerializer):
+    """El Espacio como tarjeta: nombre, acceso y cuánto tiene adentro."""
+
+    counts = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Space
+        fields = [
+            'id', 'name', 'slug', 'description', 'icon', 'visibility',
+            'counts', 'created_at',
+        ]
+
+    def get_counts(self, obj):
+        return {
+            'connections': obj.connections.count(),
+            'documents': obj.documents.count(),
+            'agents': obj.agents.count(),
+            'members': obj.members.count(),
+        }
+
+
+class SpaceDetailSerializer(SpaceListSerializer):
+    """El Espacio abierto: las tres pestañas en una sola respuesta."""
+
+    connections = serializers.SerializerMethodField()
+    documents = serializers.SerializerMethodField()
+    agents = serializers.SerializerMethodField()
+    members = MemberUserSerializer(many=True, read_only=True)
+
+    class Meta(SpaceListSerializer.Meta):
+        fields = SpaceListSerializer.Meta.fields + [
+            'connections', 'documents', 'agents', 'members',
+        ]
+
+    def get_connections(self, obj):
+        return [
+            {'id': c.id, 'name': c.name, 'connector_type': c.connector_type,
+             'category': c.category, 'is_active': c.is_active}
+            for c in obj.connections.all()
+        ]
+
+    def get_documents(self, obj):
+        return [
+            {'id': d.id, 'title': d.title, 'category': d.category, 'source': d.source}
+            for d in obj.documents.all()
+        ]
+
+    def get_agents(self, obj):
+        return [
+            {'id': a.id, 'name': a.name, 'description': a.description,
+             'area': a.area, 'is_active': a.is_active}
+            for a in obj.agents.all()
+        ]
+
+
+class SpaceWriteSerializer(serializers.ModelSerializer):
+    """Crear y editar un Espacio. El contenido se engancha por endpoints aparte."""
+
+    visibility = serializers.ChoiceField(choices=VISIBILITY_CHOICES, required=False)
+
+    class Meta:
+        model = Space
+        fields = ['name', 'description', 'icon', 'visibility']
+
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError('El Espacio necesita un nombre.')
+        return value

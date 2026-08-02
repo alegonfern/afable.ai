@@ -1,20 +1,24 @@
 import logging
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.mail import send_mail
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import ROLE_ADMIN, Invitation, Membership, Workspace
-from .permissions import IsAdmin, IsMember, workspaces_of
+from .models import ROLE_ADMIN, Invitation, Membership, Space, Workspace
+from .permissions import (
+    IsAdmin, IsEditor, IsMember, require_space, spaces_visible_to, workspaces_of,
+)
 from .serializers import (
     SECTORES,
     InvitationCreateSerializer, InvitationPreviewSerializer, InvitationSerializer,
     MembershipRoleSerializer, MembershipSerializer,
+    SpaceDetailSerializer, SpaceListSerializer, SpaceWriteSerializer,
     WorkspaceCreateSerializer, WorkspaceSerializer,
 )
 
@@ -299,3 +303,156 @@ class InvitationAcceptView(APIView):
             ).data,
             'role': membership.role,
         })
+
+
+# ---------------------------------------------------------------------------
+# Espacios
+# ---------------------------------------------------------------------------
+
+# Qué colección del Espacio toca cada segmento de la URL, y de dónde salen los
+# objetos que se pueden enganchar. Todo se filtra por la Organization del
+# Workspace: no se puede meter en un Espacio una fuente de otra empresa.
+COLECCIONES_DE_ESPACIO = {
+    'conexiones': ('connections', 'SystemConnection'),
+    'documentos': ('documents', 'CompanyDocument'),
+    'agentes': ('agents', 'Agent'),
+    'personas': ('members', 'User'),
+}
+
+
+def _queryset_enganchable(nombre_modelo, workspace):
+    """Los objetos que ese Workspace tiene derecho a enganchar a un Espacio."""
+    from apps.agents.models import Agent
+    from apps.organizations.models import CompanyDocument, SystemConnection
+
+    organization = workspace.organization
+    if nombre_modelo == 'SystemConnection':
+        return SystemConnection.objects.filter(organization=organization)
+    if nombre_modelo == 'CompanyDocument':
+        return CompanyDocument.objects.filter(organization=organization)
+    if nombre_modelo == 'Agent':
+        return Agent.objects.filter(organization=organization)
+    # Personas: sólo miembros del Workspace.
+    return get_user_model().objects.filter(memberships__workspace=workspace)
+
+
+class SpaceListCreateView(APIView):
+    """Contexto › Espacios: la lista, y crear uno nuevo."""
+
+    def get_permissions(self):
+        # Ver la lista es de cualquier miembro; crear un Espacio, de editor
+        # para arriba: un Espacio nuevo reparte acceso a datos.
+        if self.request.method == 'POST':
+            return [IsAuthenticated(), IsEditor()]
+        return [IsAuthenticated(), IsMember()]
+
+    def get(self, request, slug):
+        espacios = spaces_visible_to(request.membership).prefetch_related(
+            'connections', 'documents', 'agents', 'members'
+        )
+        return Response(SpaceListSerializer(espacios, many=True, context={'request': request}).data)
+
+    def post(self, request, slug):
+        serializer = SpaceWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        espacio = serializer.save(workspace=request.workspace, created_by=request.user)
+        # Quien lo crea queda adentro, si no un Espacio restringido nace sin nadie.
+        espacio.members.add(request.user)
+        return Response(
+            SpaceDetailSerializer(espacio, context={'request': request}).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class SpaceDetailView(APIView):
+    """El Espacio abierto, con sus tres pestañas. Editarlo y borrarlo."""
+
+    permission_classes = [IsAuthenticated, IsMember]
+
+    def get(self, request, slug, space_slug):
+        espacio = require_space(request.membership, space_slug)
+        return Response(SpaceDetailSerializer(espacio, context={'request': request}).data)
+
+    def patch(self, request, slug, space_slug):
+        espacio = require_space(request.membership, space_slug)
+        self._exigir_edicion(request)
+        serializer = SpaceWriteSerializer(espacio, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(SpaceDetailSerializer(espacio, context={'request': request}).data)
+
+    def delete(self, request, slug, space_slug):
+        espacio = require_space(request.membership, space_slug)
+        self._exigir_edicion(request)
+        espacio.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def _exigir_edicion(self, request):
+        from rest_framework.exceptions import PermissionDenied
+
+        from .models import ROLE_EDITOR
+
+        if not request.membership.has_at_least(ROLE_EDITOR):
+            raise PermissionDenied('Sólo un editor puede cambiar un Espacio.')
+
+
+class SpaceContentView(APIView):
+    """Enganchar y soltar contenido de un Espacio.
+
+    POST agrega, DELETE saca. Un solo endpoint para las cuatro colecciones
+    (conexiones, documentos, agentes, personas) porque la operación es la misma
+    y así la pantalla no tiene que aprenderse cuatro rutas.
+    """
+
+    permission_classes = [IsAuthenticated, IsEditor]
+
+    def post(self, request, slug, space_slug, coleccion):
+        espacio, campo, objetos, ids = self._resolver(request, space_slug, coleccion)
+        encontrados = list(objetos.filter(pk__in=ids))
+        campo.add(*encontrados)
+        return Response(SpaceDetailSerializer(espacio, context={'request': request}).data)
+
+    def delete(self, request, slug, space_slug, coleccion):
+        espacio, campo, objetos, ids = self._resolver(request, space_slug, coleccion)
+        campo.remove(*objetos.filter(pk__in=ids))
+        return Response(SpaceDetailSerializer(espacio, context={'request': request}).data)
+
+    def _resolver(self, request, space_slug, coleccion):
+        if coleccion not in COLECCIONES_DE_ESPACIO:
+            raise NotFound('Esa colección no existe en un Espacio.')
+        espacio = require_space(request.membership, space_slug)
+        nombre_campo, nombre_modelo = COLECCIONES_DE_ESPACIO[coleccion]
+        ids = request.data.get('ids')
+        if ids is None:
+            ids = [request.data.get('id')] if request.data.get('id') else []
+        if not isinstance(ids, list) or not ids:
+            raise ValidationError({'ids': 'Mande al menos un id.'})
+        objetos = _queryset_enganchable(nombre_modelo, request.workspace)
+        return espacio, getattr(espacio, nombre_campo), objetos, ids
+
+
+class SpaceAvailableView(APIView):
+    """Lo que todavía se puede enganchar a este Espacio, para los selectores."""
+
+    permission_classes = [IsAuthenticated, IsEditor]
+
+    def get(self, request, slug, space_slug):
+        espacio = require_space(request.membership, space_slug)
+        salida = {}
+        for coleccion, (nombre_campo, nombre_modelo) in COLECCIONES_DE_ESPACIO.items():
+            ya_estan = getattr(espacio, nombre_campo).values_list('pk', flat=True)
+            disponibles = _queryset_enganchable(nombre_modelo, request.workspace).exclude(
+                pk__in=list(ya_estan)
+            )
+            salida[coleccion] = [
+                {'id': o.pk, 'label': _etiqueta(o, nombre_modelo)} for o in disponibles[:200]
+            ]
+        return Response(salida)
+
+
+def _etiqueta(obj, nombre_modelo):
+    if nombre_modelo == 'CompanyDocument':
+        return obj.title
+    if nombre_modelo == 'User':
+        return obj.get_full_name() or obj.email
+    return obj.name

@@ -139,6 +139,19 @@ export const api = {
   createInvitation: (slug, data) => apiClient.post(`/workspaces/${slug}/invitations/`, data),
   revokeInvitation: (slug, id) => apiClient.delete(`/workspaces/${slug}/invitations/${id}/`),
   resendInvitation: (slug, id) => apiClient.post(`/workspaces/${slug}/invitations/${id}/resend/`),
+  // ── Espacios ──
+  getSpaces: (slug) => apiClient.get(`/workspaces/${slug}/espacios/`),
+  createSpace: (slug, data) => apiClient.post(`/workspaces/${slug}/espacios/`, data),
+  getSpace: (slug, space) => apiClient.get(`/workspaces/${slug}/espacios/${space}/`),
+  updateSpace: (slug, space, data) => apiClient.patch(`/workspaces/${slug}/espacios/${space}/`, data),
+  deleteSpace: (slug, space) => apiClient.delete(`/workspaces/${slug}/espacios/${space}/`),
+  getSpaceAvailable: (slug, space) => apiClient.get(`/workspaces/${slug}/espacios/${space}/disponibles/`),
+  // coleccion: conexiones | documentos | agentes | personas
+  addToSpace: (slug, space, coleccion, ids) =>
+    apiClient.post(`/workspaces/${slug}/espacios/${space}/${coleccion}/`, { ids }),
+  removeFromSpace: (slug, space, coleccion, ids) =>
+    apiClient.delete(`/workspaces/${slug}/espacios/${space}/${coleccion}/`, { data: { ids } }),
+
   // Por token: quien abre el link todavía no es miembro de ningún Workspace.
   getInvitation: (token) => apiClient.get(`/invitations/${token}/`),
   acceptInvitation: (token) => apiClient.post(`/invitations/${token}/accept/`),

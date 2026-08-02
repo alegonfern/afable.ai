@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     InvitationDetailView, InvitationListCreateView, InvitationResendView,
     MemberDetailView, MemberListView, SectorListView,
+    SpaceAvailableView, SpaceContentView, SpaceDetailView, SpaceListCreateView,
     WorkspaceDetailView, WorkspaceListCreateView,
 )
 
@@ -17,6 +18,19 @@ urlpatterns = [
     path('<slug:slug>/members/<int:pk>/', MemberDetailView.as_view(), name='workspace-member-detail'),
     path('<slug:slug>/invitations/', InvitationListCreateView.as_view(), name='workspace-invitations'),
     path('<slug:slug>/invitations/<int:pk>/', InvitationDetailView.as_view(), name='workspace-invitation-detail'),
+    path('<slug:slug>/espacios/', SpaceListCreateView.as_view(), name='space-list'),
+    path(
+        '<slug:slug>/espacios/<slug:space_slug>/',
+        SpaceDetailView.as_view(), name='space-detail',
+    ),
+    path(
+        '<slug:slug>/espacios/<slug:space_slug>/disponibles/',
+        SpaceAvailableView.as_view(), name='space-available',
+    ),
+    path(
+        '<slug:slug>/espacios/<slug:space_slug>/<slug:coleccion>/',
+        SpaceContentView.as_view(), name='space-content',
+    ),
     path(
         '<slug:slug>/invitations/<int:pk>/resend/',
         InvitationResendView.as_view(), name='workspace-invitation-resend',

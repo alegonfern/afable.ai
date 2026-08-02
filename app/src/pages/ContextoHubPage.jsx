@@ -6,8 +6,10 @@ import IntegrationsPage from './IntegrationsPage';
 import MiContextoPage from './MiContextoPage';
 import ContextoPage from './ContextoPage';
 import DocumentosTab from './DocumentosTab';
+import EspaciosTab from './espacios/EspaciosTab';
 
 const TABS = [
+  { value: 'espacios',      label: 'Espacios' },
   { value: 'integraciones', label: 'Conexiones' },
   { value: 'mi-contexto',   label: 'Mi Contexto' },
   { value: 'cubiculos',     label: 'Cubículos' },
@@ -18,7 +20,7 @@ export default function ContextoHubPage() {
   const theme = useTheme();
   const [searchParams, setSearchParams] = useSearchParams();
   const initial = TABS.some(t => t.value === searchParams.get('tab'))
-    ? searchParams.get('tab') : 'integraciones';
+    ? searchParams.get('tab') : 'espacios';
   const [tab, setTab] = useState(initial);
 
   const handleChange = (_, value) => {
@@ -39,6 +41,7 @@ export default function ContextoHubPage() {
         </Tabs>
       </Box>
 
+      {tab === 'espacios' && <EspaciosTab />}
       {tab === 'integraciones' && <IntegrationsPage hideHeader />}
       {tab === 'mi-contexto' && <MiContextoPage hideHeader />}
       {tab === 'cubiculos' && <ContextoPage hideHeader />}

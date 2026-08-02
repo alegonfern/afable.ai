@@ -14,7 +14,10 @@ propósito que vivan juntas: un solo archivo que leer para saber quién ve qué.
 from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.permissions import BasePermission
 
-from .models import ROLE_ADMIN, ROLE_EDITOR, ROLE_MEMBER, Membership
+from .models import (
+    ROLE_ADMIN, ROLE_EDITOR, ROLE_MEMBER,
+    VISIBILITY_OPEN, Membership, Space,
+)
 
 
 def resolve_membership(user, workspace_slug):
@@ -72,6 +75,48 @@ def is_admin_anywhere(user):
     if not user or not user.is_authenticated:
         return False
     return Membership.objects.filter(user=user, role=ROLE_ADMIN).exists()
+
+
+def spaces_visible_to(membership):
+    """Los Espacios que ese miembro puede ver dentro de su Workspace.
+
+    Abiertos, más los restringidos donde está agregado. El administrador los ve
+    todos: no puede administrar lo que no aparece en la lista.
+    """
+    if membership is None:
+        return Space.objects.none()
+    todos = Space.objects.filter(workspace=membership.workspace)
+    if membership.role == ROLE_ADMIN:
+        return todos.distinct()
+    from django.db.models import Q
+    return todos.filter(
+        Q(visibility=VISIBILITY_OPEN) | Q(members=membership.user)
+    ).distinct()
+
+
+def require_space(membership, space_slug):
+    """El Espacio, o 404. Mismo criterio que el Workspace: si no lo ve, no existe."""
+    espacio = spaces_visible_to(membership).filter(slug=space_slug).first()
+    if espacio is None:
+        raise NotFound('Espacio no encontrado.')
+    return espacio
+
+
+def sources_visible_to(membership):
+    """Las fuentes (conexiones y documentos) que alcanza ese miembro, vía Espacios.
+
+    Devuelve `(conexiones, documentos)`. Es la consulta que tiene que usar el
+    agente antes de armar el contexto: lo que no sale de acá no entra al prompt.
+    """
+    from apps.organizations.models import CompanyDocument, SystemConnection
+
+    espacios = spaces_visible_to(membership)
+    if membership is None:
+        return SystemConnection.objects.none(), CompanyDocument.objects.none()
+    return (
+        SystemConnection.objects.filter(spaces__in=espacios).distinct(),
+        CompanyDocument.objects.filter(spaces__in=espacios).distinct(),
+    )
 
 
 class WorkspaceRolePermission(BasePermission):

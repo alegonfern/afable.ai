@@ -304,3 +304,97 @@ class AltaDeUsuarioTests(TestCase):
             Membership.objects.get(user=uno).workspace_id,
             Membership.objects.get(user=dos).workspace_id,
         )
+
+
+class EspaciosTests(TestCase):
+    """Los Espacios: que un Espacio restringido no se filtre, y que enganchar funcione.
+
+    El caso que importa es el del medio: un miembro común no puede ver el Espacio
+    restringido del que no forma parte, pero el administrador sí — porque tiene
+    que poder administrar lo que no usa.
+    """
+
+    def setUp(self):
+        from .models import Space
+        from .permissions import spaces_visible_to
+
+        self.Space = Space
+        self.spaces_visible_to = spaces_visible_to
+
+        self.admin = crear_usuario('admin-esp@afable.test', 'Ada')
+        self.miembro = crear_usuario('miembro-esp@afable.test', 'Bruno')
+        self.invitado = crear_usuario('invitado-esp@afable.test', 'Carla')
+
+        self.workspace = Workspace.objects.create(name='Espacios SpA')
+        self.m_admin = self.workspace.add_member(self.admin, ROLE_ADMIN)
+        self.m_miembro = self.workspace.add_member(self.miembro, ROLE_MEMBER)
+        self.m_invitado = self.workspace.add_member(self.invitado, ROLE_MEMBER)
+
+        self.abierto = Space.objects.create(
+            workspace=self.workspace, name='General', visibility='abierto',
+        )
+        self.privado = Space.objects.create(
+            workspace=self.workspace, name='Personas', visibility='restringido',
+        )
+        self.privado.members.add(self.invitado)
+
+    def test_el_espacio_abierto_lo_ve_cualquier_miembro(self):
+        visibles = self.spaces_visible_to(self.m_miembro)
+        self.assertIn(self.abierto, visibles)
+
+    def test_el_restringido_no_se_le_filtra_a_quien_no_esta_dentro(self):
+        visibles = self.spaces_visible_to(self.m_miembro)
+        self.assertNotIn(self.privado, visibles)
+
+    def test_el_restringido_lo_ve_quien_fue_agregado(self):
+        self.assertIn(self.privado, self.spaces_visible_to(self.m_invitado))
+
+    def test_el_administrador_ve_todos_los_espacios(self):
+        visibles = self.spaces_visible_to(self.m_admin)
+        self.assertIn(self.abierto, visibles)
+        self.assertIn(self.privado, visibles)
+
+    def test_pedir_un_espacio_que_no_ve_es_404_no_403(self):
+        from rest_framework.exceptions import NotFound as NF
+
+        from .permissions import require_space
+
+        with self.assertRaises(NF):
+            require_space(self.m_miembro, self.privado.slug)
+
+    def test_el_slug_se_arma_solo_y_no_choca_entre_hermanos(self):
+        otro = self.Space.objects.create(workspace=self.workspace, name='General')
+        self.assertEqual(self.abierto.slug, 'general')
+        self.assertEqual(otro.slug, 'general-2')
+
+    def test_la_api_lista_solo_los_espacios_que_corresponden(self):
+        client = APIClient()
+        client.force_authenticate(user=self.miembro)
+        resp = client.get(f'/api/v1/workspaces/{self.workspace.slug}/espacios/')
+        self.assertEqual(resp.status_code, 200)
+        nombres = [e['name'] for e in resp.json()]
+        self.assertEqual(nombres, ['General'])
+
+    def test_un_miembro_comun_no_puede_crear_un_espacio(self):
+        client = APIClient()
+        client.force_authenticate(user=self.miembro)
+        resp = client.post(
+            f'/api/v1/workspaces/{self.workspace.slug}/espacios/', {'name': 'Ventas'}, format='json',
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_enganchar_una_conexion_de_otra_empresa_no_hace_nada(self):
+        from apps.organizations.models import Organization, SystemConnection
+
+        ajena = Organization.objects.create(owner=self.admin, name='Otra empresa')
+        conexion = SystemConnection.objects.create(
+            organization=ajena, name='Odoo ajeno', connector_type='odoo',
+        )
+        client = APIClient()
+        client.force_authenticate(user=self.admin)
+        resp = client.post(
+            f'/api/v1/workspaces/{self.workspace.slug}/espacios/{self.abierto.slug}/conexiones/',
+            {'ids': [conexion.id]}, format='json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self.abierto.connections.count(), 0)

@@ -308,3 +308,109 @@ class Invitation(models.Model):
         self.accepted_by = user
         self.save(update_fields=['accepted_at', 'accepted_by'])
         return membership
+
+
+# ---------------------------------------------------------------------------
+# Espacios de contexto
+# ---------------------------------------------------------------------------
+
+VISIBILITY_OPEN = 'abierto'
+VISIBILITY_RESTRICTED = 'restringido'
+
+VISIBILITY_CHOICES = [
+    (VISIBILITY_OPEN, 'Abierto — lo ve todo el Workspace'),
+    (VISIBILITY_RESTRICTED, 'Restringido — solo quienes se agreguen'),
+]
+
+
+class Space(models.Model):
+    """Un Espacio: contenedor que junta fuentes, agentes y personas.
+
+    Es la unidad con la que se decide quién ve qué. Sin Espacios, todas las
+    conexiones y documentos de la empresa quedan revueltos y cualquiera puede
+    preguntarle al agente por la carpeta de Recursos Humanos. Con Espacios,
+    el agente de Ventas sólo alcanza las fuentes del Espacio de Ventas.
+
+    La visibilidad se resuelve en `permissions.spaces_visible_to`, junto al
+    resto de los permisos del Workspace: acá sólo viven los datos.
+    """
+
+    workspace = models.ForeignKey(
+        Workspace, on_delete=models.CASCADE, related_name='spaces'
+    )
+    name = models.CharField(max_length=120)
+    slug = models.SlugField(max_length=140)
+    description = models.TextField(blank=True)
+    icon = models.CharField(max_length=8, blank=True, help_text='Emoji de la tarjeta.')
+    visibility = models.CharField(
+        max_length=16, choices=VISIBILITY_CHOICES, default=VISIBILITY_OPEN
+    )
+
+    # Quiénes entran cuando el Espacio es restringido. En un Espacio abierto esta
+    # lista se ignora al resolver el acceso: la usa igual la pantalla para mostrar
+    # a los responsables del Espacio.
+    members = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True, related_name='spaces'
+    )
+
+    # Lo que el Espacio le presta a sus agentes.
+    connections = models.ManyToManyField(
+        'organizations.SystemConnection', blank=True, related_name='spaces'
+    )
+    documents = models.ManyToManyField(
+        'organizations.CompanyDocument', blank=True, related_name='spaces'
+    )
+    agents = models.ManyToManyField(
+        'agents.Agent', blank=True, related_name='spaces'
+    )
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='+',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'workspace_spaces'
+        ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['workspace', 'slug'], name='unico_slug_de_espacio_por_workspace'
+            ),
+        ]
+        verbose_name = 'Espacio'
+        verbose_name_plural = 'Espacios'
+
+    def __str__(self):
+        return f'{self.workspace.name} — {self.name}'
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = self._slug_disponible(slugify(self.name) or 'espacio')
+        super().save(*args, **kwargs)
+
+    def _slug_disponible(self, base):
+        candidato, n = base, 2
+        hermanos = Space.objects.filter(workspace=self.workspace).exclude(pk=self.pk)
+        while hermanos.filter(slug=candidato).exists():
+            candidato = f'{base}-{n}'
+            n += 1
+        return candidato
+
+    @property
+    def is_open(self):
+        return self.visibility == VISIBILITY_OPEN
+
+    def allows(self, user, membership=None):
+        """Si `user` puede ver este Espacio.
+
+        Un Espacio abierto lo ve cualquier miembro del Workspace. Uno restringido,
+        sólo quien esté en `members` — con la excepción del administrador, que
+        tiene que poder administrar lo que no usa.
+        """
+        if self.is_open:
+            return True
+        if membership is not None and membership.role == ROLE_ADMIN:
+            return True
+        return self.members.filter(pk=user.pk).exists()

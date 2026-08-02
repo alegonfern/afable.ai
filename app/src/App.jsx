@@ -32,6 +32,7 @@ import ProfilePage from './pages/ProfilePage';
 import MiContextoPage from './pages/MiContextoPage';
 import ContextoPage from './pages/ContextoPage';
 import ContextoHubPage from './pages/ContextoHubPage';
+import EspacioDetallePage from './pages/espacios/EspacioDetallePage';
 import AutomationsPage from './pages/AutomationsPage';
 import RutinaPage from './pages/RutinaPage';
 import SettingsPage from './pages/SettingsPage';
@@ -107,6 +108,7 @@ export default function App() {
             <Route path="documentos"         element={<DocumentsPage />} />
             <Route path="mi-contexto"        element={<MiContextoPage />} />
             <Route path="contexto"           element={<ContextoHubPage />} />
+            <Route path="espacios/:spaceSlug" element={<EspacioDetallePage />} />
             <Route path="contexto-cubiculos" element={<ContextoPage />} />
             <Route path="contexto-empresa"   element={<Navigate to="/app/mi-contexto" replace />} />
             <Route path="automatizaciones"   element={<AutomationsPage />} />
