@@ -51,15 +51,23 @@ def get_business_model(organization) -> dict:
     return {'sources': sources, 'entities': entities, 'edges': edges, 'synced': synced}
 
 
-def get_connections_context(organization) -> Optional[str]:
+def get_connections_context(organization, allowed_ids=None) -> Optional[str]:
     """
-    Retorna un bloque de contexto con todos los sistemas activos de la org.
+    Retorna un bloque de contexto con los sistemas activos de la org.
     Retorna None si no hay conexiones activas.
+
+    `allowed_ids` es el alcance del agente según sus Espacios: `None` es sin
+    restricción. Sin este filtro el bloque nombraba, con su esquema completo, los
+    sistemas de Espacios donde el agente no entra — el agente no podía consultarlos
+    (eso ya lo cortaba `allowed_ids` en las herramientas) pero sí sabía que existían
+    y cómo se llamaban sus tablas.
     """
     from apps.organizations.models import SystemConnection
     connections = SystemConnection.objects.filter(
         organization=organization, is_active=True
     )
+    if allowed_ids is not None:
+        connections = connections.filter(id__in=allowed_ids)
     if not connections.exists():
         return None
 

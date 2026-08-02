@@ -270,9 +270,28 @@ def _normalizar_args(name, args):
     return args
 
 
-def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None, artifacts: dict = None) -> dict:
+def _documentos(org, allowed_doc_ids=None):
+    """Los documentos que este agente alcanza.
+
+    `allowed_doc_ids=None` es sin restricción. Una lista limita a esos documentos,
+    y una lista VACÍA no devuelve ninguno: un agente encerrado en un Espacio sin
+    documentos no tiene que poder leer los del resto de la empresa. Toda consulta a
+    `CompanyDocument` dentro de las herramientas pasa por acá — si alguna se saltea
+    esta función, el Espacio deja de valer para esa herramienta.
+    """
+    from apps.organizations.models import CompanyDocument
+
+    qs = CompanyDocument.objects.filter(organization=org)
+    if allowed_doc_ids is not None:
+        qs = qs.filter(id__in=allowed_doc_ids)
+    return qs
+
+
+def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None, artifacts: dict = None, allowed_doc_ids=None) -> dict:
     """Ejecuta una herramienta y registra procedencia en `provenance`.
     `allowed_ids` (si viene) limita a qué sistemas conectados puede acceder el agente.
+    `allowed_doc_ids` hace lo mismo con los documentos: los dos salen del Espacio
+    del agente (ver `apps/workspaces/permissions.alcance_de_agente`).
     `artifacts` (si viene) acumula figuras generadas: marcador → PNG base64."""
     args = _normalizar_args(name, args)
     now = datetime.now().strftime('%H:%M')
@@ -293,7 +312,7 @@ def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None,
             hallazgos = []
 
             # Documentos y archivos (Drive, subidas manuales): titulo y contenido.
-            for doc in CompanyDocument.objects.filter(organization=org):
+            for doc in _documentos(org, allowed_doc_ids):
                 texto = doc.extracted_text or ''
                 en_titulo = consulta.lower() in (doc.title or '').lower()
                 pos = texto.lower().find(consulta.lower())
@@ -336,7 +355,7 @@ def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None,
             })
             if not hallazgos:
                 inventario = list(
-                    CompanyDocument.objects.filter(organization=org).values_list('title', flat=True)
+                    _documentos(org, allowed_doc_ids).values_list('title', flat=True)
                 )
                 return {
                     "encontrado": False,
@@ -360,7 +379,7 @@ def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None,
                     errores.append(f'{conn.name}: {e}')
 
             doc_id = (args or {}).get('id')
-            docs = CompanyDocument.objects.filter(organization=org)
+            docs = _documentos(org, allowed_doc_ids)
             if doc_id:
                 docs = docs.filter(id=doc_id)
             docs = list(docs)
@@ -382,7 +401,7 @@ def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None,
         if name == 'read_company_document':
             from apps.organizations.models import CompanyDocument
             doc_id = (args or {}).get('id')
-            doc = CompanyDocument.objects.filter(organization=org, id=doc_id).first()
+            doc = _documentos(org, allowed_doc_ids).filter(id=doc_id).first()
             if not doc:
                 return {"error": f"No existe un documento de la empresa con id={doc_id}."}
             if not doc.extracted_text:

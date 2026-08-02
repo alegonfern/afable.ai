@@ -17,6 +17,7 @@ from .serializers import (
     AutomationSerializer, SkillSerializer, SkillWriteSerializer, RoutineSerializer,
 )
 from apps.organizations.models import Organization
+from apps.workspaces.permissions import alcance_de_agente
 from services.agent_service import chat_direct, stream_direct, resolve_model
 
 
@@ -99,10 +100,15 @@ def _get_user_role_context(user):
     return (' '.join(parts) + '\n\n') if parts else ''
 
 
-def _get_org_context(org):
+def _get_org_context(org, allowed_doc_ids=None):
     """Contexto de EMPRESA (no del usuario): formulario + índice de documentos
     subidos. Se inyecta siempre, en todos los modos — es lo que no está en
-    ninguna tabla conectada (mission, tono, glosario, políticas)."""
+    ninguna tabla conectada (mission, tono, glosario, políticas).
+
+    `allowed_doc_ids` es el alcance del agente según sus Espacios: `None` es sin
+    restricción, una lista limita a esos documentos, y una lista vacía deja el
+    índice vacío a propósito (un agente encerrado en un Espacio sin documentos
+    no tiene que ver los del resto de la empresa)."""
     from apps.organizations.models import OrganizationContext, CompanyDocument, ContextCubicle
 
     parts = []
@@ -138,9 +144,11 @@ def _get_org_context(org):
     PRESUPUESTO_DOCS = 60_000   # caracteres
     TOPE_POR_DOC = 20_000
 
+    doc_qs = CompanyDocument.objects.filter(organization=org)
+    if allowed_doc_ids is not None:
+        doc_qs = doc_qs.filter(id__in=allowed_doc_ids)
     docs = list(
-        CompanyDocument.objects.filter(organization=org)
-        .order_by('-updated_at' if hasattr(CompanyDocument, 'updated_at') else '-id')
+        doc_qs.order_by('-updated_at' if hasattr(CompanyDocument, 'updated_at') else '-id')
     )
     if docs:
         completos, indice, gastado = [], [], 0
@@ -233,7 +241,12 @@ Acciones adicionales disponibles:
     has_scan = scans.exists()
 
     role_ctx = _get_user_role_context(user)
-    org_ctx = _get_org_context(org)
+
+    # El Espacio decide qué alcanza el agente. `None` en cualquiera de los dos es
+    # "sin restricción": un agente que no está en ningún Espacio sigue viendo todo
+    # lo de su empresa (ver `alcance_de_agente`).
+    espacio_conns, espacio_docs = alcance_de_agente(agent)
+    org_ctx = _get_org_context(org, allowed_doc_ids=espacio_docs)
 
     # Primero intenta SystemConnection (arquitectura nueva)
     from apps.organizations.models import SystemConnection
@@ -242,8 +255,12 @@ Acciones adicionales disponibles:
     # su contenido llega vía CompanyDocument (sync) y el tool read_company_document,
     # no por este modo. Si es la única conexión, no debe forzar 'connected_systems'.
     connections = SystemConnection.objects.filter(organization=org, is_active=True).exclude(connector_type='google_drive')
+    # El Espacio recorta antes que cualquier otra cosa: lo que no está en el Espacio
+    # del agente no existe para ese agente, ni siquiera para nombrarlo en el prompt.
+    if espacio_conns is not None:
+        connections = connections.filter(id__in=espacio_conns)
     if connections.exists():
-        conn_ctx = get_connections_context(org) or ''
+        conn_ctx = get_connections_context(org, espacio_conns) or ''
 
         # Configuración del agente elegido (si trae instrucciones / scope de sistemas / modelo).
         agent_block = ''
@@ -253,6 +270,10 @@ Acciones adicionales disponibles:
             if getattr(agent, 'model', ''):
                 agent_model = agent.model
             sys_ids = list(agent.systems.values_list('id', flat=True)) if agent.pk else []
+            if espacio_conns is not None:
+                # Se intersecta, no se reemplaza: un sistema elegido a mano en la
+                # ficha del agente no puede sacarlo del Espacio donde vive.
+                sys_ids = [i for i in sys_ids if i in set(espacio_conns)]
             if sys_ids:
                 allowed_ids = sys_ids
                 allowed_names = ', '.join(
@@ -278,9 +299,16 @@ Acciones adicionales disponibles:
             if de_habilidades:
                 agent_block += f"\n{de_habilidades}\n"
 
+        # Sin sistemas elegidos a mano, el alcance sigue siendo el del Espacio: si
+        # no viajara acá, las herramientas volverían a ver toda la empresa.
+        if allowed_ids is None and espacio_conns is not None:
+            allowed_ids = list(espacio_conns)
+
         # @mención en el mensaje: acota ESTE mensaje a un único sistema, por
         # encima del scope del agente (siempre que ese sistema exista y esté conectado).
         if mention_system_id is not None:
+            # `connections` ya viene recortado por el Espacio, así que mencionar un
+            # sistema de afuera simplemente no encuentra nada.
             mentioned = connections.filter(id=mention_system_id).first()
             if mentioned is not None:
                 allowed_ids = [mentioned.id]
@@ -290,6 +318,7 @@ Acciones adicionales disponibles:
             'mode': 'connected_systems',
             'org': org,
             'allowed_ids': allowed_ids,
+            'allowed_doc_ids': espacio_docs,
             'agent_model': agent_model,
             'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
 {perm_ctx}{agent_block}
@@ -638,7 +667,10 @@ class DirectChatView(APIView):
 
         if context.get('mode') == 'connected_systems':
             from services.agent_service import run_agent_live
-            response_text = run_agent_live(full_history, context['org'], system_prompt, model, context.get('allowed_ids'))
+            response_text = run_agent_live(
+                full_history, context['org'], system_prompt, model,
+                context.get('allowed_ids'), context.get('allowed_doc_ids'),
+            )
         else:
             response_text = chat_direct(full_history, system_prompt, model)
 
@@ -711,6 +743,7 @@ class DirectChatStreamView(APIView):
         model = (request.data.get('model') or '').strip() or context.get('agent_model')
         _, resolved_model = resolve_model(model)
         allowed_ids = context.get('allowed_ids')
+        allowed_doc_ids = context.get('allowed_doc_ids')
         # Quien va a contestar viaja en el primer evento: si la mencion cambio el
         # agente, la pantalla tiene que enterarse antes de que empiece el texto.
         agente_payload = (
@@ -726,7 +759,9 @@ class DirectChatStreamView(APIView):
                 # mientras consulta los sistemas, y al final el texto en trozos (efecto typing).
                 from services.agent_service import run_agent_live_events
                 full_text = ''
-                for event in run_agent_live_events(full_history, org, system_prompt, model, allowed_ids):
+                for event in run_agent_live_events(
+                    full_history, org, system_prompt, model, allowed_ids, allowed_doc_ids,
+                ):
                     if 'status' in event:
                         yield f"data: {json.dumps({'status': event['status']})}\n\n"
                     elif 'final' in event:

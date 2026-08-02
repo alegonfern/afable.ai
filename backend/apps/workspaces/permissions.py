@@ -119,6 +119,34 @@ def sources_visible_to(membership):
     )
 
 
+def alcance_de_agente(agent):
+    """Qué fuentes alcanza este agente, según los Espacios a los que pertenece.
+
+    Devuelve `(ids_de_conexiones, ids_de_documentos)`. **`None` en cualquiera de
+    los dos significa "sin restricción"**, y es a propósito: un agente que no está
+    en ningún Espacio sigue viendo todo lo de su empresa, como antes de que los
+    Espacios existieran. Si los Espacios restringieran también a los agentes que
+    nadie asignó, instalar esta función dejaría a toda la instalación existente
+    con agentes que de golpe no saben nada.
+
+    Un agente que SÍ está en Espacios queda encerrado en la unión de sus fuentes,
+    aunque esa unión sea vacía: ahí el silencio es la respuesta correcta.
+    """
+    if agent is None or not agent.pk:
+        return None, None
+
+    espacios = list(agent.spaces.all())
+    if not espacios:
+        return None, None
+
+    conexiones = set()
+    documentos = set()
+    for espacio in espacios:
+        conexiones.update(espacio.connections.values_list('id', flat=True))
+        documentos.update(espacio.documents.values_list('id', flat=True))
+    return list(conexiones), list(documentos)
+
+
 class WorkspaceRolePermission(BasePermission):
     """Base de los permisos DRF. Espera `slug` en los kwargs de la vista.
 
