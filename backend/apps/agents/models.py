@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from django.utils.text import slugify
 
 
 class Agent(models.Model):
@@ -9,6 +10,10 @@ class Agent(models.Model):
         'organizations.Organization', on_delete=models.CASCADE, related_name='agents'
     )
     name = models.CharField(max_length=255)
+    # Con lo que se lo llama en la conversación: @ventas, @contratos. Se arma solo
+    # desde el nombre la primera vez y despues no se toca, porque cambiarlo romperia
+    # las menciones ya escritas en los hilos.
+    handle = models.SlugField(max_length=60, blank=True)
     erp_type = models.CharField(max_length=20, choices=ERP_TYPES, default='odoo', blank=True)  # legado
     description = models.TextField(blank=True)
     # Configuración real del agente:
@@ -33,9 +38,29 @@ class Agent(models.Model):
     class Meta:
         db_table = 'agents'
         ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['organization', 'handle'],
+                condition=~models.Q(handle=''),
+                name='unico_handle_de_agente_por_empresa',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.organization.name})"
+
+    def save(self, *args, **kwargs):
+        if not self.handle:
+            self.handle = self._handle_disponible(slugify(self.name)[:50] or 'agente')
+        super().save(*args, **kwargs)
+
+    def _handle_disponible(self, base):
+        candidato, n = base, 2
+        hermanos = Agent.objects.filter(organization=self.organization).exclude(pk=self.pk)
+        while hermanos.filter(handle=candidato).exists():
+            candidato = f'{base}-{n}'
+            n += 1
+        return candidato
 
 
 class AgentTemplate(models.Model):
@@ -102,6 +127,12 @@ class Message(models.Model):
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='messages')
     role = models.CharField(max_length=20, choices=ROLES)
     content = models.TextField()
+    # Quien contesto este mensaje en concreto. La conversacion tiene un agente
+    # "actual", pero en un hilo pueden haber contestado varios: sin esto, al
+    # recargar la pagina todas las respuestas aparecen firmadas por el ultimo.
+    agent = models.ForeignKey(
+        Agent, on_delete=models.SET_NULL, null=True, blank=True, related_name='messages'
+    )
     model_used = models.CharField(max_length=100, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

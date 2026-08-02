@@ -380,6 +380,36 @@ def _resolve_agent(request, default_agent):
     return default_agent
 
 
+# Una mención al agente: @ventas, @contratos. Se acepta en cualquier parte del
+# mensaje, no sólo al principio, porque la gente escribe "consultale a @ventas".
+PATRON_MENCION = re.compile(r'(?:^|\s)@([a-z0-9][a-z0-9-]{0,59})\b', re.IGNORECASE)
+
+
+def _agentes_del_usuario(user):
+    org_ids = Organization.objects.filter(owner=user).values_list('id', flat=True)
+    return Agent.objects.filter(organization_id__in=org_ids, is_active=True)
+
+
+def _agente_mencionado(user, texto):
+    """El agente al que apunta la primera `@mención` del mensaje, o None.
+
+    Una mención que no corresponde a ningún agente se ignora en silencio y se
+    queda escrita en el mensaje: puede ser un correo, un handle de otra cosa, o
+    sencillamente un error de tipeo, y cortar la conversación por eso sería peor
+    que contestar con el agente que ya venía.
+    """
+    if not texto:
+        return None
+    handles = [m.group(1).lower() for m in PATRON_MENCION.finditer(texto)]
+    if not handles:
+        return None
+    encontrados = {a.handle: a for a in _agentes_del_usuario(user).filter(handle__in=handles)}
+    for handle in handles:
+        if handle in encontrados:
+            return encontrados[handle]
+    return None
+
+
 def _agente_de_conversacion(request, conversation):
     """
     Agente que responde en una conversación que ya existe.
@@ -390,7 +420,12 @@ def _agente_de_conversacion(request, conversation):
     se ignoraba cuando había conversación, así que la única forma de cambiar de
     agente era abrir otro hilo.
     """
-    agent = _resolve_agent(request, conversation.agent)
+    # La mención manda sobre el selector: si el usuario escribió @ventas, quiere
+    # que conteste Ventas aunque en la barra siga marcado otro agente.
+    agent = (
+        _agente_mencionado(request.user, request.data.get('message', ''))
+        or _resolve_agent(request, conversation.agent)
+    )
     if agent and agent != conversation.agent:
         conversation.agent = agent
         conversation.save(update_fields=['agent'])
@@ -575,7 +610,10 @@ class DirectChatView(APIView):
             conversation = get_object_or_404(Conversation, pk=conversation_id, user=request.user)
             agent = _agente_de_conversacion(request, conversation)
         else:
-            agent = _resolve_agent(request, default_agent)
+            agent = (
+                _agente_mencionado(request.user, message)
+                or _resolve_agent(request, default_agent)
+            )
             conversation = Conversation.objects.create(
                 agent=agent, user=request.user, title=_conversation_title(agent, message))
 
@@ -596,7 +634,10 @@ class DirectChatView(APIView):
             response_text = chat_direct(full_history, system_prompt, model)
 
         clean_response = _strip_action(response_text)
-        Message.objects.create(conversation=conversation, role='assistant', content=clean_response, model_used=resolved_model)
+        Message.objects.create(
+            conversation=conversation, role='assistant', content=clean_response,
+            agent=agent, model_used=resolved_model,
+        )
         conversation.save()
 
         return Response({'conversation_id': conversation.id, 'message': clean_response, 'model': resolved_model})
@@ -639,7 +680,10 @@ class DirectChatStreamView(APIView):
             conversation = get_object_or_404(Conversation, pk=conversation_id, user=request.user)
             agent = _agente_de_conversacion(request, conversation)
         else:
-            agent = _resolve_agent(request, default_agent)
+            agent = (
+                _agente_mencionado(request.user, message)
+                or _resolve_agent(request, default_agent)
+            )
             conversation = Conversation.objects.create(
                 agent=agent, user=request.user, title=_conversation_title(agent, message))
 
@@ -651,16 +695,22 @@ class DirectChatStreamView(APIView):
         full_history = list(conversation.messages.values('role', 'content').order_by('created_at'))
 
         conv_id = conversation.id
+        agent_id = agent.id if agent else None
         user = request.user
         mode = context.get('mode')
         org = context.get('org')
         model = (request.data.get('model') or '').strip() or context.get('agent_model')
         _, resolved_model = resolve_model(model)
         allowed_ids = context.get('allowed_ids')
+        # Quien va a contestar viaja en el primer evento: si la mencion cambio el
+        # agente, la pantalla tiene que enterarse antes de que empiece el texto.
+        agente_payload = (
+            {'id': agent.id, 'name': agent.name, 'handle': agent.handle} if agent else None
+        )
 
         def event_stream():
             accumulated = []
-            yield f"data: {json.dumps({'conversation_id': conv_id, 'model': resolved_model})}\n\n"
+            yield f"data: {json.dumps({'conversation_id': conv_id, 'model': resolved_model, 'agent': agente_payload})}\n\n"
 
             if mode == 'connected_systems':
                 # Agente con datos en vivo: emite estados de progreso por cada herramienta
@@ -700,7 +750,10 @@ class DirectChatStreamView(APIView):
                 # El modelo a veces responde SOLO con la acción; que el historial
                 # no quede con un mensaje vacío.
                 clean_response = action_result.get('message', '')
-            Message.objects.create(conversation_id=conv_id, role='assistant', content=clean_response, model_used=resolved_model)
+            Message.objects.create(
+                conversation_id=conv_id, role='assistant', content=clean_response,
+                agent_id=agent_id, model_used=resolved_model,
+            )
             Conversation.objects.filter(pk=conv_id).update()
 
             done_payload = {'done': True, 'model': resolved_model}

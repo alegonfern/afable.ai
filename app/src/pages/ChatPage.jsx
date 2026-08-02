@@ -15,6 +15,8 @@ import { useNavigate, useLocation, useOutletContext } from 'react-router-dom';
 import { api } from '../services/api';
 import AgentesGaleria from './trabajo/AgentesGaleria';
 import SelectorAgente from './trabajo/SelectorAgente';
+import MencionAgentes, { aplicarMencion, detectarMencion, filtrarAgentes }
+  from '../components/MencionAgentes';
 import { useApp } from '../context/AppContext';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -164,6 +166,14 @@ function MessageBubble({ msg, onReintentar }) {
         <Bot size={14} color="#fff" />
       </Box>
       <Box sx={{ flex: 1, minWidth: 0 }}>
+        {/* Quien contesto ESTE mensaje. En un hilo pueden haber contestado
+            varios agentes, y sin la firma todas las respuestas parecen del
+            ultimo que quedo seleccionado. */}
+        {(msg.agent_name || msg.agent_handle) && (
+          <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: '#9BA6E3', mb: 0.4 }}>
+            {msg.agent_handle ? `@${msg.agent_handle}` : msg.agent_name}
+          </Typography>
+        )}
         <Box sx={{ bgcolor: d ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
           border: `1px solid ${theme.palette.divider}`,
           borderRadius: '4px 14px 14px 14px', px: 2, py: 1.5,
@@ -379,6 +389,10 @@ export default function ChatPage() {
   const [showScrollBtn, setShowScrollBtn] = useState(false);
   const [activeAgent, setActiveAgent] = useState(null);   // {id, name} si se entra desde un agente
   const [galeriaAbierta, setGaleriaAbierta] = useState(false); // vitrina desplegada en el compositor
+  // Mencionar un agente con @: la lista de la empresa y lo que se esta tipeando.
+  const [agentesMencionables, setAgentesMencionables] = useState([]);
+  const [mencion, setMencion] = useState(null);      // { consulta, desde } o null
+  const [mencionIdx, setMencionIdx] = useState(0);
   const [savedDoc, setSavedDoc] = useState(null);         // {title} cuando el agente guardó un documento
 
   const [attachment, setAttachment] = useState(null);     // {name, extracted_text, error}
@@ -524,6 +538,14 @@ export default function ChatPage() {
           try {
             const data = JSON.parse(line.slice(6));
             if (data.conversation_id) setConvId(data.conversation_id);
+            if (data.agent) {
+              // Si el usuario menciono a otro agente, el backend ya decidio: la
+              // barra y la firma del mensaje tienen que reflejar a QUIEN contesta.
+              setActiveAgent({ id: data.agent.id, name: data.agent.name });
+              setMessages(prev => prev.map(m => m.id === aid
+                ? { ...m, agent_name: data.agent.name, agent_handle: data.agent.handle }
+                : m));
+            }
             if (data.model) {
               setMessages(prev => prev.map(m => m.id === aid ? { ...m, model: data.model } : m));
             }
@@ -598,7 +620,60 @@ export default function ChatPage() {
     }
   }, [location.state, location.pathname, navigate, sendMessage]);
 
+  // Los agentes de la empresa, para el autocompletado de `@`. Se piden una vez:
+  // la lista cambia poco y no vale la pena volver a consultarla por cada tecla.
+  useEffect(() => {
+    let vivo = true;
+    api.getAgents()
+      .then(({ data }) => { if (vivo) setAgentesMencionables(Array.isArray(data) ? data : []); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+
+  const sugerencias = mencion ? filtrarAgentes(agentesMencionables, mencion.consulta) : [];
+
+  const handleInputChange = (e) => {
+    const texto = e.target.value;
+    setInput(texto);
+    const detectada = detectarMencion(texto, e.target.selectionStart ?? texto.length);
+    setMencion(detectada);
+    setMencionIdx(0);
+  };
+
+  const elegirMencion = (agente) => {
+    const { texto, cursor } = aplicarMencion(input, mencion, agente.handle);
+    setInput(texto);
+    setMencion(null);
+    // El agente mencionado pasa a ser el del hilo, para que la barra de arriba
+    // no siga diciendo que se habla con otro.
+    setActiveAgent({ id: agente.id, name: agente.name });
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange?.(cursor, cursor);
+    });
+  };
+
   const handleKeyDown = (e) => {
+    // Con la lista de menciones abierta, el teclado es de la lista: Enter elige
+    // un agente en vez de mandar el mensaje a medio escribir.
+    if (mencion && sugerencias.length) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMencionIdx((i) => (i + 1) % sugerencias.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMencionIdx((i) => (i - 1 + sugerencias.length) % sugerencias.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        elegirMencion(sugerencias[mencionIdx]);
+        return;
+      }
+      if (e.key === 'Escape') { e.preventDefault(); setMencion(null); return; }
+    }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
 
@@ -665,11 +740,17 @@ export default function ChatPage() {
       {/* Input */}
       <Box sx={{ flexShrink: 0, px: { xs: 2, sm: 3, md: 4 }, pt: 1.5, pb: 2.5, maxWidth: 780, width: '100%', mx: 'auto' }}>
         <Box sx={{
+          position: 'relative',
           border: `1.5px solid ${loading ? 'rgba(88, 106, 208,0.4)' : theme.palette.divider}`,
           borderRadius: '14px', bgcolor: d ? 'rgba(255,255,255,0.03)' : '#fff',
           transition: 'border-color 0.2s', '&:focus-within': { borderColor: 'rgba(88, 106, 208,0.5)' },
           boxShadow: d ? 'none' : '0 2px 12px rgba(0,0,0,0.06)',
         }}>
+          {mencion && (
+            <MencionAgentes
+              agentes={sugerencias} indice={mencionIdx} onElegir={elegirMencion}
+            />
+          )}
           {(attachment || attaching || mentionedSystem) && (
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, px: 2, pt: 1.25 }}>
               {attaching && (
@@ -692,7 +773,7 @@ export default function ChatPage() {
           )}
           <TextField inputRef={inputRef} multiline maxRows={6} fullWidth
             placeholder="Escribe un mensaje... (Enter para enviar)"
-            value={input} onChange={e => setInput(e.target.value)}
+            value={input} onChange={handleInputChange}
             onKeyDown={handleKeyDown} disabled={loading}
             variant="standard" InputProps={{ disableUnderline: true }}
             sx={{ px: 2, pt: 1.5, pb: 0.5,

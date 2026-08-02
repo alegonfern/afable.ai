@@ -15,16 +15,22 @@ class AgentTemplateSerializer(serializers.ModelSerializer):
 class AgentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Agent
-        fields = ['id', 'organization', 'name', 'description', 'instructions',
+        fields = ['id', 'organization', 'name', 'handle', 'description', 'instructions',
                   'area', 'systems', 'model', 'tools_summary',
                   'recommended_frequency', 'is_active', 'created_at']
         read_only_fields = ['id', 'created_at']
 
 
 class MessageSerializer(serializers.ModelSerializer):
+    # Firmado por mensaje, no por conversacion: en un hilo pueden haber
+    # contestado varios agentes y al recargar hay que poder distinguirlos.
+    agent_name = serializers.CharField(source='agent.name', read_only=True, default=None)
+    agent_handle = serializers.CharField(source='agent.handle', read_only=True, default=None)
+
     class Meta:
         model = Message
-        fields = ['id', 'role', 'content', 'model_used', 'created_at']
+        fields = ['id', 'role', 'content', 'agent', 'agent_name', 'agent_handle',
+                  'model_used', 'created_at']
         read_only_fields = ['id', 'created_at']
 
 
