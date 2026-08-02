@@ -3,7 +3,8 @@ from django.urls import path
 from .views import (
     InvitationDetailView, InvitationListCreateView, InvitationResendView,
     MemberDetailView, MemberListView, SectorListView,
-    SpaceAvailableView, SpaceContentView, SpaceDetailView, SpaceListCreateView,
+    SpaceAvailableView, SpaceContentView, SpaceConversationsView,
+    SpaceDetailView, SpaceListCreateView,
     WorkspaceDetailView, WorkspaceListCreateView,
 )
 
@@ -26,6 +27,10 @@ urlpatterns = [
     path(
         '<slug:slug>/espacios/<slug:space_slug>/disponibles/',
         SpaceAvailableView.as_view(), name='space-available',
+    ),
+    path(
+        '<slug:slug>/espacios/<slug:space_slug>/conversaciones/',
+        SpaceConversationsView.as_view(), name='space-conversations',
     ),
     path(
         '<slug:slug>/espacios/<slug:space_slug>/<slug:coleccion>/',

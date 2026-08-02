@@ -152,6 +152,8 @@ export const api = {
   updateSpace: (slug, space, data) => apiClient.patch(`/workspaces/${slug}/espacios/${space}/`, data),
   deleteSpace: (slug, space) => apiClient.delete(`/workspaces/${slug}/espacios/${space}/`),
   getSpaceAvailable: (slug, space) => apiClient.get(`/workspaces/${slug}/espacios/${space}/disponibles/`),
+  getSpaceConversations: (slug, space) =>
+    apiClient.get(`/workspaces/${slug}/espacios/${space}/conversaciones/`),
   // coleccion: conexiones | documentos | agentes | personas
   addToSpace: (slug, space, coleccion, ids) =>
     apiClient.post(`/workspaces/${slug}/espacios/${space}/${coleccion}/`, { ids }),

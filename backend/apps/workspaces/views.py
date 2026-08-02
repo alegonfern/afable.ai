@@ -456,3 +456,38 @@ def _etiqueta(obj, nombre_modelo):
     if nombre_modelo == 'User':
         return obj.get_full_name() or obj.email
     return obj.name
+
+
+class SpaceConversationsView(APIView):
+    """Las conversaciones que se trabajaron en este Espacio.
+
+    A diferencia del historial personal, acá el hilo es del equipo: lo ve cualquiera
+    que pertenezca al Espacio, sin importar quién lo escribió. Es lo que convierte al
+    Espacio en un lugar de trabajo y no solo en una carpeta de permisos — el trabajo
+    de un compañero queda a la vista en vez de perderse en su historial privado.
+    """
+
+    permission_classes = [IsAuthenticated, IsMember]
+
+    def get(self, request, slug, space_slug):
+        from apps.agents.models import Conversation
+
+        espacio = require_space(request.membership, space_slug)
+        conversaciones = (
+            Conversation.objects
+            .filter(space=espacio)
+            .select_related('user', 'agent')
+            .order_by('-updated_at')[:100]
+        )
+        return Response([
+            {
+                'id': c.id,
+                'title': c.title or 'Sin título',
+                'agent': c.agent.name if c.agent else None,
+                'agent_handle': c.agent.handle if c.agent else None,
+                'author': (c.user.get_full_name() or c.user.email) if c.user else None,
+                'es_mia': c.user_id == request.user.id,
+                'updated_at': c.updated_at,
+            }
+            for c in conversaciones
+        ])

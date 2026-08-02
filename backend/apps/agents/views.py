@@ -3,6 +3,7 @@ import re
 from django.http import StreamingHttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import status
+from rest_framework.exceptions import NotFound
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -448,6 +449,56 @@ def _agente_mencionado(user, texto):
     return None
 
 
+def _espacio_del_pedido(request):
+    """El Espacio que viene en el pedido del chat, o None.
+
+    Llega el slug del Espacio y el del Workspace; se valida contra la membresía,
+    así que mandar el slug de un Espacio restringido ajeno no engancha nada: se
+    trata igual que no haber mandado ninguno. La conversación queda personal, que
+    es el resultado seguro.
+    """
+    espacio_slug = (request.data.get('space') or '').strip()
+    workspace_slug = (request.data.get('workspace') or '').strip()
+    if not espacio_slug or not workspace_slug:
+        return None
+    from apps.workspaces.permissions import require_space, resolve_membership
+
+    membership = resolve_membership(request.user, workspace_slug)
+    if membership is None:
+        return None
+    try:
+        return require_space(membership, espacio_slug)
+    except NotFound:
+        return None
+
+
+def _agente_inicial(request, message, espacio, default_agent):
+    """Quién contesta el primer mensaje de un hilo nuevo. En orden:
+
+    1. El agente mencionado con `@`: es lo más explícito que hay.
+    2. El elegido a mano en el selector.
+    3. Un agente DEL ESPACIO activo, si hay Espacio. Sin esto, decir "estoy
+       trabajando en Finanzas" y que conteste un agente que no pertenece a
+       Finanzas — y que por lo tanto alcanza todos los datos de la empresa —
+       vacía de sentido al Espacio en el camino más común.
+    4. El agente por omisión de siempre.
+    """
+    mencionado = _agente_mencionado(request.user, message)
+    if mencionado is not None:
+        return mencionado
+
+    elegido = _resolve_agent(request, None)
+    if elegido is not None:
+        return elegido
+
+    if espacio is not None:
+        del_espacio = espacio.agents.filter(is_active=True).order_by('name').first()
+        if del_espacio is not None:
+            return del_espacio
+
+    return default_agent
+
+
 def _agente_de_conversacion(request, conversation):
     """
     Agente que responde en una conversación que ya existe.
@@ -648,12 +699,11 @@ class DirectChatView(APIView):
             conversation = get_object_or_404(Conversation, pk=conversation_id, user=request.user)
             agent = _agente_de_conversacion(request, conversation)
         else:
-            agent = (
-                _agente_mencionado(request.user, message)
-                or _resolve_agent(request, default_agent)
-            )
+            espacio = _espacio_del_pedido(request)
+            agent = _agente_inicial(request, message, espacio, default_agent)
             conversation = Conversation.objects.create(
-                agent=agent, user=request.user, title=_conversation_title(agent, message))
+                agent=agent, user=request.user, space=espacio,
+                title=_conversation_title(agent, message))
 
         mention_system_id = request.data.get('system_id') or None
         context = _build_onboarding_context(request.user, agent, mention_system_id)
@@ -721,12 +771,11 @@ class DirectChatStreamView(APIView):
             conversation = get_object_or_404(Conversation, pk=conversation_id, user=request.user)
             agent = _agente_de_conversacion(request, conversation)
         else:
-            agent = (
-                _agente_mencionado(request.user, message)
-                or _resolve_agent(request, default_agent)
-            )
+            espacio = _espacio_del_pedido(request)
+            agent = _agente_inicial(request, message, espacio, default_agent)
             conversation = Conversation.objects.create(
-                agent=agent, user=request.user, title=_conversation_title(agent, message))
+                agent=agent, user=request.user, space=espacio,
+                title=_conversation_title(agent, message))
 
         mention_system_id = request.data.get('system_id') or None
         context = _build_onboarding_context(request.user, agent, mention_system_id)

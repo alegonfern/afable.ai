@@ -17,7 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.workspaces.models import ROLE_ADMIN, ROLE_EDITOR
-from apps.workspaces.permissions import require_membership
+from apps.workspaces.permissions import require_membership, require_space
 
 from .models import Agent, AgentFavorite
 
@@ -63,7 +63,12 @@ def serializar(agent, editable):
 
 
 class AgentGalleryView(APIView):
-    """GET /api/v1/agents/gallery/?workspace=<slug>&tab=&q=&orden=&page="""
+    """GET /api/v1/agents/gallery/?workspace=<slug>&espacio=&tab=&q=&orden=&page=
+
+    `espacio` acota a los agentes de ese Espacio. Es lo que permite decir "estoy
+    trabajando en Finanzas" y ver solo los agentes de Finanzas, en vez del catálogo
+    entero de la empresa.
+    """
 
     permission_classes = [IsAuthenticated]
 
@@ -86,6 +91,13 @@ class AgentGalleryView(APIView):
                 es_favorito=Exists(favoritos),
             )
         )
+
+        espacio_slug = (request.query_params.get('espacio') or '').strip()
+        if espacio_slug:
+            # `require_space` corta con 404 si no lo ve: pedir los agentes de un
+            # Espacio restringido ajeno no puede devolver la lista.
+            espacio = require_space(membership, espacio_slug)
+            agentes = agentes.filter(spaces=espacio)
 
         tab = request.query_params.get('tab', 'todos')
         if tab == 'favoritos':

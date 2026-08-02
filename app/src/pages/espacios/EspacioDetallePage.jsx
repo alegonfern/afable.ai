@@ -37,6 +37,8 @@ function detalle(item, campo) {
   return '';
 }
 
+const PESTANA_CONVERSACIONES = 'conversaciones';
+
 export default function EspacioDetallePage() {
   const theme = useTheme();
   const navigate = useNavigate();
@@ -50,6 +52,7 @@ export default function EspacioDetallePage() {
   const [disponibles, setDisponibles] = useState(null);
   const [eligiendo, setEligiendo] = useState(null); // la pestaña cuyo selector está abierto
   const [seleccion, setSeleccion] = useState([]);
+  const [conversaciones, setConversaciones] = useState(null);
 
   const pestana = useMemo(() => PESTANAS.find((p) => p.campo === tab), [tab]);
 
@@ -68,6 +71,17 @@ export default function EspacioDetallePage() {
   }, [slug, spaceSlug]);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  // Las conversaciones se piden al entrar a su pestaña: es la lista que más
+  // cambia y no tiene por qué viajar con la ficha.
+  useEffect(() => {
+    if (tab !== PESTANA_CONVERSACIONES || !slug || !spaceSlug) return;
+    let vivo = true;
+    api.getSpaceConversations(slug, spaceSlug)
+      .then(({ data }) => { if (vivo) setConversaciones(data); })
+      .catch(() => { if (vivo) setConversaciones([]); });
+    return () => { vivo = false; };
+  }, [tab, slug, spaceSlug]);
 
   const abrirSelector = async () => {
     setEligiendo(pestana);
@@ -126,7 +140,7 @@ export default function EspacioDetallePage() {
     );
   }
 
-  const items = espacio[pestana.campo] || [];
+  const items = pestana ? (espacio[pestana.campo] || []) : [];
   const paraElegir = (disponibles && eligiendo && disponibles[eligiendo.coleccion]) || [];
 
   return (
@@ -173,9 +187,47 @@ export default function EspacioDetallePage() {
               label={`${p.label} (${(espacio[p.campo] || []).length})`}
             />
           ))}
+          <Tab value={PESTANA_CONVERSACIONES} label="Conversaciones" />
         </Tabs>
       </Box>
 
+      {tab === PESTANA_CONVERSACIONES ? (
+        <Box sx={{ px: { xs: 2, sm: 3 }, pt: 2, pb: 5, maxWidth: 780, width: '100%' }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+            Lo que se trabajó en este Espacio. A diferencia de su historial personal,
+            estas conversaciones las ve cualquiera que pertenezca al Espacio.
+          </Typography>
+          {conversaciones === null ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress size={20} />
+            </Box>
+          ) : conversaciones.length === 0 ? (
+            <Typography variant="body2" color="text.secondary" sx={{ py: 3 }}>
+              Todavía no se conversó nada en este Espacio. En el chat, elija «{espacio.name}»
+              en el selector de Espacio y lo que hable queda acá.
+            </Typography>
+          ) : (
+            <List dense sx={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 1 }}>
+              {conversaciones.map((c) => (
+                <ListItem
+                  key={c.id} divider button
+                  onClick={() => navigate(`/app/chat?conversation=${c.id}`)}
+                >
+                  <ListItemText
+                    primary={c.title}
+                    secondary={[
+                      c.agent_handle ? `@${c.agent_handle}` : c.agent,
+                      c.es_mia ? 'usted' : c.author,
+                    ].filter(Boolean).join(' · ')}
+                    primaryTypographyProps={{ fontSize: '0.86rem' }}
+                    secondaryTypographyProps={{ fontSize: '0.75rem' }}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          )}
+        </Box>
+      ) : (
       <Box sx={{ px: { xs: 2, sm: 3 }, pt: 2, pb: 5, maxWidth: 780, width: '100%' }}>
         <Button
           size="small" startIcon={<AddIcon />} onClick={abrirSelector}
@@ -211,6 +263,7 @@ export default function EspacioDetallePage() {
           </List>
         )}
       </Box>
+      )}
 
       <Dialog open={Boolean(eligiendo)} onClose={() => setEligiendo(null)} fullWidth maxWidth="sm">
         <DialogTitle sx={{ fontSize: '1rem', fontWeight: 600 }}>

@@ -15,9 +15,11 @@ import { useNavigate, useLocation, useOutletContext } from 'react-router-dom';
 import { api } from '../services/api';
 import AgentesGaleria from './trabajo/AgentesGaleria';
 import SelectorAgente from './trabajo/SelectorAgente';
+import SelectorEspacio from '../components/SelectorEspacio';
 import MencionAgentes, { aplicarMencion, detectarMencion, filtrarAgentes }
   from '../components/MencionAgentes';
 import { useApp } from '../context/AppContext';
+import { useWorkspace } from '../context/WorkspaceContext';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Cookies2 from 'js-cookie';
@@ -382,6 +384,7 @@ export default function ChatPage() {
   const location = useLocation();
   const { focusMode } = useOutletContext() || {};
   const { aiModel } = useApp();
+  const { slug, espacioSlug } = useWorkspace();
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -526,6 +529,10 @@ export default function ChatPage() {
           // Va siempre: al iniciar define el agente del hilo, y en un hilo abierto
           // permite conmutar de agente sin perder la conversación.
           agent_id: activeAgent?.id || undefined,
+          // El Espacio activo: la conversación nueva queda ahí, a la vista de
+          // quienes pertenecen al Espacio. Sin Espacio, el hilo es personal.
+          workspace: slug || undefined,
+          space: espacioSlug || undefined,
         }),
       });
 
@@ -793,6 +800,9 @@ export default function ChatPage() {
                 abierto={galeriaAbierta}
                 onToggle={() => setGaleriaAbierta(v => !v)}
               />
+              {/* En que Espacio se esta trabajando: acota los agentes que se
+                  ofrecen y donde queda guardada la conversacion. */}
+              <SelectorEspacio />
               <Box sx={{ width: '1px', height: 16, bgcolor: 'divider', mx: 0.25 }} />
               <input ref={fileInputRef} type="file" hidden onChange={handleFileChange}
                 accept=".pdf,.docx,.txt,.csv,.md,.xlsx,.xls,image/*" />

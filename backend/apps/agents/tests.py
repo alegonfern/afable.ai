@@ -286,3 +286,184 @@ class AlcanceDeEspacioTests(TestCase):
         self.ventas.systems.add(self.sap)
         contexto = _build_onboarding_context(self.user, self.ventas)
         self.assertNotIn(self.sap.id, contexto['allowed_ids'] or [])
+
+
+class EspacioEnElChatTests(TestCase):
+    """Trabajar EN un Espacio: qué agentes se ofrecen y dónde queda la conversación."""
+
+    def setUp(self):
+        from apps.workspaces.models import ROLE_ADMIN, ROLE_MEMBER, Space, Workspace
+
+        self.Space = Space
+
+        self.duena = User.objects.create_user(
+            username='duena@afable.test', email='duena@afable.test', password='afable123',
+        )
+        self.companero = User.objects.create_user(
+            username='companero@afable.test', email='companero@afable.test', password='afable123',
+        )
+        self.ajeno = User.objects.create_user(
+            username='ajeno@afable.test', email='ajeno@afable.test', password='afable123',
+        )
+
+        self.org = Organization.objects.create(owner=self.duena, name='Cocinas SpA')
+        self.workspace = Workspace.objects.create(name='Cocinas SpA', organization=self.org)
+        self.workspace.add_member(self.duena, ROLE_ADMIN)
+        self.workspace.add_member(self.companero, ROLE_MEMBER)
+        self.workspace.add_member(self.ajeno, ROLE_MEMBER)
+
+        self.ventas = Agent.objects.create(organization=self.org, name='Ventas')
+        self.personas = Agent.objects.create(organization=self.org, name='Personas')
+
+        self.espacio = Space.objects.create(workspace=self.workspace, name='Ventas')
+        self.espacio.agents.add(self.ventas)
+        self.espacio.members.add(self.duena, self.companero)
+
+    def _cliente(self, user):
+        client = APIClient()
+        client.force_authenticate(user=user)
+        return client
+
+    def test_la_galeria_filtrada_solo_trae_los_agentes_del_espacio(self):
+        resp = self._cliente(self.duena).get(
+            '/api/v1/agents/gallery/',
+            {'workspace': self.workspace.slug, 'espacio': self.espacio.slug},
+        )
+        self.assertEqual(resp.status_code, 200)
+        nombres = [a['name'] for a in resp.json()['results']]
+        self.assertEqual(nombres, ['Ventas'])
+
+    def test_sin_espacio_la_galeria_trae_todos(self):
+        resp = self._cliente(self.duena).get(
+            '/api/v1/agents/gallery/', {'workspace': self.workspace.slug},
+        )
+        nombres = {a['name'] for a in resp.json()['results']}
+        self.assertEqual(nombres, {'Ventas', 'Personas'})
+
+    def test_pedir_los_agentes_de_un_espacio_restringido_ajeno_es_404(self):
+        self.espacio.visibility = 'restringido'
+        self.espacio.save()
+        resp = self._cliente(self.ajeno).get(
+            '/api/v1/agents/gallery/',
+            {'workspace': self.workspace.slug, 'espacio': self.espacio.slug},
+        )
+        self.assertEqual(resp.status_code, 404)
+
+    def test_la_conversacion_del_espacio_la_ve_un_companero(self):
+        from apps.agents.models import Conversation
+
+        conv = Conversation.objects.create(
+            agent=self.ventas, user=self.duena, space=self.espacio, title='Cierre de mes',
+        )
+        resp = self._cliente(self.companero).get(
+            f'/api/v1/workspaces/{self.workspace.slug}/espacios/{self.espacio.slug}/conversaciones/'
+        )
+        self.assertEqual(resp.status_code, 200)
+        cuerpo = resp.json()
+        self.assertEqual([c['id'] for c in cuerpo], [conv.id])
+        # Y sabe que no es suya: el hilo es del equipo, pero se ve de quién salió.
+        self.assertFalse(cuerpo[0]['es_mia'])
+        self.assertEqual(cuerpo[0]['agent_handle'], 'ventas')
+
+    def test_una_conversacion_personal_no_aparece_en_el_espacio(self):
+        from apps.agents.models import Conversation
+
+        Conversation.objects.create(agent=self.ventas, user=self.duena, title='Mía y de nadie más')
+        resp = self._cliente(self.companero).get(
+            f'/api/v1/workspaces/{self.workspace.slug}/espacios/{self.espacio.slug}/conversaciones/'
+        )
+        self.assertEqual(resp.json(), [])
+
+    def test_quien_no_entra_al_espacio_restringido_no_ve_sus_conversaciones(self):
+        from apps.agents.models import Conversation
+
+        self.espacio.visibility = 'restringido'
+        self.espacio.save()
+        Conversation.objects.create(
+            agent=self.ventas, user=self.duena, space=self.espacio, title='Confidencial',
+        )
+        resp = self._cliente(self.ajeno).get(
+            f'/api/v1/workspaces/{self.workspace.slug}/espacios/{self.espacio.slug}/conversaciones/'
+        )
+        self.assertEqual(resp.status_code, 404)
+
+    def test_el_espacio_que_manda_el_chat_queda_en_la_conversacion(self):
+        from apps.agents.views import _espacio_del_pedido
+
+        class PedidoFalso:
+            def __init__(self, user, data):
+                self.user = user
+                self.data = data
+
+        pedido = PedidoFalso(
+            self.duena, {'workspace': self.workspace.slug, 'space': self.espacio.slug},
+        )
+        self.assertEqual(_espacio_del_pedido(pedido), self.espacio)
+
+    def test_mandar_el_slug_de_un_espacio_ajeno_deja_la_conversacion_personal(self):
+        """No se cae con error: el resultado seguro es un hilo personal."""
+        from apps.agents.views import _espacio_del_pedido
+
+        class PedidoFalso:
+            def __init__(self, user, data):
+                self.user = user
+                self.data = data
+
+        self.espacio.visibility = 'restringido'
+        self.espacio.save()
+        pedido = PedidoFalso(
+            self.ajeno, {'workspace': self.workspace.slug, 'space': self.espacio.slug},
+        )
+        self.assertIsNone(_espacio_del_pedido(pedido))
+
+    def test_con_espacio_activo_contesta_un_agente_del_espacio(self):
+        """Si no, "trabajo en Finanzas" lo responde un agente que ve toda la empresa."""
+        from apps.agents.views import _agente_inicial
+
+        class PedidoFalso:
+            def __init__(self, user, data):
+                self.user = user
+                self.data = data
+
+        suelto = Agent.objects.create(organization=self.org, name='Por omisión')
+        pedido = PedidoFalso(self.duena, {})
+        elegido = _agente_inicial(pedido, 'hola', self.espacio, suelto)
+        self.assertEqual(elegido, self.ventas)
+
+    def test_la_mencion_le_gana_al_agente_del_espacio(self):
+        from apps.agents.views import _agente_inicial
+
+        class PedidoFalso:
+            def __init__(self, user, data):
+                self.user = user
+                self.data = data
+
+        suelto = Agent.objects.create(organization=self.org, name='Por omisión')
+        pedido = PedidoFalso(self.duena, {})
+        elegido = _agente_inicial(pedido, '@personas quién entró este mes', self.espacio, suelto)
+        self.assertEqual(elegido, self.personas)
+
+    def test_sin_espacio_sigue_contestando_el_de_siempre(self):
+        from apps.agents.views import _agente_inicial
+
+        class PedidoFalso:
+            def __init__(self, user, data):
+                self.user = user
+                self.data = data
+
+        suelto = Agent.objects.create(organization=self.org, name='Por omisión')
+        pedido = PedidoFalso(self.duena, {})
+        self.assertEqual(_agente_inicial(pedido, 'hola', None, suelto), suelto)
+
+    def test_un_espacio_sin_agentes_cae_al_de_siempre(self):
+        from apps.agents.views import _agente_inicial
+
+        class PedidoFalso:
+            def __init__(self, user, data):
+                self.user = user
+                self.data = data
+
+        pelado = self.Space.objects.create(workspace=self.workspace, name='Vacío')
+        suelto = Agent.objects.create(organization=self.org, name='Por omisión')
+        pedido = PedidoFalso(self.duena, {})
+        self.assertEqual(_agente_inicial(pedido, 'hola', pelado, suelto), suelto)

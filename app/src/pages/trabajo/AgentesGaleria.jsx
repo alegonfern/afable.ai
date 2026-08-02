@@ -39,7 +39,7 @@ export default function AgentesGaleria({ onElegir, embebida = false }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const navigate = useNavigate();
-  const { slug } = useWorkspace();
+  const { slug, espacioSlug } = useWorkspace();
 
   const textMuted = d ? 'rgba(255,255,255,0.66)' : 'rgba(0,0,0,0.62)';
   const bgSuave = d ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)';
@@ -66,6 +66,9 @@ export default function AgentesGaleria({ onElegir, embebida = false }) {
       setCargando(true);
       const { data } = await api.getAgentGallery({
         workspace: slug, tab: pestana, orden, q: busqueda.trim(), page: nuevaPagina,
+        // Con un Espacio activo se ofrecen SOLO sus agentes: es la mitad visible
+        // de que el Espacio decida qué datos alcanza cada agente.
+        espacio: espacioSlug || undefined,
       });
       setAgentes((previos) => (nuevaPagina === 1 ? data.results : [...previos, ...data.results]));
       setHayMas(data.has_next);
@@ -76,7 +79,7 @@ export default function AgentesGaleria({ onElegir, embebida = false }) {
     } finally {
       setCargando(false);
     }
-  }, [slug, pestana, orden, busqueda]);
+  }, [slug, pestana, orden, busqueda, espacioSlug]);
 
   // Cada cambio de pestaña, orden o búsqueda vuelve a la primera página.
   useEffect(() => {

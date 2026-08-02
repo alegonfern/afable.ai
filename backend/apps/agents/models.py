@@ -106,6 +106,13 @@ class AgentTemplate(models.Model):
 
 class Conversation(models.Model):
     agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name='conversations')
+    # El Espacio donde se trabajo esta conversacion. Con Espacio, el hilo es del
+    # equipo: lo ve cualquiera que pertenezca al Espacio, no solo quien lo escribio.
+    # `null` es una conversacion personal, que es como funcionaba todo antes.
+    space = models.ForeignKey(
+        'workspaces.Space', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='conversations',
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='conversations'
     )

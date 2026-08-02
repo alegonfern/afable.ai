@@ -13,6 +13,9 @@ import { useApp } from './AppContext';
  */
 
 const CLAVE_GUARDADA = 'afable_workspace_slug';
+// El Espacio en el que se esta trabajando. Se guarda por Workspace: cambiar de
+// empresa no puede dejar activo el Espacio de la anterior.
+const CLAVE_ESPACIO = 'afable_espacio_slug';
 
 const WorkspaceContext = createContext();
 
@@ -65,6 +68,35 @@ export const WorkspaceProvider = ({ children }) => {
     return () => window.removeEventListener('auth-login', alEntrar);
   }, [cargar]);
 
+  // ── El Espacio activo ────────────────────────────────────────────────────
+  // Es el "estoy trabajando en Finanzas" del chat: acota los agentes que se
+  // ofrecen y a que Espacio quedan las conversaciones nuevas. `null` = sin
+  // Espacio, se ve todo lo que la persona alcanza.
+  const [espacios, setEspacios] = useState([]);
+  const [espacioSlug, setEspacioSlug] = useState(null);
+
+  const cargarEspacios = useCallback(async () => {
+    if (!slugActivo) { setEspacios([]); return; }
+    try {
+      const { data } = await api.getSpaces(slugActivo);
+      setEspacios(data);
+      // El guardado solo vale si sigue existiendo y sigue siendo visible.
+      const guardado = localStorage.getItem(`${CLAVE_ESPACIO}:${slugActivo}`);
+      setEspacioSlug(data.some((e) => e.slug === guardado) ? guardado : null);
+    } catch {
+      setEspacios([]);
+    }
+  }, [slugActivo]);
+
+  useEffect(() => { cargarEspacios(); }, [cargarEspacios]);
+
+  const seleccionarEspacio = (slug) => {
+    setEspacioSlug(slug);
+    if (!slugActivo) return;
+    if (slug) localStorage.setItem(`${CLAVE_ESPACIO}:${slugActivo}`, slug);
+    else localStorage.removeItem(`${CLAVE_ESPACIO}:${slugActivo}`);
+  };
+
   const seleccionar = (slug) => {
     setSlugActivo(slug);
     if (slug) localStorage.setItem(CLAVE_GUARDADA, slug);
@@ -72,6 +104,7 @@ export const WorkspaceProvider = ({ children }) => {
   };
 
   const workspace = workspaces.find((w) => w.slug === slugActivo) || null;
+  const espacio = espacios.find((e) => e.slug === espacioSlug) || null;
   const rol = workspace ? workspace.my_role : null;
 
   // Puente con la app anterior: Contexto, Documentos y Automatizaciones consultan
@@ -109,6 +142,11 @@ export const WorkspaceProvider = ({ children }) => {
         esAdmin: rol === 'admin',
         esEditor: rol === 'admin' || rol === 'editor',
         seleccionar,
+        espacios,
+        espacio,
+        espacioSlug: espacio ? espacio.slug : null,
+        seleccionarEspacio,
+        recargarEspacios: cargarEspacios,
         recargar: cargar,
         loading,
         error,
