@@ -34,6 +34,10 @@ export default function DashboardLayout() {
         sx={{
           flexGrow: 1,
           width: '100%',
+          // Alto definido, no solo mínimo: con `minHeight` el contenedor crece
+          // con su contenido y los hijos flex nunca reciben un alto contra el
+          // cual encogerse.
+          height: '100vh',
           minHeight: '100vh',
           bgcolor: 'background.default',
           display: 'flex',
@@ -42,7 +46,11 @@ export default function DashboardLayout() {
           transition: 'padding-top 0.2s ease',
         }}
       >
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        {/* minHeight:0 — sin esto un hijo flex no puede encogerse por debajo de
+            su contenido, así que una pantalla que crece (el chat cuando se
+            despliega la vitrina de agentes) empuja el layout fuera del alto de
+            la ventana en vez de repartirse el espacio. */}
+        <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           <Outlet context={{ focusMode, toggleFocusMode }} />
         </Box>
       </Box>
