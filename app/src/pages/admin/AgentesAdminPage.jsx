@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, CircularProgress, TextField, Typography, useTheme } from '@mui/material';
+import { Box, CircularProgress, Tab, Tabs, TextField, Typography, useTheme } from '@mui/material';
 import { Bot, ChevronRight, Search } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { api } from '../../services/api';
 import { useWorkspace } from '../../context/WorkspaceContext';
+import HabilidadesTab from './HabilidadesTab';
 
 const DISPLAY = `'Sora', 'Inter', sans-serif`;
 
@@ -29,6 +30,7 @@ export default function AgentesAdminPage() {
   const [pendientes, setPendientes] = useState(0);
   const [busqueda, setBusqueda] = useState('');
   const [cargando, setCargando] = useState(true);
+  const [tab, setTab] = useState('agentes');
 
   const cargar = useCallback(async () => {
     if (!slug || !esAdmin) return;
@@ -94,6 +96,23 @@ export default function AgentesAdminPage() {
         </Box>
       )}
 
+      <Box sx={{ borderBottom: `1px solid ${borde}`, mt: 3 }}>
+        <Tabs
+          value={tab} onChange={(_, v) => setTab(v)}
+          sx={{ minHeight: 40, '& .MuiTab-root': { minHeight: 40, textTransform: 'none', fontSize: '0.875rem' } }}
+        >
+          <Tab value="agentes" label="Agentes" />
+          <Tab value="habilidades" label="Habilidades" />
+        </Tabs>
+      </Box>
+
+      {tab === 'habilidades' && (
+        <Box sx={{ mt: 3 }}>
+          <HabilidadesTab agentes={agentes} />
+        </Box>
+      )}
+
+      {tab === 'agentes' && (<>
       <TextField
         value={busqueda}
         onChange={(e) => setBusqueda(e.target.value)}
@@ -162,6 +181,7 @@ export default function AgentesAdminPage() {
           {filtrados.length} {filtrados.length === 1 ? 'agente' : 'agentes'}
         </Typography>
       </Box>
+      </>)}
     </Box>
   );
 }

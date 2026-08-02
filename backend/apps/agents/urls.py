@@ -1,5 +1,6 @@
 from django.urls import path
 from .views import (
+    SkillDetailView, SkillListCreateView,
     AgentListCreateView, AgentDetailView, AvailableModelsView,
     AgentTemplateListView, AgentTemplateUseView,
     ChatView, DirectChatView, DirectChatStreamView, ChatAttachmentView,
@@ -25,6 +26,8 @@ urlpatterns = [
     path('templates/<int:pk>/use/', AgentTemplateUseView.as_view(), name='agent-template-use'),
     path('documents/', DocumentListCreateView.as_view(), name='document-list'),
     path('documents/<int:pk>/', DocumentDetailView.as_view(), name='document-detail'),
+    path('habilidades/', SkillListCreateView.as_view(), name='skill-list'),
+    path('habilidades/<int:pk>/', SkillDetailView.as_view(), name='skill-detail'),
     path('automations/', AutomationListCreateView.as_view(), name='automation-list'),
     path('automations/<int:pk>/', AutomationDetailView.as_view(), name='automation-detail'),
     path('automations/<int:pk>/run/', AutomationRunNowView.as_view(), name='automation-run'),

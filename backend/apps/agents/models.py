@@ -354,3 +354,62 @@ class AgentConfig(models.Model):
         if self.info_util:
             partes.append(f'INFORMACIÓN ÚTIL DE LA EMPRESA:\n{self.info_util}')
         return '\n\n'.join(partes)
+
+
+class Skill(models.Model):
+    """Una Habilidad: un bloque de instrucciones que se comparte entre agentes.
+
+    El caso que la justifica es el tono. Una empresa escribe una vez cómo le
+    habla a sus clientes, y esa Habilidad se le engancha a los cinco agentes que
+    redactan hacia afuera. Sin esto, la misma indicación queda copiada cinco
+    veces y corregirla es acordarse de los cinco lugares.
+
+    Vive a nivel de empresa, no de agente: es justamente lo que la hace
+    reutilizable.
+    """
+
+    organization = models.ForeignKey(
+        'organizations.Organization', on_delete=models.CASCADE, related_name='skills'
+    )
+    name = models.CharField(max_length=120)
+    description = models.CharField(
+        max_length=280, blank=True, help_text='Para qué sirve, en una línea.',
+    )
+    instructions = models.TextField(help_text='Lo que se le agrega al agente que la use.')
+    agents = models.ManyToManyField(Agent, blank=True, related_name='skills')
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='+',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'agent_skills'
+        ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['organization', 'name'], name='unico_nombre_de_habilidad_por_empresa',
+            ),
+        ]
+        verbose_name = 'Habilidad'
+        verbose_name_plural = 'Habilidades'
+
+    def __str__(self):
+        return f'{self.organization.name} — {self.name}'
+
+
+def habilidades_como_contexto(agent):
+    """Las Habilidades activas del agente, listas para pegar al prompt.
+
+    Devuelve '' cuando no hay ninguna, para que quien llama no tenga que
+    preguntar antes de concatenar.
+    """
+    if not agent or not agent.pk:
+        return ''
+    activas = agent.skills.filter(is_active=True).order_by('name')
+    if not activas:
+        return ''
+    bloques = [f'— {s.name}:\n{s.instructions}' for s in activas]
+    return 'Habilidades que tiene que aplicar siempre:\n' + '\n\n'.join(bloques)

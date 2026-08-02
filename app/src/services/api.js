@@ -139,6 +139,12 @@ export const api = {
   createInvitation: (slug, data) => apiClient.post(`/workspaces/${slug}/invitations/`, data),
   revokeInvitation: (slug, id) => apiClient.delete(`/workspaces/${slug}/invitations/${id}/`),
   resendInvitation: (slug, id) => apiClient.post(`/workspaces/${slug}/invitations/${id}/resend/`),
+  // ── Habilidades (bloques de instrucciones que se comparten entre agentes) ──
+  getSkills: () => apiClient.get('/agents/habilidades/'),
+  createSkill: (data) => apiClient.post('/agents/habilidades/', data),
+  updateSkill: (id, data) => apiClient.patch(`/agents/habilidades/${id}/`, data),
+  deleteSkill: (id) => apiClient.delete(`/agents/habilidades/${id}/`),
+
   // ── Espacios ──
   getSpaces: (slug) => apiClient.get(`/workspaces/${slug}/espacios/`),
   createSpace: (slug, data) => apiClient.post(`/workspaces/${slug}/espacios/`, data),

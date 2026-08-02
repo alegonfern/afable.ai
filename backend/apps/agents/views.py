@@ -7,11 +7,14 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
-from .models import AgentConfig, Agent, AgentTemplate, Conversation, Message, Document, Automation, Routine
+from .models import (
+    AgentConfig, Agent, AgentTemplate, Conversation, Message, Document, Automation,
+    Routine, Skill, habilidades_como_contexto,
+)
 from .serializers import (
     AgentSerializer, AgentTemplateSerializer, ChatRequestSerializer,
     ConversationSerializer, ConversationListSerializer, DocumentSerializer,
-    AutomationSerializer, RoutineSerializer,
+    AutomationSerializer, SkillSerializer, SkillWriteSerializer, RoutineSerializer,
 )
 from apps.organizations.models import Organization
 from services.agent_service import chat_direct, stream_direct, resolve_model
@@ -268,6 +271,12 @@ Acciones adicionales disponibles:
                 del_workspace = config.como_contexto()
                 if del_workspace:
                     agent_block += f"\n{del_workspace}\n"
+            # Las Habilidades van al final del bloque, despues de las instrucciones
+            # propias: son transversales a la empresa y no tienen que tapar lo que
+            # este agente en particular tiene que hacer.
+            de_habilidades = habilidades_como_contexto(agent)
+            if de_habilidades:
+                agent_block += f"\n{de_habilidades}\n"
 
         # @mención en el mensaje: acota ESTE mensaje a un único sistema, por
         # encima del scope del agente (siempre que ese sistema exista y esté conectado).
@@ -1182,3 +1191,63 @@ class RoutineRunNowView(APIView):
         data = RoutineSerializer(routine).data
         data['run_ok'] = out['ok']
         return Response(data)
+
+
+# ---------------------------------------------------------------------------
+# Habilidades
+# ---------------------------------------------------------------------------
+
+
+class SkillListCreateView(APIView):
+    """Admin › Agentes › Habilidades: la lista y crear una nueva."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        org = _user_org(request.user, request.query_params.get('organization'))
+        habilidades = Skill.objects.filter(organization=org).prefetch_related('agents')
+        return Response(SkillSerializer(habilidades, many=True).data)
+
+    def post(self, request):
+        org = _user_org(request.user, request.data.get('organization'))
+        serializer = SkillWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        habilidad = serializer.save(organization=org, created_by=request.user)
+        self._enganchar(habilidad, request.data.get('agent_ids'), org)
+        return Response(SkillSerializer(habilidad).data, status=status.HTTP_201_CREATED)
+
+    def _enganchar(self, habilidad, agent_ids, org):
+        """Los agentes que la usan. Sólo los de esta empresa: una Habilidad no
+        cruza de organización, y mandar un id ajeno no engancha nada."""
+        if agent_ids is None:
+            return
+        habilidad.agents.set(Agent.objects.filter(organization=org, pk__in=agent_ids))
+
+
+class SkillDetailView(SkillListCreateView):
+    """Editar, reasignar o borrar una Habilidad."""
+
+    def _get(self, request, pk):
+        org = _user_org(request.user, request.data.get('organization')
+                        or request.query_params.get('organization'))
+        habilidad = Skill.objects.filter(organization=org, pk=pk).first()
+        if habilidad is None:
+            raise NotFound('Habilidad no encontrada.')
+        return org, habilidad
+
+    def get(self, request, pk):
+        _, habilidad = self._get(request, pk)
+        return Response(SkillSerializer(habilidad).data)
+
+    def patch(self, request, pk):
+        org, habilidad = self._get(request, pk)
+        serializer = SkillWriteSerializer(habilidad, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        self._enganchar(habilidad, request.data.get('agent_ids'), org)
+        return Response(SkillSerializer(habilidad).data)
+
+    def delete(self, request, pk):
+        _, habilidad = self._get(request, pk)
+        habilidad.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

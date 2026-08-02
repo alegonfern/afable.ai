@@ -8,6 +8,7 @@ datos, no un error de tipeo.
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from rest_framework.test import APIClient
 
 from apps.agents.models import Agent
 from apps.agents.views import _agente_mencionado
@@ -87,3 +88,79 @@ class MencionTests(TestCase):
     def test_sin_texto_no_hay_mencion(self):
         self.assertIsNone(_agente_mencionado(self.user, ''))
         self.assertIsNone(_agente_mencionado(self.user, None))
+
+
+class HabilidadesTests(TestCase):
+    """Las Habilidades: bloques de instrucciones compartidos entre agentes."""
+
+    def setUp(self):
+        from apps.agents.models import Skill, habilidades_como_contexto
+
+        self.Skill = Skill
+        self.como_contexto = habilidades_como_contexto
+
+        self.user = User.objects.create_user(
+            username='duena@afable.test', email='duena@afable.test', password='afable123',
+        )
+        self.org = Organization.objects.create(owner=self.user, name='Cocinas SpA')
+        self.ventas = Agent.objects.create(organization=self.org, name='Ventas')
+        self.soporte = Agent.objects.create(organization=self.org, name='Soporte')
+
+        self.tono = Skill.objects.create(
+            organization=self.org, name='Tono corporativo',
+            instructions='Trate de usted y no prometa plazos.',
+        )
+
+    def test_sin_habilidades_el_bloque_va_vacio(self):
+        self.assertEqual(self.como_contexto(self.ventas), '')
+
+    def test_una_habilidad_enganchada_entra_al_prompt(self):
+        self.tono.agents.add(self.ventas)
+        bloque = self.como_contexto(self.ventas)
+        self.assertIn('Tono corporativo', bloque)
+        self.assertIn('no prometa plazos', bloque)
+
+    def test_la_misma_habilidad_sirve_para_varios_agentes(self):
+        self.tono.agents.add(self.ventas, self.soporte)
+        self.assertIn('Tono corporativo', self.como_contexto(self.ventas))
+        self.assertIn('Tono corporativo', self.como_contexto(self.soporte))
+
+    def test_editarla_cambia_a_todos_los_que_la_usan(self):
+        """La razón de ser de la Habilidad: un solo lugar donde corregir."""
+        self.tono.agents.add(self.ventas, self.soporte)
+        self.tono.instructions = 'Trate de usted y sea breve.'
+        self.tono.save()
+        for agente in (self.ventas, self.soporte):
+            self.assertIn('sea breve', self.como_contexto(agente))
+
+    def test_una_habilidad_desactivada_no_entra(self):
+        self.tono.agents.add(self.ventas)
+        self.tono.is_active = False
+        self.tono.save()
+        self.assertEqual(self.como_contexto(self.ventas), '')
+
+    def test_la_api_no_engancha_agentes_de_otra_empresa(self):
+        otra_duena = User.objects.create_user(
+            username='ajena@afable.test', email='ajena@afable.test', password='afable123',
+        )
+        org_ajena = Organization.objects.create(owner=otra_duena, name='Otra SpA')
+        agente_ajeno = Agent.objects.create(organization=org_ajena, name='Secretos')
+
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        resp = client.post(
+            '/api/v1/agents/habilidades/',
+            {'name': 'Nueva', 'instructions': 'Algo.', 'agent_ids': [agente_ajeno.id]},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 201)
+        creada = self.Skill.objects.get(pk=resp.json()['id'])
+        self.assertEqual(creada.agents.count(), 0)
+
+    def test_una_habilidad_sin_instrucciones_se_rechaza(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        resp = client.post(
+            '/api/v1/agents/habilidades/', {'name': 'Vacía', 'instructions': '   '}, format='json',
+        )
+        self.assertEqual(resp.status_code, 400)

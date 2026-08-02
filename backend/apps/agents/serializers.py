@@ -1,5 +1,7 @@
 from rest_framework import serializers
-from .models import Agent, AgentTemplate, Conversation, Message, Document, Automation, Routine
+from .models import (
+    Agent, AgentTemplate, Conversation, Message, Document, Automation, Routine, Skill,
+)
 
 
 class AgentTemplateSerializer(serializers.ModelSerializer):
@@ -65,6 +67,34 @@ class ConversationListSerializer(serializers.ModelSerializer):
 class ChatRequestSerializer(serializers.Serializer):
     message = serializers.CharField()
     conversation_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+class SkillSerializer(serializers.ModelSerializer):
+    """La Habilidad como fila: incluye a quiénes se les aplica."""
+
+    agents = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Skill
+        fields = ['id', 'name', 'description', 'instructions', 'agents',
+                  'is_active', 'created_at', 'updated_at']
+
+    def get_agents(self, obj):
+        return [{'id': a.id, 'name': a.name, 'handle': a.handle} for a in obj.agents.all()]
+
+
+class SkillWriteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Skill
+        fields = ['name', 'description', 'instructions', 'is_active']
+
+    def validate_instructions(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError(
+                'Una Habilidad sin instrucciones no le agrega nada al agente.'
+            )
+        return value
 
 
 class DocumentSerializer(serializers.ModelSerializer):
