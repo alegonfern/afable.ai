@@ -1,0 +1,22 @@
+<svg width="200" height="200" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Afable">
+  <defs>
+    <linearGradient id="afable" x1="0" y1="0" x2="120" y2="120" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#586AD0"/>
+      <stop offset="1" stop-color="#2F42A6"/>
+    </linearGradient>
+  </defs>
+  <rect width="120" height="120" rx="27" fill="url(#afable)"/>
+  <g transform="translate(60 60) scale(0.185) translate(-256 -256)" fill="none" stroke="#FFFFFF">
+    <circle cx="256" cy="256" r="57" stroke-width="44"/>
+    <g stroke-width="48" stroke-linecap="round">
+      <line x1="256" y1="137" x2="256" y2="49"/>
+      <line x1="256" y1="137" x2="256" y2="49" transform="rotate(45 256 256)"/>
+      <line x1="256" y1="137" x2="256" y2="49" transform="rotate(90 256 256)"/>
+      <line x1="256" y1="137" x2="256" y2="49" transform="rotate(135 256 256)"/>
+      <line x1="256" y1="137" x2="256" y2="49" transform="rotate(180 256 256)"/>
+      <line x1="256" y1="137" x2="256" y2="49" transform="rotate(225 256 256)"/>
+      <line x1="256" y1="137" x2="256" y2="49" transform="rotate(270 256 256)"/>
+      <line x1="256" y1="137" x2="256" y2="49" transform="rotate(315 256 256)"/>
+    </g>
+  </g>
+</svg>

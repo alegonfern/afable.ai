@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ícono — flecha sobre gradiente</title>
+<style>
+  :root{
+    --vio:#7C3AED;
+    --cyan:#06B6D4;
+    --ink:#12101F;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    background:#F7F6FB;color:var(--ink);
+    font-family:-apple-system,'Segoe UI',Inter,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:900px;margin:0 auto;padding:56px 24px 80px}
+  .eyebrow{font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#8A85A3;margin-bottom:40px}
+  .hero{
+    background:#fff;border:1px solid #EAE7F4;border-radius:24px;
+    display:flex;align-items:center;justify-content:center;
+    padding:80px 24px;
+  }
+  .icon{
+    border-radius:22.5%;
+    background:linear-gradient(135deg,var(--vio) 0%,var(--cyan) 100%);
+    display:flex;align-items:center;justify-content:center;
+    box-shadow:0 16px 40px rgba(94,58,222,.30);
+  }
+  .icon.xl{width:220px;height:220px}
+  .icon.md{width:96px;height:96px;box-shadow:0 8px 22px rgba(94,58,222,.25)}
+  .icon.sm{width:56px;height:56px;box-shadow:0 4px 12px rgba(94,58,222,.22)}
+  .icon.xs{width:28px;height:28px;box-shadow:none}
+  .icon svg{width:58%;height:58%}
+  .sizes{
+    margin-top:16px;background:#fff;border:1px solid #EAE7F4;border-radius:24px;
+    padding:48px 24px;display:flex;align-items:flex-end;justify-content:center;gap:40px;
+  }
+  .sizes .col{display:flex;flex-direction:column;align-items:center;gap:12px}
+  .sizes .label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#8A85A3}
+  .dark{
+    margin-top:16px;background:var(--ink);border-radius:24px;
+    padding:48px 24px;display:flex;align-items:center;justify-content:center;gap:40px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">Ícono · gradiente violeta → cyan</div>
+
+  <!-- PRINCIPAL -->
+  <div class="hero">
+    <div class="icon xl">
+      <svg viewBox="0 0 120 120" fill="none">
+        <path d="M60 26 L92 92 L60 74 L28 92 Z"
+              fill="#FFFFFF" stroke="#FFFFFF"
+              stroke-width="14" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- ESCALAS -->
+  <div class="sizes">
+    <div class="col">
+      <div class="icon md">
+        <svg viewBox="0 0 120 120" fill="none">
+          <path d="M60 26 L92 92 L60 74 L28 92 Z" fill="#FFF" stroke="#FFF" stroke-width="14" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="label">App</span>
+    </div>
+    <div class="col">
+      <div class="icon sm">
+        <svg viewBox="0 0 120 120" fill="none">
+          <path d="M60 26 L92 92 L60 74 L28 92 Z" fill="#FFF" stroke="#FFF" stroke-width="14" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="label">Toolbar</span>
+    </div>
+    <div class="col">
+      <div class="icon xs">
+        <svg viewBox="0 0 120 120" fill="none">
+          <path d="M60 26 L92 92 L60 74 L28 92 Z" fill="#FFF" stroke="#FFF" stroke-width="14" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <span class="label">Favicon</span>
+    </div>
+  </div>
+
+  <!-- SOBRE FONDO OSCURO -->
+  <div class="dark">
+    <div class="icon md">
+      <svg viewBox="0 0 120 120" fill="none">
+        <path d="M60 26 L92 92 L60 74 L28 92 Z" fill="#FFF" stroke="#FFF" stroke-width="14" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  </div>
+</div>
+</body>
+</html>

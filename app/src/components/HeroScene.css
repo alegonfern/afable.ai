@@ -1,0 +1,364 @@
+/* ═══════════════════════════════════════════════════════════
+   HeroScene — escena isométrica de equipos + agentes
+   Vive dentro de .lp-page, así que hereda sus variables.
+   ═══════════════════════════════════════════════════════════ */
+
+.hs-wrap {
+  position: relative;
+  isolation: isolate;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* Ojo: la perspectiva va en el transform del plano, NO en el escenario.
+   Con `perspective` acá, las tarjetas de chat entran al ordenamiento 3D
+   del plano y quedan detrás de las parcelas. */
+.hs-stage {
+  position: relative;
+  z-index: 0;
+  height: 500px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── El plano inclinado ── */
+
+.hs-plane {
+  position: relative;
+  z-index: 1;
+  width: 560px;
+  height: 560px;
+  transform: perspective(1600px) rotateX(56deg) rotateZ(45deg) scale(0.66);
+  transform-style: preserve-3d;
+}
+
+/* Placa base: aterriza la escena y le da suelo a las parcelas.
+   Hermana del plano, con la misma inclinación pero sin preserve-3d. */
+.hs-base {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 700px;
+  height: 700px;
+  margin: -350px 0 0 -350px;
+  border-radius: 44px;
+  transform: perspective(1600px) rotateX(56deg) rotateZ(45deg) scale(0.66) translateZ(-24px);
+  background:
+    radial-gradient(circle, rgba(33, 30, 23, 0.07) 1px, transparent 1px) 0 0 / 26px 26px,
+    var(--bg-soft);
+  box-shadow: 0 0 0 1px var(--line) inset;
+}
+
+/* ── Áreas ── */
+
+.hs-zone {
+  position: absolute;
+  width: 250px;
+  height: 250px;
+  border-radius: 26px;
+  transform-style: preserve-3d;
+  background: var(--zone);
+  box-shadow:
+    0 0 0 1.5px var(--zone-edge) inset,
+    0 14px 26px rgba(33, 30, 23, 0.18);
+}
+/* Pared lateral: le da espesor a la parcela */
+.hs-zone::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 26px;
+  background: var(--zone-side);
+  transform: translateZ(-20px);
+}
+
+.hs-zone--comercial   { --zone: rgba(88, 106, 208, 0.72);  --zone-side: #4655A8; --zone-edge: rgba(88, 106, 208, 0.9); }
+.hs-zone--finanzas    { --zone: rgba(52, 211, 153, 0.72);  --zone-side: #1EA576; --zone-edge: rgba(30, 165, 118, 0.85); }
+.hs-zone--operaciones { --zone: rgba(125, 211, 252, 0.75); --zone-side: #4CA8D6; --zone-edge: rgba(76, 168, 214, 0.85); }
+.hs-zone--personas    { --zone: rgba(249, 168, 212, 0.75); --zone-side: #D67AAD; --zone-edge: rgba(214, 122, 173, 0.85); }
+
+.hs-zone-label {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%) translateZ(46px) rotateZ(-45deg) rotateX(-56deg);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 12px;
+  box-shadow: 0 6px 14px rgba(33, 30, 23, 0.12);
+}
+
+/* ── Pasarela central ── */
+
+.hs-walk {
+  position: absolute;
+  background: linear-gradient(90deg, rgba(88, 106, 208, 0.85), rgba(88, 106, 208, 0.62));
+  border-radius: 12px;
+  box-shadow: 0 14px 0 -2px rgba(58, 74, 168, 0.5);
+}
+.hs-walk--h { left: -40px; right: -40px; top: 266px; height: 38px; }
+.hs-walk--v { top: -40px; bottom: -40px; left: 266px; width: 38px; }
+
+/* Partículas: la información viajando por la pasarela */
+.hs-flow { position: absolute; pointer-events: none; }
+.hs-flow--h { left: -40px; right: -40px; top: 280px; height: 12px; }
+.hs-flow--v { top: -40px; bottom: -40px; left: 280px; width: 12px; }
+.hs-flow i {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.9);
+}
+.hs-flow--h i { top: 1px; animation: hs-run-h 3.6s linear infinite; }
+.hs-flow--v i { left: 1px; animation: hs-run-v 4.2s linear infinite; }
+.hs-flow i:nth-child(2) { animation-delay: 1.2s; }
+.hs-flow i:nth-child(3) { animation-delay: 2.4s; }
+
+@keyframes hs-run-h {
+  0%   { left: 0; opacity: 0; }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+@keyframes hs-run-v {
+  0%   { top: 100%; opacity: 0; }
+  12%  { opacity: 1; }
+  88%  { opacity: 1; }
+  100% { top: 0; opacity: 0; }
+}
+
+/* ── Nodo central: el agente ── */
+
+.hs-core {
+  position: absolute;
+  left: 286px;
+  top: 286px;
+  transform: translate(-50%, -50%);
+  transform-style: preserve-3d;
+}
+.hs-core-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 86px;
+  height: 86px;
+  margin: -43px 0 0 -43px;
+  border-radius: 50%;
+  border: 2px solid rgba(88, 106, 208, 0.55);
+  animation: hs-pulse 2.8s ease-out infinite;
+}
+@keyframes hs-pulse {
+  0%   { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(1.9); opacity: 0; }
+}
+.hs-core-badge {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transform: translateZ(34px) rotateZ(-45deg) rotateX(-56deg);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 16px 8px 8px;
+  box-shadow: 0 16px 30px rgba(33, 30, 23, 0.22);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+/* ── Personas ── */
+
+.hs-avatar {
+  position: absolute;
+  transform-style: preserve-3d;
+}
+.hs-avatar-shadow {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 34px;
+  height: 34px;
+  margin-left: -17px;
+  border-radius: 50%;
+  background: rgba(33, 30, 23, 0.16);
+  filter: blur(6px);
+}
+.hs-avatar-pic {
+  position: relative;
+  transform: translateZ(58px) rotateZ(-45deg) rotateX(-56deg);
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 2.5px solid var(--card);
+  box-shadow: 0 10px 20px rgba(33, 30, 23, 0.28);
+  overflow: visible;
+}
+.hs-avatar-pic img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+}
+.hs-avatar-dot {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #22C55E;
+  border: 2.5px solid var(--card);
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.22);
+}
+/* Los nombres por persona se quitaron: chocaban con la etiqueta del área
+   y la escena se lee mejor solo con las caras. */
+
+/* ── Tarjetas de chat ── */
+
+/* z-index 2: el subárbol preserve-3d del plano se pinta por encima de sus
+   hermanos posteriores si no se le gana explícitamente */
+/* translate3d + will-change: sin promover las tarjetas a su propia capa
+   compuesta, el subárbol preserve-3d del plano se dibuja encima de ellas
+   aunque tengan más z-index. */
+.hs-cards {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 500px;
+  z-index: 5;
+  pointer-events: none;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+.hs-card {
+  position: absolute;
+  width: 268px;
+  text-align: left;
+  background: var(--card);
+  border: 1px solid rgba(33, 30, 23, 0.12);
+  border-radius: 16px;
+  padding: 13px 15px;
+  box-shadow: 0 10px 24px rgba(33, 30, 23, 0.14), 0 30px 60px rgba(33, 30, 23, 0.12);
+  animation: hs-card-in 0.5s ease both;
+}
+.hs-card--ask    { left: 3%;  top: 20%; }
+.hs-card--answer { right: 2%; top: 62%; animation-delay: 0.75s; }
+
+@keyframes hs-card-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.97); }
+  to   { opacity: 1; transform: none; }
+}
+
+.hs-card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 7px;
+}
+.hs-card-head img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.hs-card-agent {
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, #586AD0, #2F42A6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hs-card-who  { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+.hs-card-area { font-size: 11.5px; color: var(--muted); }
+.hs-card p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.hs-card--answer p { color: var(--muted); }
+.hs-card-source {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 10.5px;
+  font-style: italic;
+  color: var(--muted);
+}
+
+/* ── Pie de la escena ── */
+
+.hs-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 26px;
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.hs-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.hs-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22C55E;
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+}
+
+/* ── Tema oscuro ── */
+
+.lp-page.dark .hs-zone {
+  box-shadow:
+    0 0 0 1px var(--zone-edge) inset,
+    0 22px 0 -2px var(--zone-side),
+    0 24px 40px rgba(0, 0, 0, 0.5);
+}
+.lp-page.dark .hs-avatar-shadow { background: rgba(0, 0, 0, 0.5); }
+.lp-page.dark .hs-card { box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45); }
+.lp-page.dark .hs-core-badge { box-shadow: 0 16px 30px rgba(0, 0, 0, 0.5); }
+
+/* ── Responsive ── */
+
+@media (max-width: 1040px) {
+  .hs-stage { height: 440px; }
+  .hs-plane { transform: perspective(1600px) rotateX(56deg) rotateZ(45deg) scale(0.62); }
+  .hs-base { transform: perspective(1600px) rotateX(56deg) rotateZ(45deg) scale(0.62) translateZ(-24px); }
+  .hs-card { width: 260px; }
+  .hs-card--ask { left: 0; top: 6%; }
+  .hs-card--answer { right: 0; top: 62%; }
+}
+
+@media (max-width: 720px) {
+  .hs-stage { height: 380px; }
+  .hs-plane { transform: perspective(1600px) rotateX(56deg) rotateZ(45deg) scale(0.44); }
+  .hs-base { transform: perspective(1600px) rotateX(56deg) rotateZ(45deg) scale(0.44) translateZ(-24px); }
+  .hs-card { width: 208px; padding: 10px 12px; }
+  .hs-card p { font-size: 12px; }
+  .hs-card--ask { left: 0; top: 2%; }
+  .hs-card--answer { right: 0; top: 56%; }
+  .hs-legend { font-size: 12px; gap: 8px 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hs-flow i, .hs-core-ring { animation: none; }
+  .hs-flow i { opacity: 0.9; }
+  .hs-card { animation: none; }
+}

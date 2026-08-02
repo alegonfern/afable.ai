@@ -1,0 +1,14 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Afable · Isotipo "Núcleo abierto" · #9BA6E3 · fondo transparente -->
+  <circle cx="256" cy="256" r="57" stroke="#9BA6E3" stroke-width="44" fill="none"/>
+  <g stroke="#9BA6E3" stroke-width="48" stroke-linecap="round">
+    <line x1="256" y1="137" x2="256" y2="49"/>
+    <line x1="256" y1="137" x2="256" y2="49" transform="rotate(45 256 256)"/>
+    <line x1="256" y1="137" x2="256" y2="49" transform="rotate(90 256 256)"/>
+    <line x1="256" y1="137" x2="256" y2="49" transform="rotate(135 256 256)"/>
+    <line x1="256" y1="137" x2="256" y2="49" transform="rotate(180 256 256)"/>
+    <line x1="256" y1="137" x2="256" y2="49" transform="rotate(225 256 256)"/>
+    <line x1="256" y1="137" x2="256" y2="49" transform="rotate(270 256 256)"/>
+    <line x1="256" y1="137" x2="256" y2="49" transform="rotate(315 256 256)"/>
+  </g>
+</svg>

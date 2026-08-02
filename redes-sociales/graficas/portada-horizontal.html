@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  @font-face { font-family: 'Recoleta'; src: local('Recoleta'); }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:1584px;height:396px;overflow:hidden}
+  body{
+    background:#FCFAF3;
+    font-family:'Inter',sans-serif;
+    position:relative;
+  }
+  .dotgrid{
+    position:absolute; inset:0;
+    background-image: radial-gradient(#E4E0D4 1.6px, transparent 1.6px);
+    background-size: 26px 26px;
+    opacity:.5;
+  }
+  .row{
+    position:relative; height:100%;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 96px;
+  }
+  .brand{ display:flex; align-items:center; gap:18px; }
+  .tile{
+    width:76px; height:76px; border-radius:18px;
+    background:linear-gradient(135deg,#586AD0,#2F42A6);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .tile svg{width:60%;height:60%}
+  .wordmark{ font-family:'Sora',sans-serif; font-weight:800; font-size:38px; letter-spacing:-0.02em; color:#12101F; }
+  .right{ text-align:right; }
+  h1{
+    font-family:'Recoleta','Sora',sans-serif; font-weight:600; font-size:64px;
+    color:#12101F; letter-spacing:-0.01em; margin-bottom:10px;
+  }
+  p{ font-family:'Inter',sans-serif; font-weight:500; font-size:24px; color:#4B4A57; }
+</style>
+</head>
+<body>
+  <div class="dotgrid"></div>
+  <div class="row">
+    <div class="brand">
+      <div class="tile">
+        <svg viewBox="0 0 512 512" fill="none" stroke="#fff">
+          <circle cx="256" cy="256" r="57" stroke-width="44"/>
+          <g stroke-linecap="round" stroke-width="48">
+            <line x1="256" y1="137" x2="256" y2="49"/>
+            <line x1="256" y1="137" x2="256" y2="49" transform="rotate(45 256 256)"/>
+            <line x1="256" y1="137" x2="256" y2="49" transform="rotate(90 256 256)"/>
+            <line x1="256" y1="137" x2="256" y2="49" transform="rotate(135 256 256)"/>
+            <line x1="256" y1="137" x2="256" y2="49" transform="rotate(180 256 256)"/>
+            <line x1="256" y1="137" x2="256" y2="49" transform="rotate(225 256 256)"/>
+            <line x1="256" y1="137" x2="256" y2="49" transform="rotate(270 256 256)"/>
+            <line x1="256" y1="137" x2="256" y2="49" transform="rotate(315 256 256)"/>
+          </g>
+        </svg>
+      </div>
+      <div class="wordmark">Afable</div>
+    </div>
+    <div class="right">
+      <h1>IA para equipos.</h1>
+      <p>getafable.com</p>
+    </div>
+  </div>
+</body>
+</html>

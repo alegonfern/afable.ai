@@ -1,0 +1,27 @@
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Editor
+.vscode/
+.idea/
+*.iml
+
+# Logs
+*.log
+logs/
+.gstack/
+Implementaciones ERPs/alcance-rever.md
+/Implementaciones ERPs
+.env
+
+# Memoria: todo el material de trabajo con la IA — planes, contexto, prompts,
+# conversaciones, capturas de referencia y material estrategico (pitch decks).
+# NO se versiona: no tiene por que salir del computador.
+/Memoria/
+
+# Material de referencia de terceros (logos de servicios, capturas): la app usa
+# sus propias copias en app/src/assets/.
+"Logos Servicios"/

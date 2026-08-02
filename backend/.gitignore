@@ -1,0 +1,38 @@
+# Entorno virtual
+.venv/
+venv/
+env/
+
+# Variables de entorno — NUNCA subir
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Django
+*.sqlite3
+/media/
+/staticfiles/
+/static_root/
+
+# Migraciones generadas localmente (opcional — comenta si quieres versionar las migraciones)
+# */migrations/0*.py
+
+# Tests
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Docker
+*.env.backup

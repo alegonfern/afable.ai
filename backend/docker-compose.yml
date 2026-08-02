@@ -1,0 +1,44 @@
+services:
+  db:
+    # pgvector: Postgres 16 con la extension `vector`, necesaria para la
+    # busqueda semantica (Knowledge > Search). No hay variante alpine oficial.
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: afable
+      POSTGRES_USER: afable
+      POSTGRES_PASSWORD: afable
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  backend:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8001
+    volumes:
+      - .:/app
+    network_mode: "host"
+    env_file: .env
+    depends_on:
+      - db
+
+  # Corredor de fondo: sincroniza las carpetas de Drive y ejecuta las
+  # automatizaciones y rutinas vencidas. Estuvo apagado desde la reconstruccion
+  # v1 y por eso las carpetas conectadas quedaban "esperando primer sync" para
+  # siempre. La app agents volvio, asi que el comando existe de nuevo.
+  automations:
+    build: .
+    command: python manage.py run_automations
+    volumes:
+      - .:/app
+    network_mode: "host"
+    env_file: .env
+    environment:
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      - db
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

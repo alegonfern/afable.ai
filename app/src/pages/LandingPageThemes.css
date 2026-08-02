@@ -1,0 +1,5 @@
+/* === AFABLE — THEME SYSTEM ===
+   Vaciado en el rediseño estilo Littlebird (2026-07-11):
+   el modo claro/oscuro ahora vive en LandingPage.css vía CSS variables
+   (.lp-page / .lp-page.dark). Este archivo se conserva solo para no
+   romper el import existente. */
