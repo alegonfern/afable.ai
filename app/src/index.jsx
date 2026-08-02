@@ -82,18 +82,31 @@ export function getAfableTheme(mode) {
           body: {
             backgroundColor: d ? '#0e0e0e' : '#fbfbfa',
             fontSize: '0.9375rem',
+          },
+          // La barra fina va en TODO lo que scrollea, no solo en la página.
+          // Estaba puesta solo sobre `body`, así que cada caja con scroll propio
+          // — la vitrina de agentes en el compositor, la lista de menciones, la
+          // galería del home — se dibujaba con la barra gruesa del sistema. En
+          // Linux esa barra además ocupa lugar y corre el contenido al aparecer.
+          '*': {
+            scrollbarWidth: 'thin',
             scrollbarColor: d
               ? 'rgba(255,255,255,0.12) transparent'
               : 'rgba(0,0,0,0.15) transparent',
             '&::-webkit-scrollbar': { width: '6px', height: '6px' },
             '&::-webkit-scrollbar-track': { background: 'transparent' },
             '&::-webkit-scrollbar-thumb': {
-              background: d ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.15)',
+              background: 'transparent',
               borderRadius: '3px',
             },
-            '&::-webkit-scrollbar-thumb:hover': {
-              background: d ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.25)',
-            },
+          },
+          // El pulgar aparece recién cuando el cursor está sobre la caja: la
+          // barra deja de ser parte permanente del dibujo.
+          '*:hover::-webkit-scrollbar-thumb, *:focus-within::-webkit-scrollbar-thumb': {
+            background: d ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.17)',
+          },
+          '*::-webkit-scrollbar-thumb:hover': {
+            background: d ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.28)',
           },
         },
       },

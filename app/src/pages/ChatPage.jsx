@@ -309,7 +309,11 @@ function WelcomeScreen() {
   const hasConnections = dashboard?.connections?.length > 0;
 
   return (
-    <Box sx={{ flex: 1, overflowY: 'auto', px: { xs: 2, sm: 3, md: 4 }, py: 3, maxWidth: 820, mx: 'auto', width: '100%' }}>
+    // Sin scroll propio: esta pantalla vive DENTRO de la caja de mensajes, que ya
+    // scrollea. Con `overflowY: auto` acá quedaban dos contenedores con scroll uno
+    // dentro del otro y, con la galería de agentes larga, dos barras a la vez.
+    // `1 0 auto` para que no se encoja: crece con las tarjetas y scrollea el padre.
+    <Box sx={{ flex: '1 0 auto', px: { xs: 2, sm: 3, md: 4 }, py: 3, maxWidth: 820, mx: 'auto', width: '100%' }}>
 
       {/* Header */}
       <Box sx={{ mb: 3 }}>
