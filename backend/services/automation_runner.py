@@ -33,7 +33,9 @@ def _run_prompt(user, organization, prompt: str, agent=None) -> str:
     from apps.agents.views import _build_onboarding_context
     from services.agent_service import run_agent_live, chat_direct
 
-    ctx = _build_onboarding_context(user, agent)
+    # El prompt de la automatizacion hace de consulta: si el corpus de documentos no
+    # cabe en el contexto, es lo que decide que fragmentos entran.
+    ctx = _build_onboarding_context(user, agent, consulta=prompt)
     system_prompt = ctx.get('system_prompt', '')
     if ctx.get('mode') == 'connected_systems':
         return run_agent_live(

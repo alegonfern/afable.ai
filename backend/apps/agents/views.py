@@ -101,7 +101,7 @@ def _get_user_role_context(user):
     return (' '.join(parts) + '\n\n') if parts else ''
 
 
-def _get_org_context(org, allowed_doc_ids=None, inyectados=None):
+def _get_org_context(org, allowed_doc_ids=None, inyectados=None, consulta=''):
     """Contexto de EMPRESA (no del usuario): formulario + índice de documentos
     subidos. Se inyecta siempre, en todos los modos — es lo que no está en
     ninguna tabla conectada (mission, tono, glosario, políticas).
@@ -115,7 +115,11 @@ def _get_org_context(org, allowed_doc_ids=None, inyectados=None):
     documentos cuyo texto entró completo al prompt. Sirve para citar: cuando el
     agente responde con el contenido que ya venía en el prompt no llama a ninguna
     herramienta, así que no queda rastro de procedencia y la respuesta salía sin
-    fuente — justo en el camino más común."""
+    fuente — justo en el camino más común.
+
+    `consulta` es lo que el usuario acaba de preguntar. Solo se usa cuando el corpus
+    de documentos no cabe en el prompt: ahí decide qué fragmentos entran. Vacío
+    (una automatización sin pregunta, por ejemplo) deja el comportamiento de antes."""
     from apps.organizations.models import OrganizationContext, CompanyDocument, ContextCubicle
 
     parts = []
@@ -146,8 +150,7 @@ def _get_org_context(org, allowed_doc_ids=None, inyectados=None):
     #
     # Para una pyme el corpus entero suele caber, asi que la regla se da vuelta: primero
     # el texto integro, y solo cuando se acaba el presupuesto se cae al resumen mas la
-    # tool. La busqueda semantica (pgvector) reemplaza este recorte cuando el corpus
-    # crezca de verdad.
+    # tool.
     PRESUPUESTO_DOCS = 60_000   # caracteres
     TOPE_POR_DOC = 20_000
 
@@ -157,7 +160,51 @@ def _get_org_context(org, allowed_doc_ids=None, inyectados=None):
     docs = list(
         doc_qs.order_by('-updated_at' if hasattr(CompanyDocument, 'updated_at') else '-id')
     )
-    if docs:
+
+    # Cuando el corpus NO cabe, el recorte por presupuesto es una loteria: los
+    # documentos entran por fecha, asi que justo el que responde la pregunta puede
+    # quedar afuera o entrar cortado a los 20.000 caracteres. Ahi la busqueda
+    # semantica hace la diferencia — se recuperan los fragmentos que hablan de lo
+    # que se pregunto, salgan del documento que salgan.
+    #
+    # Si el corpus cabe entero no se usa: tener el texto completo a la vista le gana
+    # a cualquier recuperacion, y es el caso de la mayoria de las pymes.
+    recuperado_por_semantica = False
+    total_texto = sum(len((d.extracted_text or '').strip()) for d in docs)
+    if docs and consulta and total_texto > PRESUPUESTO_DOCS:
+        from services.retrieval import buscar, como_bloque_de_prompt
+        relevantes = buscar(org, consulta, allowed_doc_ids, k=12)
+        if relevantes:
+            if inyectados is not None:
+                for r in relevantes:
+                    if not any(i['id'] == r['documento_id'] for i in inyectados):
+                        inyectados.append({'id': r['documento_id'], 'title': r['titulo']})
+            parts.append(
+                'FRAGMENTOS RELEVANTES DE LOS DOCUMENTOS DE LA EMPRESA (los que hablan de lo '
+                'que se acaba de preguntar, recuperados de un corpus mas grande que lo que '
+                'cabe en esta conversacion). Responde usando esto como fuente principal y cita '
+                'el documento por su titulo. Si necesitas el documento completo, llama a '
+                '`read_company_document(id)`; si esto no alcanza para responder, busca de nuevo '
+                'con `buscar_en_fuentes` usando otras palabras antes de decir que no sabes.'
+                '\n\n' + como_bloque_de_prompt(relevantes)
+            )
+            indice_resto = [
+                f"- [id={d.id}] «{d.title}»: {((d.summary or '').strip() or 'sin resumen disponible')[:200]}"
+                for d in docs
+            ]
+            parts.append(
+                'TODOS LOS DOCUMENTOS DE LA EMPRESA (usa read_company_document(id) o '
+                '`buscar_en_fuentes` para lo que no este arriba):\n' + '\n'.join(indice_resto)
+            )
+            recuperado_por_semantica = True
+
+    # Ojo con el orden de estas tres ramas: la primera version vaciaba `docs` para
+    # saltear el volcado, y con eso caia en el `else` de abajo y el prompt terminaba
+    # diciendo "la empresa todavia no tiene documentos" INMEDIATAMENTE despues de
+    # los fragmentos recuperados. Una bandera, no una lista vacia.
+    if recuperado_por_semantica:
+        pass
+    elif docs:
         completos, indice, gastado = [], [], 0
         for d in docs:
             texto = (d.extracted_text or '').strip()
@@ -220,7 +267,10 @@ def _get_dummyjson_context(user):
         return None
 
 
-def _build_onboarding_context(user, agent=None, mention_system_id=None):
+def _build_onboarding_context(user, agent=None, mention_system_id=None, consulta=''):
+    """`consulta` es el mensaje que el usuario acaba de mandar. Se usa solo para
+    elegir qué fragmentos de documento entran al prompt cuando el corpus de la
+    empresa no cabe entero (ver `_get_org_context`)."""
     from apps.organizations.models import IntegrationScan
 
     orgs = Organization.objects.filter(owner=user).exclude(name="Personal")
@@ -257,7 +307,7 @@ Acciones adicionales disponibles:
     espacio_conns, espacio_docs = alcance_de_agente(agent)
     docs_en_prompt = []
     org_ctx = _get_org_context(
-        org, allowed_doc_ids=espacio_docs, inyectados=docs_en_prompt,
+        org, allowed_doc_ids=espacio_docs, inyectados=docs_en_prompt, consulta=consulta,
     )
 
     # Primero intenta SystemConnection (arquitectura nueva)
@@ -752,7 +802,7 @@ class DirectChatView(APIView):
                 title=_conversation_title(agent, message))
 
         mention_system_id = request.data.get('system_id') or None
-        context = _build_onboarding_context(request.user, agent, mention_system_id)
+        context = _build_onboarding_context(request.user, agent, mention_system_id, consulta=message)
         system_prompt = context['system_prompt']
 
         Message.objects.create(conversation=conversation, role='user', content=message)
@@ -826,7 +876,7 @@ class DirectChatStreamView(APIView):
                 title=_conversation_title(agent, message))
 
         mention_system_id = request.data.get('system_id') or None
-        context = _build_onboarding_context(request.user, agent, mention_system_id)
+        context = _build_onboarding_context(request.user, agent, mention_system_id, consulta=message)
         system_prompt = context['system_prompt']
 
         mensaje_usuario = Message.objects.create(

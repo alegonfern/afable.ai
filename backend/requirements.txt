@@ -3,6 +3,9 @@ djangorestframework==3.15.2
 djangorestframework-simplejwt==5.3.1
 django-cors-headers==4.4.0
 psycopg[binary]>=3.1
+# pgvector: campo VectorField y operadores de distancia para la busqueda
+# semantica (apps/sources). La imagen de la base ya trae la extension.
+pgvector>=0.3.0
 anthropic>=0.50.0
 python-decouple==3.8
 Pillow==10.4.0

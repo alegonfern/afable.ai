@@ -182,17 +182,24 @@ def _tools_spec(org, allowed_ids=None):
             "name": "buscar_en_fuentes",
             "description": (
                 "Busca en TODO lo que la empresa tiene conectado: los documentos y archivos de "
-                "Drive, y los sistemas y tablas conectados. Úsala cuando el usuario pregunte si "
-                "existe algo ('¿tengo algún reporte de contabilidad?', 'busca en mis archivos...') "
-                "en vez de responder que no puedes ver sus archivos. Devuelve dónde está cada "
-                "coincidencia y un fragmento del texto."
+                "Drive, y los sistemas y tablas conectados. Busca por SIGNIFICADO, no solo por "
+                "palabra exacta: puedes pasarle la pregunta del usuario tal como la hizo y te "
+                "devuelve los fragmentos de documento que la responden. Úsala cuando el usuario "
+                "pregunte si existe algo ('¿tengo algún reporte de contabilidad?', 'busca en mis "
+                "archivos...') y también cuando pregunte por el CONTENIDO de las políticas, "
+                "manuales o contratos de la empresa y no tengas ese texto a la vista. Nunca "
+                "respondas que no puedes ver sus archivos. Devuelve dónde está cada coincidencia "
+                "y los fragmentos de texto relevantes."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "consulta": {
                         "type": "string",
-                        "description": "Palabra o frase a buscar, por ejemplo 'reporte de contabilidad'",
+                        "description": (
+                            "Qué buscar, en lenguaje natural. Puede ser la pregunta completa del "
+                            "usuario, por ejemplo '¿cuántos días de vacaciones me corresponden?'"
+                        ),
                     },
                 },
                 "required": ["consulta"],
@@ -309,26 +316,57 @@ def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None,
             if not consulta:
                 return {"error": "Falta qué buscar."}
 
-            hallazgos = []
+            # Los documentos se buscan de dos formas que se complementan, y por eso
+            # conviven en la misma herramienta en vez de en dos:
+            #
+            # - Semantica (fragmentos vectorizados): encuentra por significado, o sea
+            #   responde "¿cuantos dias de vacaciones tengo?" con el parrafo del
+            #   reglamento que habla de feriado legal sin que la palabra "vacaciones"
+            #   aparezca. Es el camino principal, pero necesita el indice armado.
+            # - Literal (subcadena en titulo y texto): no necesita indice, y para
+            #   "¿tengo un archivo que se llame X?" es mas preciso que cualquier
+            #   vector, porque ahi el usuario quiere la coincidencia exacta.
+            por_documento = {}
 
-            # Documentos y archivos (Drive, subidas manuales): titulo y contenido.
+            from services.retrieval import buscar as buscar_semantico
+            for r in buscar_semantico(org, consulta, allowed_doc_ids, k=8):
+                h = por_documento.get(r['documento_id'])
+                if h is None:
+                    por_documento[r['documento_id']] = {
+                        "donde": f'Documento «{r["titulo"]}»',
+                        "id": r['documento_id'],
+                        "coincide_en": 'el sentido del contenido',
+                        "fragmentos": [r['texto']],
+                        "como_leerlo": f'read_company_document({r["documento_id"]})',
+                    }
+                elif len(h['fragmentos']) < 3:
+                    h['fragmentos'].append(r['texto'])
+
             for doc in _documentos(org, allowed_doc_ids):
                 texto = doc.extracted_text or ''
                 en_titulo = consulta.lower() in (doc.title or '').lower()
                 pos = texto.lower().find(consulta.lower())
                 if not en_titulo and pos < 0:
                     continue
+                h = por_documento.get(doc.id)
+                if h is not None:
+                    # Ya lo trajo la busqueda semantica: solo se precisa por que mas
+                    # coincide, sin duplicar el documento en los resultados.
+                    h['coincide_en'] += ' y en el título' if en_titulo else ' y textualmente'
+                    continue
                 fragmento = ''
                 if pos >= 0:
                     desde = max(0, pos - 120)
                     fragmento = texto[desde:pos + 240].replace('\n', ' ')
-                hallazgos.append({
+                por_documento[doc.id] = {
                     "donde": f'Documento «{doc.title}»',
                     "id": doc.id,
                     "coincide_en": 'el título' if en_titulo else 'el contenido',
-                    "fragmento": fragmento,
+                    "fragmentos": [fragmento] if fragmento else [],
                     "como_leerlo": f'read_company_document({doc.id})',
-                })
+                }
+
+            hallazgos = list(por_documento.values())
 
             # Sistemas conectados: nombre de la conexion y de sus tablas o modulos.
             for conn in SystemConnection.objects.filter(organization=org, is_active=True):

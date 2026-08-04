@@ -169,3 +169,17 @@ OLLAMA_CLOUD_MODEL    = config('OLLAMA_CLOUD_MODEL', default='gpt-oss:120b')
 # Modelos cloud a exponer en el selector de la app aunque no aparezcan en /api/tags
 # (lista separada por comas, ej: "gpt-oss:120b-cloud,qwen3-coder:480b-cloud").
 OLLAMA_CLOUD_MODELS   = [m.strip() for m in config('OLLAMA_CLOUD_MODELS', default='').split(',') if m.strip()]
+
+# Busqueda semantica (Knowledge > Search). Proveedor de embeddings: 'ollama' o
+# 'ninguno' para apagarla (los documentos vuelven a volcarse enteros al prompt,
+# como antes de que existiera). Anthropic no tiene API de embeddings, asi que la
+# ANTHROPIC_API_KEY no sirve aca.
+#
+# OJO: el modelo define la dimension del vector, y la dimension esta en la
+# migracion de `apps.sources.Fragmento` (768 = embeddinggemma). Cambiar a un
+# modelo de otra dimension exige una migracion nueva y reindexar todo.
+EMBEDDINGS_PROVIDER = config('EMBEDDINGS_PROVIDER', default='ollama')
+EMBEDDINGS_MODEL    = config('EMBEDDINGS_MODEL', default='embeddinggemma')
+# Vacio = usar OLLAMA_BASE_URL. Se separa para poder tener el modelo de embeddings
+# en otra maquina que el de chat.
+EMBEDDINGS_BASE_URL = config('EMBEDDINGS_BASE_URL', default='')

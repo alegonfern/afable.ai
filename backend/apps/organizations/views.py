@@ -622,6 +622,12 @@ class CompanyDocumentListCreateView(APIView):
         doc.processing_error = result['error']
         doc.save(update_fields=['extracted_text', 'summary', 'processing_error'])
 
+        # Busqueda semantica: se trocea y vectoriza recien subido. Si el proveedor
+        # de embeddings no esta, el documento queda sin indexar y la subida termina
+        # bien igual — se recupera con `manage.py indexar_conocimiento`.
+        from services.indexing import indexar_documento_sin_ruido
+        indexar_documento_sin_ruido(doc)
+
         return Response(CompanyDocumentSerializer(doc, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
 
