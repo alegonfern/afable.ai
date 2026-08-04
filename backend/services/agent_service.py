@@ -95,6 +95,14 @@ def chunk_text(text: str, size: int = 28):
 
 
 def chat_direct(history: list[dict], system_prompt: str = "", model: str = None) -> str:
+    """Devuelve el texto TAL CUAL lo dio el modelo, sin limpiar.
+
+    A proposito: quien llama desde el chat necesita el `__ACTION__{...}` intacto para
+    extraer la accion (`_extract_action` en apps/agents/views.py) y recien despues
+    sacarlo del texto que se muestra. Limpiar aca se comeria la accion y romperia el
+    alta de empresa. Los consumidores que NO usan el protocolo de acciones —Tareas y
+    Automatizaciones— limpian en `automation_runner._run_prompt`.
+    """
     provider, resolved = resolve_model(model)
     if provider == 'anthropic':
         return _chat_anthropic_simple(history, system_prompt, resolved)

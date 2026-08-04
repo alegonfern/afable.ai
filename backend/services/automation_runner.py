@@ -38,12 +38,31 @@ def _run_prompt(user, organization, prompt: str, agent=None) -> str:
     ctx = _build_onboarding_context(user, agent, consulta=prompt)
     system_prompt = ctx.get('system_prompt', '')
     if ctx.get('mode') == 'connected_systems':
-        return run_agent_live(
+        salida = run_agent_live(
             [{'role': 'user', 'content': prompt}], organization, system_prompt,
             model=ctx.get('agent_model'), allowed_ids=ctx.get('allowed_ids'),
             allowed_doc_ids=ctx.get('allowed_doc_ids'),
         )
-    return chat_direct([{'role': 'user', 'content': prompt}], system_prompt)
+    else:
+        salida = chat_direct([{'role': 'user', 'content': prompt}], system_prompt)
+    return _limpiar_para_leer(salida)
+
+
+def _limpiar_para_leer(texto: str) -> str:
+    """Saca del texto lo que es protocolo y no respuesta.
+
+    Por acá salen las Tareas y las Automatizaciones: nadie ejecuta acciones ni
+    herramientas con este resultado, se lee y se guarda. El chat sí las ejecuta, y por
+    eso limpia recién después de extraerlas — acá hay que hacerlo nosotros.
+
+    Sin esto, el resultado de una Tarea ejecutada por un agente llegaba con
+    `__ACTION__{"type":"search",...}` pegado adelante: el modelo intenta invocar
+    escribiendo, porque no todos usan el campo `tool_calls`.
+    """
+    from apps.agents.views import _strip_action
+    from services.agent_service import _quitar_llamadas_visibles
+
+    return _quitar_llamadas_visibles(_strip_action(texto or '')).strip()
 
 
 def _send_result_email(to_email: str, subject: str, body: str):

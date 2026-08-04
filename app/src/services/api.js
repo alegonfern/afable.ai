@@ -168,6 +168,17 @@ export const api = {
   getSpaceAvailable: (slug, space) => apiClient.get(`/workspaces/${slug}/espacios/${space}/disponibles/`),
   getSpaceConversations: (slug, space) =>
     apiClient.get(`/workspaces/${slug}/espacios/${space}/conversaciones/`),
+  // Tareas del Espacio: el pendiente que toma una persona o un agente.
+  getSpaceTasks: (slug, space) =>
+    apiClient.get(`/workspaces/${slug}/espacios/${space}/tareas/`),
+  createSpaceTask: (slug, space, data) =>
+    apiClient.post(`/workspaces/${slug}/espacios/${space}/tareas/`, data),
+  updateSpaceTask: (slug, space, id, data) =>
+    apiClient.patch(`/workspaces/${slug}/espacios/${space}/tareas/${id}/`, data),
+  deleteSpaceTask: (slug, space, id) =>
+    apiClient.delete(`/workspaces/${slug}/espacios/${space}/tareas/${id}/`),
+  runSpaceTask: (slug, space, id) =>
+    apiClient.post(`/workspaces/${slug}/espacios/${space}/tareas/${id}/ejecutar/`, {}),
   // coleccion: conexiones | documentos | agentes | personas
   addToSpace: (slug, space, coleccion, ids) =>
     apiClient.post(`/workspaces/${slug}/espacios/${space}/${coleccion}/`, { ids }),

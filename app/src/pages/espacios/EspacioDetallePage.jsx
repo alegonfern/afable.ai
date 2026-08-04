@@ -10,6 +10,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import PublicOutlinedIcon from '@mui/icons-material/PublicOutlined';
 import PageHeader from '../../components/PageHeader';
+import TareasTab from './TareasTab';
 import { api } from '../../services/api';
 import { useWorkspace } from '../../context/WorkspaceContext';
 
@@ -38,6 +39,7 @@ function detalle(item, campo) {
 }
 
 const PESTANA_CONVERSACIONES = 'conversaciones';
+const PESTANA_TAREAS = 'tareas';
 
 export default function EspacioDetallePage() {
   const theme = useTheme();
@@ -187,11 +189,19 @@ export default function EspacioDetallePage() {
               label={`${p.label} (${(espacio[p.campo] || []).length})`}
             />
           ))}
+          <Tab value={PESTANA_TAREAS} label="Tareas" />
           <Tab value={PESTANA_CONVERSACIONES} label="Conversaciones" />
         </Tabs>
       </Box>
 
-      {tab === PESTANA_CONVERSACIONES ? (
+      {tab === PESTANA_TAREAS ? (
+        // Los agentes y las personas del Espacio se pasan desde la ficha, que ya los
+        // trae: pedirlos de nuevo sería un viaje extra por lo mismo.
+        <TareasTab
+          slug={slug} spaceSlug={spaceSlug}
+          agentes={espacio.agents || []} personas={espacio.members || []}
+        />
+      ) : tab === PESTANA_CONVERSACIONES ? (
         <Box sx={{ px: { xs: 2, sm: 3 }, pt: 2, pb: 5, maxWidth: 780, width: '100%' }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
             Lo que se trabajó en este Espacio. A diferencia de su historial personal,

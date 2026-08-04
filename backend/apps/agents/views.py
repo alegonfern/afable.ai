@@ -101,7 +101,7 @@ def _get_user_role_context(user):
     return (' '.join(parts) + '\n\n') if parts else ''
 
 
-def _get_org_context(org, allowed_doc_ids=None, inyectados=None, consulta=''):
+def _get_org_context(org, allowed_doc_ids=None, inyectados=None, consulta='', con_herramientas=True):
     """Contexto de EMPRESA (no del usuario): formulario + índice de documentos
     subidos. Se inyecta siempre, en todos los modos — es lo que no está en
     ninguna tabla conectada (mission, tono, glosario, políticas).
@@ -119,7 +119,11 @@ def _get_org_context(org, allowed_doc_ids=None, inyectados=None, consulta=''):
 
     `consulta` es lo que el usuario acaba de preguntar. Solo se usa cuando el corpus
     de documentos no cabe en el prompt: ahí decide qué fragmentos entran. Vacío
-    (una automatización sin pregunta, por ejemplo) deja el comportamiento de antes."""
+    (una automatización sin pregunta, por ejemplo) deja el comportamiento de antes.
+
+    `con_herramientas` dice si el agente va a correr con la capa de herramientas. En
+    `False` no se nombra ninguna: prometerle una herramienta que no puede llamar hace
+    que se gaste el turno intentando invocarla en vez de responder."""
     from apps.organizations.models import OrganizationContext, CompanyDocument, ContextCubicle
 
     parts = []
@@ -183,19 +187,29 @@ def _get_org_context(org, allowed_doc_ids=None, inyectados=None, consulta=''):
                 'FRAGMENTOS RELEVANTES DE LOS DOCUMENTOS DE LA EMPRESA (los que hablan de lo '
                 'que se acaba de preguntar, recuperados de un corpus mas grande que lo que '
                 'cabe en esta conversacion). Responde usando esto como fuente principal y cita '
-                'el documento por su titulo. Si necesitas el documento completo, llama a '
-                '`read_company_document(id)`; si esto no alcanza para responder, busca de nuevo '
-                'con `buscar_en_fuentes` usando otras palabras antes de decir que no sabes.'
-                '\n\n' + como_bloque_de_prompt(relevantes)
+                'el documento por su titulo.'
+                + (' Si necesitas el documento completo, llama a `read_company_document(id)`; '
+                   'si esto no alcanza para responder, busca de nuevo con `buscar_en_fuentes` '
+                   'usando otras palabras antes de decir que no sabes.'
+                   if con_herramientas else
+                   ' Si la respuesta no esta en estos fragmentos, dilo: no tienes forma de '
+                   'buscar mas.')
+                + '\n\n' + como_bloque_de_prompt(relevantes)
             )
             indice_resto = [
                 f"- [id={d.id}] «{d.title}»: {((d.summary or '').strip() or 'sin resumen disponible')[:200]}"
                 for d in docs
             ]
-            parts.append(
-                'TODOS LOS DOCUMENTOS DE LA EMPRESA (usa read_company_document(id) o '
-                '`buscar_en_fuentes` para lo que no este arriba):\n' + '\n'.join(indice_resto)
-            )
+            if con_herramientas:
+                parts.append(
+                    'TODOS LOS DOCUMENTOS DE LA EMPRESA (usa read_company_document(id) o '
+                    '`buscar_en_fuentes` para lo que no este arriba):\n' + '\n'.join(indice_resto)
+                )
+            else:
+                parts.append(
+                    'TODOS LOS DOCUMENTOS DE LA EMPRESA (de estos solo tienes a la vista los '
+                    'fragmentos de arriba):\n' + '\n'.join(indice_resto)
+                )
             recuperado_por_semantica = True
 
     # Ojo con el orden de estas tres ramas: la primera version vaciaba `docs` para
@@ -227,22 +241,29 @@ def _get_org_context(org, allowed_doc_ids=None, inyectados=None, consulta=''):
             sello = _tz.localtime().strftime('%d-%m-%Y %H:%M')
             parts.append(
                 f'CONTENIDO DE LOS DOCUMENTOS DE LA EMPRESA (version vigente al {sello}). '
-                'Responde usando esto como fuente principal y cita el documento por su titulo. '
-                'Si el usuario dice que edito o actualizo un archivo, NO le pidas que te pegue el '
-                'contenido: llama a la herramienta `actualizar_documentos` y lee la version nueva '
-                'tu mismo. Si pregunta si EXISTE algo ("¿tengo un reporte de contabilidad?", "busca '
-                'en mis archivos..."), usa `buscar_en_fuentes`: nunca respondas que no puedes ver '
-                'sus archivos.\n\n' + '\n\n'.join(completos)
+                'Responde usando esto como fuente principal y cita el documento por su titulo.'
+                + (' Si el usuario dice que edito o actualizo un archivo, NO le pidas que te pegue '
+                   'el contenido: llama a la herramienta `actualizar_documentos` y lee la version '
+                   'nueva tu mismo. Si pregunta si EXISTE algo ("¿tengo un reporte de '
+                   'contabilidad?", "busca en mis archivos..."), usa `buscar_en_fuentes`: nunca '
+                   'respondas que no puedes ver sus archivos.'
+                   if con_herramientas else
+                   ' Esto es TODO lo que tienes a la vista: no puedes buscar ni releer archivos, '
+                   'asi que si algo no esta aca, dilo en vez de inventarlo.')
+                + '\n\n' + '\n\n'.join(completos)
             )
         if indice:
             parts.append(
-                'OTROS DOCUMENTOS DISPONIBLES (usa read_company_document(id) para leerlos '
-                'completos):\n' + '\n'.join(indice)
+                ('OTROS DOCUMENTOS DISPONIBLES (usa read_company_document(id) para leerlos '
+                 'completos):\n' if con_herramientas else
+                 'OTROS DOCUMENTOS DE LA EMPRESA (solo su resumen: no tienes forma de abrirlos '
+                 'completos en esta conversacion):\n') + '\n'.join(indice)
             )
     else:
         parts.append(
-            'La empresa todavia no tiene documentos ni archivos conectados. Si el usuario pregunta '
-            'por alguno, usa `buscar_en_fuentes` para confirmarlo antes de responder.'
+            'La empresa todavia no tiene documentos ni archivos conectados.'
+            + (' Si el usuario pregunta por alguno, usa `buscar_en_fuentes` para confirmarlo '
+               'antes de responder.' if con_herramientas else '')
         )
 
     cubicles = list(ContextCubicle.objects.filter(organization=org))
@@ -306,9 +327,6 @@ Acciones adicionales disponibles:
     # lo de su empresa (ver `alcance_de_agente`).
     espacio_conns, espacio_docs = alcance_de_agente(agent)
     docs_en_prompt = []
-    org_ctx = _get_org_context(
-        org, allowed_doc_ids=espacio_docs, inyectados=docs_en_prompt, consulta=consulta,
-    )
 
     # Primero intenta SystemConnection (arquitectura nueva)
     from apps.organizations.models import SystemConnection
@@ -321,7 +339,20 @@ Acciones adicionales disponibles:
     # del agente no existe para ese agente, ni siquiera para nombrarlo en el prompt.
     if espacio_conns is not None:
         connections = connections.filter(id__in=espacio_conns)
-    if connections.exists():
+
+    # Solo el modo 'connected_systems' corre con la capa de herramientas
+    # (`run_agent_live`). En los demás no hay ninguna herramienta que ejecutar, así que
+    # el contexto NO puede decirle al agente que llame a `buscar_en_fuentes`: cuando lo
+    # hacía, un modelo como gpt-oss se gastaba el turno escribiendo la invocación como
+    # texto y contestaba nada. Se vio en el resultado de una Tarea, que quedó con un
+    # `__ACTION__` pelado en vez de una respuesta.
+    con_herramientas = connections.exists()
+    org_ctx = _get_org_context(
+        org, allowed_doc_ids=espacio_docs, inyectados=docs_en_prompt, consulta=consulta,
+        con_herramientas=con_herramientas,
+    )
+
+    if con_herramientas:
         conn_ctx = get_connections_context(org, espacio_conns) or ''
 
         # Configuración del agente elegido (si trae instrucciones / scope de sistemas / modelo).
