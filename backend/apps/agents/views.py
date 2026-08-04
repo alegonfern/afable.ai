@@ -276,18 +276,6 @@ def _get_org_context(org, allowed_doc_ids=None, inyectados=None, consulta='', co
     return ('\n\n'.join(parts) + '\n\n') if parts else ''
 
 
-def _get_dummyjson_context(user):
-    from apps.organizations.models import ActiveIntegration
-    has = ActiveIntegration.objects.filter(user=user, integration_type='dummyjson', is_active=True).exists()
-    if not has:
-        return None
-    try:
-        from services.dummyjson_client import build_context_summary
-        return build_context_summary()
-    except Exception:
-        return None
-
-
 def _build_onboarding_context(user, agent=None, mention_system_id=None, consulta=''):
     """`consulta` es el mensaje que el usuario acaba de mandar. Se usa solo para
     elegir qué fragmentos de documento entran al prompt cuando el corpus de la
@@ -310,10 +298,7 @@ El usuario aún no ha configurado su empresa. Tu objetivo es guiarlo amigablemen
 3. Cuando el usuario te confirme el nombre de su empresa, incluye EXACTAMENTE esta línea al final de tu respuesta (reemplaza NOMBRE con el nombre real):
    __ACTION__{{\"type\":\"create_org\",\"name\":\"NOMBRE\"}}__
 
-Sé conversacional, breve y entusiasta.
-
-Acciones adicionales disponibles:
-- Cargar datos demo: __ACTION__{{\"type\":\"load_demo\"}}__"""
+Sé conversacional, breve y entusiasta."""
         }
 
     org = orgs.first()
@@ -440,41 +425,28 @@ fuente — el sistema la añade automáticamente con la tabla y la hora reales.
 Responde siempre en español, conciso. Usa markdown para respuestas largas.{ACTIONS_PROMPT}""",
         }
 
-    # Fallback: DummyJSON (demo)
+    # Sin sistemas CONSULTABLES en vivo. Ojo: eso no es lo mismo que "sin nada
+    # conectado" — los documentos y las carpetas de Drive ya vienen en `org_ctx`,
+    # arriba. El texto viejo decia "aun no hay sistemas conectados" y ofrecia cargar
+    # datos demo, o sea que el agente negaba tener los documentos que tenia a la vista
+    # en el mismo prompt.
     if not has_scan:
-        dj_ctx = _get_dummyjson_context(user)
-        if dj_ctx:
-            return {
-                'mode': 'dummyjson',
-                'docs_en_prompt': docs_en_prompt,
-                'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
-{perm_ctx}
-{org_ctx}Tienes acceso en tiempo real a los datos de la tienda conectada via DummyJSON.
-
-{dj_ctx}
-
-Usa estos datos para responder preguntas sobre ventas, inventario, clientes y métricas.
-Responde siempre en español. Usa markdown para estructurar respuestas largas.{ACTIONS_PROMPT}""",
-            }
         return {
             'mode': 'no_integration',
             'docs_en_prompt': docs_en_prompt,
             'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
 {perm_ctx}
-{org_ctx}La empresa está creada pero aún no hay sistemas conectados.
-Si el usuario pide análisis o reportes:
-1. Explícale que puede conectar su ERP o base de datos desde "Integraciones"
-2. Menciona que soportamos Odoo, SAP Business One (MSSQL) y PostgreSQL
-3. Ofrécele explorar con datos demo: "¿Quieres conectar datos demo para ver cómo funciona?"
-4. Si acepta los datos demo: __ACTION__{{"type":"connect_integration","integration":"dummyjson"}}__
+{org_ctx}Trabajas con lo que ves arriba: el contexto de la empresa y sus documentos.
+NO tienes ningún sistema (ERP, CRM o base de datos) conectado para consultar en vivo,
+así que no puedes responder con cifras de ventas, stock ni facturación al día. Si te
+piden algo de eso, dilo con claridad y menciona que se conecta desde Espacios › Conexiones
+(soportamos Odoo, SAP Business One y PostgreSQL). Nunca inventes una cifra.
 
 Responde siempre en español, sé conciso y orientado a la acción.{ACTIONS_PROMPT}"""
         }
 
     scan = scans.first()
     modules = ', '.join(scan.modules_found[:6]) if scan.modules_found else 'varios módulos'
-    dj_ctx = _get_dummyjson_context(user)
-    dj_section = f'\n\nADEMÁS tienes acceso a datos en tiempo real de DummyJSON Store:\n{dj_ctx}' if dj_ctx else ''
     ai_ctx = scan.ai_context[:800] if scan.ai_context else 'Sin contexto de escaneo.'
     return {
         'mode': 'full',
@@ -484,7 +456,7 @@ Responde siempre en español, sé conciso y orientado a la acción.{ACTIONS_PROM
 {org_ctx}Tienes acceso al contexto de datos escaneado de {scan.system_name}:
 {ai_ctx}
 
-Módulos disponibles: {modules}{dj_section}
+Módulos disponibles: {modules}
 
 Ayuda al usuario a analizar sus datos, generar reportes e insights empresariales.
 Responde siempre en español. Usa markdown para estructurar respuestas largas.
@@ -662,30 +634,12 @@ Acciones y cuándo usarlas:
 - Crear agente: cuando pidan crear un agente, asistente o bot
   → __ACTION__{"type":"create_agent","name":"Nombre","description":"Para qué sirve"}__
 
-- Guardar documento: cuando el usuario pida o confirme guardar un entregable
-  → __ACTION__{"type":"save_document","title":"Título descriptivo","use_last_response":true}__
-  use_last_response guarda tu respuesta anterior completa (incluidos sus gráficos) tal cual.
-  Solo si el documento es contenido nuevo que no está en la conversación usa:
-  → __ACTION__{"type":"save_document","title":"Título","content":"contenido completo en markdown"}__
-
 - Navegar a sección: cuando el usuario quiera ir a una parte de la app
-  → __ACTION__{"type":"navigate","path":"/app/documentos"}__
-  Rutas válidas: /app, /app/agentes, /app/documentos, /app/integraciones, /app/tablero
-
-- Cargar datos demo: cuando pidan datos de prueba o demo
-  → __ACTION__{"type":"load_demo"}__
+  → __ACTION__{"type":"navigate","path":"/app/agentes"}__
+  Rutas válidas: /app, /app/agentes, /app/contexto, /app/tablero
 
 IMPORTANTE: Solo incluye __ACTION__ cuando el usuario PIDE EXPLÍCITAMENTE hacer algo. Para preguntas o análisis normales, responde sin acción.
 
-REGLA DEL ENTREGABLE: cuando tu respuesta sea un entregable completo — cualquier contenido
-que el usuario podría querer conservar: análisis con cifras o gráficos, reporte, informe,
-plan, propuesta, comparativa, minuta, resumen ejecutivo, presupuesto, cronograma, tabla de
-datos extensa, o cualquier documento redactado a pedido — termina SIEMPRE preguntando en
-una línea aparte: "¿Quieres que guarde este [análisis/informe/plan/documento según
-corresponda] como documento?" — SIN incluir la acción todavía.
-Recién cuando el usuario acepte, responde con una confirmación breve e incluye la acción
-save_document con use_last_response.
-No apliques la regla a respuestas conversacionales, aclaraciones o respuestas cortas.
 """
 
 
@@ -737,13 +691,6 @@ def _execute_action(action_data, user, conversation=None):
                 'created': created,
                 'message': f'Empresa "{org.name}" {"creada" if created else "ya registrada"} ✓'
             }
-        elif action_type == 'load_demo':
-            from django.core.management import call_command
-            call_command('seed_demo', user.email, verbosity=0)
-            return {
-                'type': 'load_demo', 'success': True,
-                'message': 'Datos demo cargados ✓'
-            }
         elif action_type == 'create_agent':
             org = Organization.objects.filter(owner=user).first()
             if not org:
@@ -760,50 +707,11 @@ def _execute_action(action_data, user, conversation=None):
                 'created': created,
                 'message': f'Agente "{agent_obj.name}" {"creado" if created else "ya existe"} ✓'
             }
-        elif action_type == 'save_document':
-            title = action_data.get('title', 'Documento sin título')
-            content = action_data.get('content', '')
-            if action_data.get('use_last_response') and conversation is not None:
-                # Guarda el entregable tal cual quedó en la conversación (con sus
-                # gráficos embebidos) — el modelo no puede reproducir el base64.
-                last = conversation.messages.filter(role='assistant').order_by('-created_at').first()
-                if last:
-                    # La oferta de guardado no es parte del entregable (puede no ser
-                    # la última línea: a veces la sigue la cita de fuente).
-                    offer = re.compile(r'^\s*¿.*guard.*\?\s*$', re.IGNORECASE)
-                    lines = [ln for ln in last.content.rstrip().splitlines() if not offer.match(ln)]
-                    content = re.sub(r'\n{3,}', '\n\n', '\n'.join(lines)).rstrip()
-            doc_count = Document.objects.filter(user=user).count()
-            doc = Document.objects.create(
-                user=user, title=title, content=content,
-                conversation=conversation,
-                grid_x=0, grid_y=doc_count * 6, grid_w=8, grid_h=6,
-            )
-            return {
-                'type': 'save_document', 'success': True,
-                'document_id': doc.id, 'document_title': doc.title,
-                'message': f'Documento "{doc.title}" guardado ✓'
-            }
         elif action_type == 'navigate':
             return {
                 'type': 'navigate', 'success': True,
                 'path': action_data.get('path', '/app'),
                 'message': f'Navegando...'
-            }
-        elif action_type == 'connect_integration':
-            from apps.organizations.models import ActiveIntegration
-            integration = action_data.get('integration', 'dummyjson')
-            obj, created = ActiveIntegration.objects.get_or_create(
-                user=user, integration_type=integration,
-                defaults={'is_active': True},
-            )
-            if not created:
-                obj.is_active = True
-                obj.save(update_fields=['is_active'])
-            return {
-                'type': 'connect_integration', 'success': True,
-                'integration': integration,
-                'message': f'Integración {integration} conectada ✓',
             }
     except Exception as e:
         return {'type': action_type, 'success': False, 'message': str(e)}

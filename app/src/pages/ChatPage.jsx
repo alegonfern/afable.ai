@@ -3,7 +3,7 @@ import Cookies from 'js-cookie';
 import {
   Box, Typography, IconButton, TextField,
   Tooltip, Chip, CircularProgress, useTheme, Avatar, Skeleton,
-  Snackbar, Alert, Button, Menu, MenuItem, Collapse,
+  Button, Menu, MenuItem, Collapse,
 } from '@mui/material';
 import {
   Send, Paperclip, AtSign, Bot, User, Sparkles,
@@ -464,7 +464,6 @@ export default function ChatPage() {
   const [agentesMencionables, setAgentesMencionables] = useState([]);
   const [mencion, setMencion] = useState(null);      // { consulta, desde } o null
   const [mencionIdx, setMencionIdx] = useState(0);
-  const [savedDoc, setSavedDoc] = useState(null);         // {title} cuando el agente guardó un documento
 
   const [attachment, setAttachment] = useState(null);     // {name, extracted_text, error}
   const [attaching, setAttaching] = useState(false);
@@ -998,23 +997,6 @@ export default function ChatPage() {
         </Typography>
       </Box>
 
-      <Snackbar
-        open={!!savedDoc} autoHideDuration={6000} onClose={() => setSavedDoc(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
-          severity="success" onClose={() => setSavedDoc(null)}
-          sx={{ borderRadius: '10px', alignItems: 'center' }}
-          action={
-            <Button size="small" onClick={() => navigate('/app/documentos')}
-              sx={{ color: '#586AD0', fontWeight: 700, fontSize: '0.78rem' }}>
-              Ver documentos
-            </Button>
-          }
-        >
-          "{savedDoc?.title}" guardado en Documentos.
-        </Alert>
-      </Snackbar>
     </Box>
   );
 }

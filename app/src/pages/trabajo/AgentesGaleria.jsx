@@ -60,7 +60,6 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
   const [hayMas, setHayMas] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [puedeCrear, setPuedeCrear] = useState(false);
-  const [menuCrear, setMenuCrear] = useState(null);
   const [menuGestionar, setMenuGestionar] = useState(null);
   const [menuOrden, setMenuOrden] = useState(null);
 
@@ -294,12 +293,12 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
         {!embebida && (
           <>
             <Button
-              onClick={(e) => setMenuCrear(e.currentTarget)}
-              startIcon={<Plus size={15} />} endIcon={<ChevronDown size={14} />}
+              onClick={() => navigate('/app/agentes/nuevo')}
+              startIcon={<Plus size={15} />}
               disabled={!puedeCrear}
               sx={botonSx}
             >
-              Crear
+              Crear agente
             </Button>
             <Button
               onClick={(e) => setMenuGestionar(e.currentTarget)}
@@ -407,18 +406,13 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
         {cargando && <CircularProgress size={22} sx={{ color: '#586AD0' }} />}
       </Box>
 
-      <Menu anchorEl={menuCrear} open={Boolean(menuCrear)} onClose={() => setMenuCrear(null)}>
-        <MenuItem onClick={() => { setMenuCrear(null); navigate('/app/agentes/nuevo'); }} sx={{ fontSize: '0.9375rem' }}>
-          Agente nuevo
-        </MenuItem>
-        <MenuItem onClick={() => { setMenuCrear(null); navigate('/app/home'); }} sx={{ fontSize: '0.9375rem' }}>
-          Desde un agente existente
-        </MenuItem>
-      </Menu>
-
+      {/* "Crear" era un desplegable de dos opciones y la segunda ("Desde un agente
+          existente") llevaba a la galería de plantillas, que se retiró: ahora que el
+          constructor existe, crear desde cero cubre el caso. Con una sola opción, el
+          desplegable no aporta — el botón va directo. */}
       <Menu anchorEl={menuGestionar} open={Boolean(menuGestionar)} onClose={() => setMenuGestionar(null)}>
-        <MenuItem onClick={() => { setMenuGestionar(null); navigate('/app/agentes'); }} sx={{ fontSize: '0.9375rem' }}>
-          Ver todos los agentes
+        <MenuItem onClick={() => { setMenuGestionar(null); navigate('/app/admin/agentes'); }} sx={{ fontSize: '0.9375rem' }}>
+          Configurar agentes
         </MenuItem>
         <MenuItem onClick={() => { setMenuGestionar(null); navigate('/app/contexto'); }} sx={{ fontSize: '0.9375rem' }}>
           Espacios y conexiones

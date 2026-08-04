@@ -16,11 +16,9 @@ import {
   Divider,
 } from '@mui/material';
 import {
-  MessageSquare, LayoutDashboard, FileText,
-  Settings, Search, ChevronLeft, Plus, ChevronDown,
+  MessageSquare, LayoutDashboard, Settings, Search, ChevronLeft, Plus, ChevronDown,
   ChevronRight, Zap, Bot, History,
-  User, Building2, HelpCircle, LogOut, Compass,
-  Timer, ListChecks, Layers, Users,
+  User, Building2, HelpCircle, LogOut, Timer, Layers, Users,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { authService } from '../../../services/auth';
@@ -139,10 +137,8 @@ export default function Drawer({ open, handleDrawerToggle }) {
     trabajo: {
       seccion: null,
       items: [
-        { path: '/app/home',       label: 'Explorar', icon: <Compass size={15} /> },
         { path: '/app/agentes',    label: 'Agentes', icon: <Bot size={15} /> },
         { path: '/app/tablero',    label: 'Tablero', icon: <LayoutDashboard size={15} /> },
-        { path: '/app/documentos', label: 'Notas',   icon: <FileText size={15} /> },
       ],
     },
     espacios: {
@@ -150,7 +146,6 @@ export default function Drawer({ open, handleDrawerToggle }) {
       items: [
         { path: '/app/contexto',         label: 'Espacios',     icon: <Layers size={15} /> },
         { path: '/app/automatizaciones', label: 'Disparadores', icon: <Timer size={15} /> },
-        { path: '/app/rutina',           label: 'Mi rutina',    icon: <ListChecks size={15} /> },
       ],
     },
     admin: {

@@ -22,19 +22,15 @@ import SeguridadPage from './pages/legal/SeguridadPage';
 
 // App
 import ChatPage from './pages/ChatPage';
-import AgentsPage from './pages/AgentsPage';
-import ExplorePage from './pages/ExplorePage';
 import ModelPage from './pages/ModelPage';
 import IntegrationsPage from './pages/IntegrationsPage';
 import TablondePage from './pages/TablondePage';
-import DocumentsPage from './pages/DocumentsPage';
 import ProfilePage from './pages/ProfilePage';
 import MiContextoPage from './pages/MiContextoPage';
 import ContextoPage from './pages/ContextoPage';
 import ContextoHubPage from './pages/ContextoHubPage';
 import EspacioDetallePage from './pages/espacios/EspacioDetallePage';
 import AutomationsPage from './pages/AutomationsPage';
-import RutinaPage from './pages/RutinaPage';
 import SettingsPage from './pages/SettingsPage';
 import HelpPage from './pages/HelpPage';
 import PricingPage from './pages/PricingPage';
@@ -98,25 +94,14 @@ export default function App() {
             <Route index                     element={<TrabajoHome />} />
             <Route path="chat"               element={<ChatPage />} />
             <Route path="modelo"             element={<ModelPage />} />
-            {/* "Agentes" es la galería del Workspace. La pantalla anterior
-                (plantillas de rol) queda accesible hasta que se decida si la
-                absorbe la galería. */}
             <Route path="agentes"            element={<AgentesPage />} />
             {/* El constructor: la misma pantalla crea y edita. */}
             <Route path="agentes/nuevo"      element={<AgenteNuevoPage />} />
             <Route path="agentes/:id/editar" element={<AgenteNuevoPage />} />
-            <Route path="agentes/plantillas" element={<AgentsPage />} />
-            <Route path="home"               element={<ExplorePage />} />
-            <Route path="integraciones"      element={<IntegrationsPage />} />
             <Route path="tablero"            element={<TablondePage />} />
-            <Route path="documentos"         element={<DocumentsPage />} />
-            <Route path="mi-contexto"        element={<MiContextoPage />} />
             <Route path="contexto"           element={<ContextoHubPage />} />
             <Route path="espacios/:spaceSlug" element={<EspacioDetallePage />} />
-            <Route path="contexto-cubiculos" element={<ContextoPage />} />
-            <Route path="contexto-empresa"   element={<Navigate to="/app/mi-contexto" replace />} />
             <Route path="automatizaciones"   element={<AutomationsPage />} />
-            <Route path="rutina"             element={<RutinaPage />} />
             <Route path="perfil"             element={<ProfilePage />} />
             <Route path="configuracion"      element={<SettingsPage />} />
             <Route path="ayuda"              element={<HelpPage />} />
