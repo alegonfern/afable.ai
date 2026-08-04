@@ -19,6 +19,7 @@ import {
   MessageSquare, LayoutDashboard, Settings, Search, ChevronLeft, Plus, ChevronDown,
   ChevronRight, Zap, Bot, History,
   User, Building2, HelpCircle, LogOut, Timer, Layers, Users,
+  Plug, FolderOpen, BookOpen,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { authService } from '../../../services/auth';
@@ -99,8 +100,19 @@ export default function Drawer({ open, handleDrawerToggle }) {
   const keyHintBg    = d ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)';
   const keyHintColor = d ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.3)';
 
-  const isActive = (path) =>
-    path === '/app' ? location.pathname === '/app' : location.pathname.startsWith(path);
+  // Compara tambien el `?tab=`: las pestañas del hub de Espacios son items
+  // distintos del menu y apuntan todas a /app/contexto. Sin esto se encendian las
+  // cuatro juntas.
+  const isActive = (path) => {
+    if (path === '/app') return location.pathname === '/app';
+    const [ruta, query] = path.split('?');
+    if (!location.pathname.startsWith(ruta)) return false;
+    if (!query) return true;
+    const pedida = new URLSearchParams(query).get('tab');
+    const actual = new URLSearchParams(location.search).get('tab');
+    // Sin ?tab= en la URL, el hub abre en su primera pestaña.
+    return actual ? actual === pedida : pedida === 'espacios';
+  };
 
   const itemSx = (active) => ({
     display: 'flex', alignItems: 'center', gap: 1.25,
@@ -122,9 +134,10 @@ export default function Drawer({ open, handleDrawerToggle }) {
   // ── Los tres modos ──────────────────────────────────────────────────────────
   // Conmutador arriba a la izquierda: solo el modo activo muestra su etiqueta, los
   // otros dos son icono pelado. La barra cambia completa segun el modo.
-  //   Trabajo  — el dia a dia: chat, conversaciones, agentes.
-  //   Espacios — conocimiento y permisos, mas lo que los administra.
-  //   Admin    — la empresa: personas, ajustes, plan.
+  //   Trabajo  — el dia a dia: chat, agentes, disparadores, tablero.
+  //   Espacios — de donde sale lo que el agente sabe: espacios, conexiones,
+  //              documentos y el contexto de la empresa.
+  //   Admin    — la empresa: personas, agentes, ajustes, plan.
   // Los items de cuenta (perfil, ayuda, cerrar sesion) viven en la ficha del
   // usuario, abajo, igual en los tres modos.
   const MODOS = [
@@ -137,15 +150,23 @@ export default function Drawer({ open, handleDrawerToggle }) {
     trabajo: {
       seccion: null,
       items: [
-        { path: '/app/agentes',    label: 'Agentes', icon: <Bot size={15} /> },
-        { path: '/app/tablero',    label: 'Tablero', icon: <LayoutDashboard size={15} /> },
+        { path: '/app/agentes',          label: 'Agentes',      icon: <Bot size={15} /> },
+        // Los Disparadores estaban en el modo Espacios, donde no son un espacio.
+        // Automatizar lo que uno quiere OBTENER de Afable es trabajo del dia a dia.
+        { path: '/app/automatizaciones', label: 'Disparadores', icon: <Timer size={15} /> },
+        { path: '/app/tablero',          label: 'Tablero',      icon: <LayoutDashboard size={15} /> },
       ],
     },
     espacios: {
-      seccion: 'Administración',
+      seccion: 'Conocimiento',
+      // Las cuatro pestañas del hub suben al menu. Estaban un nivel mas abajo,
+      // dentro de una pantalla titulada "Espacios": quien buscaba donde conectar
+      // su Odoo tenia que adivinar que estaba ahi.
       items: [
-        { path: '/app/contexto',         label: 'Espacios',     icon: <Layers size={15} /> },
-        { path: '/app/automatizaciones', label: 'Disparadores', icon: <Timer size={15} /> },
+        { path: '/app/contexto?tab=espacios',     label: 'Espacios',    icon: <Layers size={15} /> },
+        { path: '/app/contexto?tab=integraciones', label: 'Conexiones', icon: <Plug size={15} /> },
+        { path: '/app/contexto?tab=documentos',   label: 'Documentos',  icon: <FolderOpen size={15} /> },
+        { path: '/app/contexto?tab=mi-contexto',  label: 'Contexto de la empresa', icon: <BookOpen size={15} /> },
       ],
     },
     admin: {
@@ -166,7 +187,9 @@ export default function Drawer({ open, handleDrawerToggle }) {
     const dueño = enChat
       ? ['trabajo']
       : Object.entries(ITEMS_POR_MODO).find(([, { items }]) =>
-          items.some((i) => location.pathname.startsWith(i.path)),
+          // `i.path` puede traer ?tab=: para saber de que modo es la pantalla basta
+          // la ruta, sin la query.
+          items.some((i) => location.pathname.startsWith(i.path.split('?')[0])),
         );
     if (dueño && dueño[0] !== modo) setModo(dueño[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
