@@ -20,7 +20,11 @@ class AgentSerializer(serializers.ModelSerializer):
         fields = ['id', 'organization', 'name', 'handle', 'description', 'instructions',
                   'area', 'systems', 'model', 'tools_summary',
                   'recommended_frequency', 'is_active', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        # `handle` lo genera `Agent.save()` desde el nombre y no se recalcula al
+        # renombrar: es la identidad con la que se lo menciona en las conversaciones.
+        # Estaba escribible y ademas salia como REQUERIDO, asi que un POST sin handle
+        # fallaba con 400 — parte de por que este endpoint no lo llamaba nadie.
+        read_only_fields = ['id', 'handle', 'created_at']
 
 
 class MessageSerializer(serializers.ModelSerializer):

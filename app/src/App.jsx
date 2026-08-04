@@ -45,6 +45,7 @@ import PaymentResultPage from './pages/PaymentResultPage';
 // Workspace (Membership), no en los campos org_admin/areas del usuario.
 import TrabajoHome from './pages/trabajo/TrabajoHome';
 import AgentesPage from './pages/trabajo/AgentesPage';
+import AgenteNuevoPage from './pages/trabajo/AgenteNuevoPage';
 import PersonasPage from './pages/admin/PersonasPage';
 import WorkspacePage from './pages/admin/WorkspacePage';
 import AgentesAdminPage from './pages/admin/AgentesAdminPage';
@@ -101,6 +102,9 @@ export default function App() {
                 (plantillas de rol) queda accesible hasta que se decida si la
                 absorbe la galería. */}
             <Route path="agentes"            element={<AgentesPage />} />
+            {/* El constructor: la misma pantalla crea y edita. */}
+            <Route path="agentes/nuevo"      element={<AgenteNuevoPage />} />
+            <Route path="agentes/:id/editar" element={<AgenteNuevoPage />} />
             <Route path="agentes/plantillas" element={<AgentsPage />} />
             <Route path="home"               element={<ExplorePage />} />
             <Route path="integraciones"      element={<IntegrationsPage />} />

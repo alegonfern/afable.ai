@@ -18,7 +18,7 @@ const COMMANDS = [
   { group: 'Navegación', icon: Settings,       label: 'Configuración',                     action: '/app/configuracion' },
   { group: 'Navegación', icon: HelpCircle,     label: 'Ayuda',                             action: '/app/ayuda' },
   { group: 'Acciones',   icon: Plus,           label: 'Nueva conversación',                action: 'new-chat' },
-  { group: 'Acciones',   icon: Bot,            label: 'Crear agente',                      action: 'new-agent' },
+  { group: 'Acciones',   icon: Bot,            label: 'Crear agente',                      action: '/app/agentes/nuevo' },
 ];
 
 export default function CommandPalette({ open, onClose }) {

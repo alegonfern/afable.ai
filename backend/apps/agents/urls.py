@@ -13,12 +13,19 @@ from .views import (
 )
 from .gallery import AgentFavoriteView, AgentGalleryView
 from .admin_agents import AgenteAdminDetailView, AgentesAdminListView
+from .builder import (
+    AgenteConstructorDetailView, AgenteConstructorListCreateView, OpcionesConstructorView,
+)
 
 urlpatterns = [
     path('', AgentListCreateView.as_view(), name='agent-list'),
     path('models/', AvailableModelsView.as_view(), name='available-models'),
     # La galeria de Agentes de la vista Trabajo (Favoritos / Todos / Editables por mi).
     path('gallery/', AgentGalleryView.as_view(), name='agent-gallery'),
+    # Constructor: crear y editar un agente desde la app, sin codigo.
+    path('constructor/', AgenteConstructorListCreateView.as_view(), name='agent-builder'),
+    path('constructor/opciones/', OpcionesConstructorView.as_view(), name='agent-builder-options'),
+    path('constructor/<int:pk>/', AgenteConstructorDetailView.as_view(), name='agent-builder-detail'),
     # Admin > Agentes: que datos, reglas e informacion le entrega la empresa.
     path('admin/', AgentesAdminListView.as_view(), name='agent-admin-list'),
     path('admin/<int:pk>/', AgenteAdminDetailView.as_view(), name='agent-admin-detail'),

@@ -61,7 +61,7 @@ export default function DashboardHome() {
         <Button
           variant="contained"
           endIcon={<ArrowRight size={15} />}
-          onClick={() => navigate('/app/agentes')}
+          onClick={() => navigate('/app/agentes/nuevo')}
           sx={{
             background: '#586AD0',
             '&:hover': { background: '#2F42A6' },

@@ -99,12 +99,20 @@ class AgentGalleryView(APIView):
             espacio = require_space(membership, espacio_slug)
             agentes = agentes.filter(spaces=espacio)
 
+        # Un administrador edita cualquier agente de su empresa, no solo los que creó
+        # él: es lo que ya permitía el constructor (`apps/agents/builder.py`), y sin
+        # esto los agentes sembrados no tenían por dónde abrirse a editar.
+        todos_editables = editable and membership.role == ROLE_ADMIN
+
         tab = request.query_params.get('tab', 'todos')
         if tab == 'favoritos':
             agentes = agentes.filter(es_favorito=True)
         elif tab == 'editables':
             # Sin permiso para editar, la pestaña queda vacía en vez de mentir.
-            agentes = agentes.filter(created_by=request.user) if editable else agentes.none()
+            if not editable:
+                agentes = agentes.none()
+            elif not todos_editables:
+                agentes = agentes.filter(created_by=request.user)
 
         q = (request.query_params.get('q') or '').strip()
         if q:
@@ -125,7 +133,10 @@ class AgentGalleryView(APIView):
             'page': page,
             'has_next': desde + len(pagina) < total,
             'can_create': editable,
-            'results': [serializar(a, editable and (a.created_by_id == request.user.id)) for a in pagina],
+            'results': [
+                serializar(a, todos_editables or (editable and a.created_by_id == request.user.id))
+                for a in pagina
+            ],
         })
 
 

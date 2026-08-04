@@ -94,6 +94,14 @@ export const api = {
     apiClient.delete(`/agents/${id}/favorite/`, { params: { workspace } }),
   createAgent: (data) => apiClient.post('/agents/', data),
   deleteAgent: (id) => apiClient.delete(`/agents/${id}/`),
+  // Constructor: crear y editar un agente. `opciones` trae en un solo viaje los
+  // modelos, sistemas, Habilidades y Espacios con los que se arma el formulario.
+  getBuilderOptions: (workspace) =>
+    apiClient.get('/agents/constructor/opciones/', { params: { workspace } }),
+  buildAgent: (data) => apiClient.post('/agents/constructor/', data),
+  getBuilderAgent: (id, workspace) =>
+    apiClient.get(`/agents/constructor/${id}/`, { params: { workspace } }),
+  updateBuilderAgent: (id, data) => apiClient.patch(`/agents/constructor/${id}/`, data),
   getModels: () => apiClient.get('/agents/models/'),
   uploadChatAttachment: (formData) => apiClient.post('/agents/chat-attachment/', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },

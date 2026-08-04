@@ -974,53 +974,70 @@ class DirectChatStreamView(APIView):
         return response
 
 
+def modelos_disponibles():
+    """Los modelos de IA que se le pueden ofrecer a elegir, y cuál es el default.
+
+    Función aparte de la vista porque el constructor de agentes necesita la misma
+    lista dentro de su respuesta de opciones (`apps/agents/builder.py`), y tener dos
+    copias de esta lógica termina con un selector que ofrece modelos distintos según
+    la pantalla.
+    """
+    from django.conf import settings
+    import requests
+
+    provider = getattr(settings, 'AI_PROVIDER', 'ollama')
+    default_model = (getattr(settings, 'OLLAMA_CLOUD_MODEL', '')
+                     if provider == 'ollama_cloud'
+                     else getattr(settings, 'OLLAMA_MODEL', ''))
+    models, seen = [], set()
+
+    # El modelo de embeddings vive en el mismo Ollama y por lo tanto sale en
+    # /api/tags, pero NO conversa: ofrecerlo en el selector es ofrecer un modelo que
+    # falla al primer mensaje. Aparecio solo al instalar la busqueda semantica.
+    embeddings = (getattr(settings, 'EMBEDDINGS_MODEL', '') or '').strip()
+    excluidos = {embeddings, f'{embeddings}:latest'} if embeddings else set()
+
+    def add(name, kind):
+        if name and name not in seen and name not in excluidos:
+            seen.add(name)
+            models.append({'id': name, 'label': name, 'kind': kind,
+                           'default': name == default_model})
+
+    # Locales (Ollama corriendo)
+    try:
+        base = getattr(settings, 'OLLAMA_BASE_URL', 'http://localhost:11434')
+        r = requests.get(f'{base}/api/tags', timeout=4)
+        for m in r.json().get('models', []):
+            nm = m.get('name', '')
+            add(nm, 'cloud' if nm.endswith('-cloud') else 'local')
+    except Exception:
+        pass
+
+    # Cloud configurados (aunque no estén en /api/tags)
+    for nm in getattr(settings, 'OLLAMA_CLOUD_MODELS', []):
+        add(nm, 'cloud')
+    add(getattr(settings, 'OLLAMA_CLOUD_MODEL', ''), 'cloud')
+
+    # Asegura que el default esté presente
+    add(default_model, 'cloud' if provider == 'ollama_cloud' else 'local')
+
+    # Anthropic y DeepSeek — solo aparecen en el selector si hay API key configurada.
+    if getattr(settings, 'ANTHROPIC_API_KEY', ''):
+        add('claude-opus-4-8', 'anthropic')
+        add('claude-sonnet-5', 'anthropic')
+    if getattr(settings, 'DEEPSEEK_API_KEY', ''):
+        add(getattr(settings, 'DEEPSEEK_MODEL', 'deepseek-v4-flash'), 'deepseek')
+
+    return {'models': models, 'default': default_model}
+
+
 class AvailableModelsView(APIView):
     """Modelos de IA disponibles para el selector de la app: los locales de Ollama
     (/api/tags) + los cloud configurados, marcando el default activo."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from django.conf import settings
-        import requests
-
-        provider = getattr(settings, 'AI_PROVIDER', 'ollama')
-        default_model = (getattr(settings, 'OLLAMA_CLOUD_MODEL', '')
-                         if provider == 'ollama_cloud'
-                         else getattr(settings, 'OLLAMA_MODEL', ''))
-        models, seen = [], set()
-
-        def add(name, kind):
-            if name and name not in seen:
-                seen.add(name)
-                models.append({'id': name, 'label': name, 'kind': kind,
-                               'default': name == default_model})
-
-        # Locales (Ollama corriendo)
-        try:
-            base = getattr(settings, 'OLLAMA_BASE_URL', 'http://localhost:11434')
-            r = requests.get(f'{base}/api/tags', timeout=4)
-            for m in r.json().get('models', []):
-                nm = m.get('name', '')
-                add(nm, 'cloud' if nm.endswith('-cloud') else 'local')
-        except Exception:
-            pass
-
-        # Cloud configurados (aunque no estén en /api/tags)
-        for nm in getattr(settings, 'OLLAMA_CLOUD_MODELS', []):
-            add(nm, 'cloud')
-        add(getattr(settings, 'OLLAMA_CLOUD_MODEL', ''), 'cloud')
-
-        # Asegura que el default esté presente
-        add(default_model, 'cloud' if provider == 'ollama_cloud' else 'local')
-
-        # Anthropic y DeepSeek — solo aparecen en el selector si hay API key configurada.
-        if getattr(settings, 'ANTHROPIC_API_KEY', ''):
-            add('claude-opus-4-8', 'anthropic')
-            add('claude-sonnet-5', 'anthropic')
-        if getattr(settings, 'DEEPSEEK_API_KEY', ''):
-            add(getattr(settings, 'DEEPSEEK_MODEL', 'deepseek-v4-flash'), 'deepseek')
-
-        return Response({'models': models, 'default': default_model})
+        return Response(modelos_disponibles())
 
 
 class AgentListCreateView(APIView):
@@ -1032,10 +1049,38 @@ class AgentListCreateView(APIView):
         return Response(AgentSerializer(agents, many=True).data)
 
     def post(self, request):
+        """Crear un agente por el endpoint viejo.
+
+        Resuelve el permiso igual que el constructor (`apps/agents/builder.py`): ser
+        miembro del Workspace de esa empresa Y que la politica
+        `agent_creation_policy` lo habilite. Antes bastaba con ser el dueño de la
+        Organization, asi que la politica del Workspace no se consultaba nunca y
+        quedaban dos puertas con reglas distintas para lo mismo.
+
+        La organizacion sigue viniendo del cuerpo por compatibilidad, pero ahora hay
+        que ser miembro de su Workspace: mandar la de otra empresa da 404.
+        """
+        from apps.workspaces.models import Workspace
+
+        from .builder import NoPuedeCrear, _membership_que_edita
+
         serializer = AgentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        org = get_object_or_404(Organization, pk=serializer.validated_data['organization'].pk, owner=request.user)
-        serializer.save(organization=org)
+        org = serializer.validated_data['organization']
+
+        workspace = Workspace.objects.filter(organization=org).first()
+        if workspace is None:
+            return Response(
+                {'detail': 'Esa empresa todavia no tiene un Workspace.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            _membership_que_edita(request.user, workspace.slug)
+        except NoPuedeCrear as e:
+            return Response({'detail': str(e)}, status=status.HTTP_403_FORBIDDEN)
+
+        agent = serializer.save(organization=org, created_by=request.user)
+        AgentConfig.objects.get_or_create(agent=agent)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 

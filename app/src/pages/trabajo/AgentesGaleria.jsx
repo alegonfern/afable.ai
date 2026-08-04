@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Box, Button, CircularProgress, Menu, MenuItem, TextField, Typography, useTheme,
 } from '@mui/material';
-import { Bot, ChevronDown, Plus, Search, Settings2, Star } from 'lucide-react';
+import { Bot, ChevronDown, Pencil, Plus, Search, Settings2, Star } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { api } from '../../services/api';
 import { useWorkspace } from '../../context/WorkspaceContext';
@@ -172,6 +172,20 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
             {agente.author}
           </Typography>
         </Box>
+        {/* El backend ya marcaba `editable` y ese permiso no llevaba a ninguna
+            parte: sin este lápiz, un agente propio no se podía volver a abrir. */}
+        {agente.editable && (
+          <Box
+            onClick={(e) => { e.stopPropagation(); navigate(`/app/agentes/${agente.id}/editar`); }}
+            title="Editar este agente"
+            sx={{
+              display: 'flex', p: 0.5, borderRadius: '6px', flexShrink: 0, cursor: 'pointer',
+              color: textMuted, '&:hover': { bgcolor: bgSuave, color: theme.palette.text.primary },
+            }}
+          >
+            <Pencil size={15} />
+          </Box>
+        )}
         <Box
           onClick={(e) => alternarFavorito(agente, e)}
           title={agente.is_favorite ? 'Quitar de favoritos' : 'Marcar como favorito'}
@@ -394,7 +408,7 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
       </Box>
 
       <Menu anchorEl={menuCrear} open={Boolean(menuCrear)} onClose={() => setMenuCrear(null)}>
-        <MenuItem onClick={() => { setMenuCrear(null); navigate('/app/agentes'); }} sx={{ fontSize: '0.9375rem' }}>
+        <MenuItem onClick={() => { setMenuCrear(null); navigate('/app/agentes/nuevo'); }} sx={{ fontSize: '0.9375rem' }}>
           Agente nuevo
         </MenuItem>
         <MenuItem onClick={() => { setMenuCrear(null); navigate('/app/home'); }} sx={{ fontSize: '0.9375rem' }}>
