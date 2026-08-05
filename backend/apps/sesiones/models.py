@@ -57,6 +57,23 @@ class Sesion(models.Model):
         settings.AUTH_USER_MODEL, through='SesionMiembro', related_name='sesiones',
     )
 
+    # Lo que TODOS los agentes de esta Sesion ven, ademas de sus propias
+    # instrucciones. Es lo que hace que la Sesion no sea solo una carpeta: "en esta
+    # Sesion hablamos con el cliente Rever, nunca prometas fechas".
+    instrucciones_para_agentes = models.TextField(
+        blank=True,
+        help_text='Lo ven todos los agentes que trabajen en esta Sesion.',
+    )
+    # Con quien contesta un hilo nuevo si nadie eligio otro agente.
+    agente_por_defecto = models.ForeignKey(
+        'agents.Agent', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='sesiones_por_defecto',
+    )
+    # Las Habilidades que vienen preseleccionadas en las conversaciones de la Sesion.
+    habilidades_por_defecto = models.ManyToManyField(
+        'agents.Skill', blank=True, related_name='sesiones',
+    )
+
     # Archivar no es borrar: la Sesion sale de la barra lateral pero su contenido
     # sigue existiendo. Es la distincion que hace Dust y vale la pena conservarla —
     # borrar se lleva el trabajo del equipo, archivar solo lo saca de la vista.

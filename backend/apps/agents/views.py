@@ -276,10 +276,15 @@ def _get_org_context(org, allowed_doc_ids=None, inyectados=None, consulta='', co
     return ('\n\n'.join(parts) + '\n\n') if parts else ''
 
 
-def _build_onboarding_context(user, agent=None, mention_system_id=None, consulta=''):
+def _build_onboarding_context(user, agent=None, mention_system_id=None, consulta='', sesion=None):
     """`consulta` es el mensaje que el usuario acaba de mandar. Se usa solo para
     elegir qué fragmentos de documento entran al prompt cuando el corpus de la
-    empresa no cabe entero (ver `_get_org_context`)."""
+    empresa no cabe entero (ver `_get_org_context`).
+
+    `sesion`, si viene, es la Sesión en la que se está trabajando. Le suma al agente
+    dos cosas: las instrucciones que la Sesión le da a TODOS sus agentes, y sus
+    archivos — que se AGREGAN a lo que el agente ya alcanzaba, nunca lo recortan. La
+    Sesión presta contexto; el Espacio es el que restringe."""
     from apps.organizations.models import IntegrationScan
 
     orgs = Organization.objects.filter(owner=user).exclude(name="Personal")
@@ -311,6 +316,17 @@ Sé conversacional, breve y entusiasta."""
     # "sin restricción": un agente que no está en ningún Espacio sigue viendo todo
     # lo de su empresa (ver `alcance_de_agente`).
     espacio_conns, espacio_docs = alcance_de_agente(agent)
+
+    # Los archivos de la Sesion se SUMAN al alcance del agente. Con `espacio_docs` en
+    # None el agente ya alcanza todo (incluidos estos), asi que no hay nada que sumar;
+    # con una lista, se amplia. Al reves seria un error: una Sesion no puede quitarle
+    # a un agente lo que su Espacio le dio.
+    if sesion is not None and espacio_docs is not None:
+        from apps.organizations.models import CompanyDocument
+
+        de_la_sesion = CompanyDocument.objects.filter(sesion=sesion).values_list('id', flat=True)
+        espacio_docs = list(set(espacio_docs) | set(de_la_sesion))
+
     docs_en_prompt = []
 
     # Primero intenta SystemConnection (arquitectura nueva)
@@ -367,6 +383,24 @@ Sé conversacional, breve y entusiasta."""
         de_habilidades = habilidades_como_contexto(agent)
         if de_habilidades:
             agent_block += f"\n{de_habilidades}\n"
+
+    # Lo que la Sesion le dice a todos sus agentes. Va al final, despues de lo propio
+    # del agente: es el contexto del trabajo puntual y no tiene que tapar su oficio.
+    if sesion is not None:
+        if (sesion.instrucciones_para_agentes or '').strip():
+            agent_block += (
+                f"\nESTÁS TRABAJANDO EN LA SESIÓN «{sesion.name}». "
+                f"Instrucciones de esta Sesión, válidas para todos sus agentes:\n"
+                f"{sesion.instrucciones_para_agentes.strip()}\n"
+            )
+        # Las Habilidades por defecto de la Sesion se aplican a sus conversaciones,
+        # ademas de las que el agente ya trae por su cuenta.
+        de_la_sesion = sesion.habilidades_por_defecto.filter(is_active=True).order_by('name')
+        if de_la_sesion:
+            bloques = '\n\n'.join(f'— {h.name}:\n{h.instructions}' for h in de_la_sesion)
+            agent_block += (
+                f"\nHabilidades que esta Sesión aplica siempre:\n{bloques}\n"
+            )
 
     if con_herramientas:
         conn_ctx = get_connections_context(org, espacio_conns) or ''
@@ -605,16 +639,18 @@ def citar_documentos_del_prompt(texto, docs_en_prompt):
     return f"{texto}\n\n_[Fuente: {', '.join(limpios)}]_"
 
 
-def _agente_inicial(request, message, espacio, default_agent):
+def _agente_inicial(request, message, espacio, default_agent, sesion=None):
     """Quién contesta el primer mensaje de un hilo nuevo. En orden:
 
     1. El agente mencionado con `@`: es lo más explícito que hay.
     2. El elegido a mano en el selector.
-    3. Un agente DEL ESPACIO activo, si hay Espacio. Sin esto, decir "estoy
+    3. El agente por defecto de la SESIÓN, si el hilo se abre en una. Es lo que
+       configuró quien armó la Sesión para el trabajo que se hace ahí.
+    4. Un agente DEL ESPACIO activo, si hay Espacio. Sin esto, decir "estoy
        trabajando en Finanzas" y que conteste un agente que no pertenece a
        Finanzas — y que por lo tanto alcanza todos los datos de la empresa —
        vacía de sentido al Espacio en el camino más común.
-    4. El agente por omisión de siempre.
+    5. El agente por omisión de siempre.
     """
     mencionado = _agente_mencionado(request.user, message)
     if mencionado is not None:
@@ -623,6 +659,11 @@ def _agente_inicial(request, message, espacio, default_agent):
     elegido = _resolve_agent(request, None)
     if elegido is not None:
         return elegido
+
+    if sesion is not None and sesion.agente_por_defecto_id:
+        de_la_sesion = sesion.agente_por_defecto
+        if de_la_sesion.is_active:
+            return de_la_sesion
 
     if espacio is not None:
         del_espacio = espacio.agents.filter(is_active=True).order_by('name').first()
@@ -770,13 +811,16 @@ class DirectChatView(APIView):
         else:
             espacio = _espacio_del_pedido(request)
             sesion = _sesion_del_pedido(request)
-            agent = _agente_inicial(request, message, espacio, default_agent)
+            agent = _agente_inicial(request, message, espacio, default_agent, sesion)
             conversation = Conversation.objects.create(
                 agent=agent, user=request.user, space=espacio, sesion=sesion,
                 title=_conversation_title(agent, message))
 
         mention_system_id = request.data.get('system_id') or None
-        context = _build_onboarding_context(request.user, agent, mention_system_id, consulta=message)
+        context = _build_onboarding_context(
+            request.user, agent, mention_system_id, consulta=message,
+            sesion=conversation.sesion,
+        )
         system_prompt = context['system_prompt']
 
         Message.objects.create(conversation=conversation, role='user', content=message)
@@ -845,13 +889,16 @@ class DirectChatStreamView(APIView):
         else:
             espacio = _espacio_del_pedido(request)
             sesion = _sesion_del_pedido(request)
-            agent = _agente_inicial(request, message, espacio, default_agent)
+            agent = _agente_inicial(request, message, espacio, default_agent, sesion)
             conversation = Conversation.objects.create(
                 agent=agent, user=request.user, space=espacio, sesion=sesion,
                 title=_conversation_title(agent, message))
 
         mention_system_id = request.data.get('system_id') or None
-        context = _build_onboarding_context(request.user, agent, mention_system_id, consulta=message)
+        context = _build_onboarding_context(
+            request.user, agent, mention_system_id, consulta=message,
+            sesion=conversation.sesion,
+        )
         system_prompt = context['system_prompt']
 
         mensaje_usuario = Message.objects.create(

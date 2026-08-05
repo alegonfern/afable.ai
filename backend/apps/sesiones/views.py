@@ -18,7 +18,7 @@ from .models import (
 )
 from .permissions import require_sesion, sesiones_visibles
 
-LARGOS = {'name': 120, 'description': 4000, 'icon': 8}
+LARGOS = {'name': 120, 'description': 4000, 'icon': 8, 'instrucciones_para_agentes': 8000}
 
 
 def serializar(sesion, rol=None, detalle=False):
@@ -36,6 +36,12 @@ def serializar(sesion, rol=None, detalle=False):
     }
     if detalle:
         datos.update({
+            'instrucciones_para_agentes': sesion.instrucciones_para_agentes,
+            'agente_por_defecto': sesion.agente_por_defecto_id,
+            'agente_por_defecto_nombre': (
+                sesion.agente_por_defecto.name if sesion.agente_por_defecto else None
+            ),
+            'habilidad_ids': sorted(sesion.habilidades_por_defecto.values_list('id', flat=True)),
             'pendientes': sesion.tasks.exclude(state=TAREA_LISTA).count(),
             'miembros': [
                 {
@@ -161,6 +167,25 @@ class SesionDetailView(APIView):
                 )
             sesion.visibility = visibilidad
 
+        # El agente por defecto y las Habilidades: solo de la empresa de esta Sesion.
+        if 'agente_por_defecto' in request.data:
+            agente_id = request.data.get('agente_por_defecto')
+            if agente_id in (None, '', 0):
+                sesion.agente_por_defecto = None
+            else:
+                from apps.agents.models import Agent
+
+                agente = Agent.objects.filter(
+                    organization_id=membership.workspace.organization_id,
+                    pk=agente_id, is_active=True,
+                ).first()
+                if agente is None:
+                    return Response(
+                        {'detail': 'Ese agente no está disponible en esta empresa.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                sesion.agente_por_defecto = agente
+
         # Archivar no borra: la Sesion sale de la barra lateral y su contenido queda.
         if 'archivada' in request.data:
             archivar = bool(request.data.get('archivada'))
@@ -170,6 +195,14 @@ class SesionDetailView(APIView):
         # El slug NO se recalcula al renombrar: es la URL de la Sesión, y cambiarla
         # rompe los enlaces que el equipo ya se pasó.
         sesion.save()
+
+        if 'habilidad_ids' in request.data:
+            from apps.agents.models import Skill
+
+            sesion.habilidades_por_defecto.set(Skill.objects.filter(
+                organization_id=membership.workspace.organization_id,
+                pk__in=_ids(request.data.get('habilidad_ids')),
+            ))
         return Response(
             serializar(sesion, sesion.rol_de(request.user, membership), detalle=True),
         )
@@ -257,11 +290,22 @@ class SesionDisponiblesView(APIView):
 
         from apps.workspaces.models import Membership
 
+        from apps.agents.models import Agent, Skill
+
+        org_id = membership.workspace.organization_id
         ya_estan = set(sesion.miembros.values_list('user_id', flat=True))
         personas = Membership.objects.filter(
             workspace=membership.workspace,
         ).exclude(user_id__in=ya_estan).select_related('user')
         return Response({
+            'agentes': [
+                {'id': a.id, 'name': a.name}
+                for a in Agent.objects.filter(organization_id=org_id, is_active=True).order_by('name')
+            ],
+            'habilidades': [
+                {'id': h.id, 'name': h.name}
+                for h in Skill.objects.filter(organization_id=org_id, is_active=True).order_by('name')
+            ],
             'personas': [
                 {
                     'id': m.user_id,

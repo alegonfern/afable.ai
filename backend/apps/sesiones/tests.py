@@ -541,3 +541,136 @@ class ConversacionEnLaSesionTests(BaseSesiones):
         self.sesion.delete()
         conv.refresh_from_db()
         self.assertIsNone(conv.sesion_id)
+
+
+class LaSesionPrestaContextoTests(BaseSesiones):
+    """Lo que hace que la Sesión sirva para algo y no sea una carpeta bonita.
+
+    Tres cosas: sus instrucciones llegan a todos sus agentes, sus archivos AMPLÍAN lo
+    que el agente alcanza, y su agente por defecto toma los hilos nuevos.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from apps.workspaces.models import Space
+
+        self.sesion.instrucciones_para_agentes = 'Acá hablamos del cliente Rever.'
+        self.sesion.save(update_fields=['instrucciones_para_agentes'])
+
+        # Un agente ENCERRADO en un Espacio: es el caso donde ampliar importa.
+        self.espacio = Space.objects.create(workspace=self.ws, name='Ventas')
+        self.espacio.agents.add(self.agente)
+        self.doc_del_espacio = CompanyDocument.objects.create(
+            organization=self.org, title='Catálogo', file='c.pdf', extracted_text='precios',
+        )
+        self.espacio.documents.add(self.doc_del_espacio)
+
+        self.archivo_de_la_sesion = CompanyDocument.objects.create(
+            organization=self.org, sesion=self.sesion, title='Contrato Rever',
+            file='r.pdf', extracted_text='El plazo es de 45 dias.',
+        )
+
+    def contexto(self, sesion=None):
+        from apps.agents.views import _build_onboarding_context
+
+        return _build_onboarding_context(
+            self.admin, self.agente, consulta='¿cuál es el plazo?', sesion=sesion,
+        )
+
+    def test_las_instrucciones_de_la_sesion_llegan_al_agente(self):
+        prompt = self.contexto(self.sesion)['system_prompt']
+        self.assertIn('cliente Rever', prompt)
+        self.assertIn(self.sesion.name, prompt)
+
+    def test_sin_sesion_no_llegan(self):
+        self.assertNotIn('cliente Rever', self.contexto(None)['system_prompt'])
+
+    def test_los_archivos_de_la_sesion_AMPLIAN_el_alcance_del_agente(self):
+        """El agente está encerrado en su Espacio; la Sesión le presta lo suyo.
+
+        Se comprueba sobre el PROMPT y no sobre `allowed_doc_ids`, que solo viaja en el
+        modo con sistemas conectados: lo que importa es qué llega a ver el agente.
+        """
+        sin = self.contexto(None)['system_prompt']
+        self.assertIn('Catálogo', sin)
+        self.assertNotIn('Contrato Rever', sin)
+
+        con = self.contexto(self.sesion)['system_prompt']
+        self.assertIn('Contrato Rever', con)
+
+    def test_la_sesion_nunca_RECORTA_lo_que_el_espacio_dio(self):
+        """Al revés sería un error: la Sesión presta, el Espacio restringe."""
+        con = self.contexto(self.sesion)['system_prompt']
+        self.assertIn('Catálogo', con)
+
+    def test_un_agente_sin_espacio_sigue_alcanzando_todo(self):
+        """`None` es "alcanza todo": sumarle una lista lo habría restringido."""
+        from apps.agents.views import _build_onboarding_context
+
+        suelto = Agent.objects.create(organization=self.org, name='Suelto')
+        ajeno_a_todo = CompanyDocument.objects.create(
+            organization=self.org, title='Reglamento', file='x.pdf', extracted_text='reglas',
+        )
+        prompt = _build_onboarding_context(self.admin, suelto, sesion=self.sesion)['system_prompt']
+        # Ve el de la Sesión, el del Espacio ajeno y uno que no está en ninguna parte.
+        self.assertIn('Contrato Rever', prompt)
+        self.assertIn('Reglamento', prompt)
+        self.assertIn('Catálogo', prompt)
+
+    def test_las_habilidades_de_la_sesion_se_suman(self):
+        from apps.agents.models import Skill
+
+        habilidad = Skill.objects.create(
+            organization=self.org, name='Tono con Rever', instructions='Trate de usted.',
+        )
+        self.sesion.habilidades_por_defecto.add(habilidad)
+        prompt = self.contexto(self.sesion)['system_prompt']
+        self.assertIn('Trate de usted', prompt)
+
+    def test_el_agente_por_defecto_de_la_sesion_toma_el_hilo(self):
+        from apps.agents.views import _agente_inicial
+
+        propio = Agent.objects.create(organization=self.org, name='De la Sesión')
+        self.sesion.agente_por_defecto = propio
+        self.sesion.save(update_fields=['agente_por_defecto'])
+
+        pedido = mock.Mock(user=self.admin, data={})
+        elegido = _agente_inicial(pedido, 'hola', None, self.agente, self.sesion)
+        self.assertEqual(elegido, propio)
+
+    def test_un_agente_apagado_no_toma_el_hilo_aunque_sea_el_por_defecto(self):
+        from apps.agents.views import _agente_inicial
+
+        apagado = Agent.objects.create(organization=self.org, name='Apagado', is_active=False)
+        self.sesion.agente_por_defecto = apagado
+        self.sesion.save(update_fields=['agente_por_defecto'])
+
+        pedido = mock.Mock(user=self.admin, data={})
+        elegido = _agente_inicial(pedido, 'hola', None, self.agente, self.sesion)
+        self.assertEqual(elegido, self.agente)
+
+    def test_no_se_pone_como_defecto_un_agente_de_otra_empresa(self):
+        otra_org = Organization.objects.create(owner=self.ajeno, name='Muebles Ltda')
+        ajeno = Agent.objects.create(organization=otra_org, name='Ajeno')
+        self.como(self.admin)
+        r = self.client.patch(
+            self.url(), {**self.q(), 'agente_por_defecto': ajeno.id}, format='json',
+        )
+        self.assertEqual(r.status_code, 400)
+
+    def test_las_instrucciones_se_guardan_desde_la_api(self):
+        self.como(self.admin)
+        r = self.client.patch(
+            self.url(),
+            {**self.q(), 'instrucciones_para_agentes': 'Nunca prometas fechas.'},
+            format='json',
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data['instrucciones_para_agentes'], 'Nunca prometas fechas.')
+
+    def test_un_miembro_simple_no_toca_las_instrucciones(self):
+        self.como(self.colega)
+        r = self.client.patch(
+            self.url(), {**self.q(), 'instrucciones_para_agentes': 'Mías'}, format='json',
+        )
+        self.assertEqual(r.status_code, 403)

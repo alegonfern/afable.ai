@@ -37,7 +37,10 @@ export default function SesionAjustes({ sesion, slug, onCambio, onBorrada }) {
 
   const [form, setForm] = useState({
     name: sesion.name, description: sesion.description || '', icon: sesion.icon || '',
+    instrucciones_para_agentes: sesion.instrucciones_para_agentes || '',
   });
+  const [agentes, setAgentes] = useState([]);
+  const [habilidades, setHabilidades] = useState([]);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState('');
   const [disponibles, setDisponibles] = useState([]);
@@ -57,6 +60,8 @@ export default function SesionAjustes({ sesion, slug, onCambio, onBorrada }) {
     try {
       const { data } = await api.getSesionDisponibles(sesion.slug, slug);
       setDisponibles(data.personas || []);
+      setAgentes(data.agentes || []);
+      setHabilidades(data.habilidades || []);
     } catch { /* la lista de a quién agregar es accesoria */ }
   }, [sesion.slug, slug, puedo]);
 
@@ -173,6 +178,81 @@ export default function SesionAjustes({ sesion, slug, onCambio, onBorrada }) {
       >
         {guardando ? 'Guardando…' : 'Guardar'}
       </Button>
+
+      <Divider sx={{ borderColor: borde, mb: 3 }} />
+
+      {/* Lo que hace que la Sesión no sea una carpeta: lo que le dice a sus agentes. */}
+      <Etiqueta>Instrucciones para sus agentes</Etiqueta>
+      <Typography sx={{ fontSize: '0.8125rem', color: textMuted, mb: 1.5, mt: -0.75 }}>
+        Lo ven TODOS los agentes que trabajen en esta Sesión, además de sus propias
+        instrucciones. Por ejemplo: «acá hablamos del cliente Rever; nunca prometas
+        fechas de entrega».
+      </Typography>
+      <TextField
+        value={form.instrucciones_para_agentes}
+        onChange={(e) => setForm({ ...form, instrucciones_para_agentes: e.target.value })}
+        placeholder="Lo que cualquier agente debe saber al trabajar acá…"
+        multiline minRows={4} fullWidth size="small" sx={{ ...campoSx, mb: 2 }}
+      />
+      <Button
+        onClick={() => guardar()} variant="contained" disabled={guardando}
+        sx={{ textTransform: 'none', borderRadius: '8px', fontWeight: 600, px: 3, mb: 4 }}
+      >
+        {guardando ? 'Guardando…' : 'Guardar instrucciones'}
+      </Button>
+
+      <Divider sx={{ borderColor: borde, mb: 3 }} />
+
+      <Etiqueta>Con quién contesta</Etiqueta>
+      <Typography sx={{ fontSize: '0.8125rem', color: textMuted, mb: 1.5, mt: -0.75 }}>
+        El agente que toma un hilo nuevo si nadie eligió otro. Una mención con @ le gana
+        siempre.
+      </Typography>
+      <Select
+        size="small" displayEmpty value={sesion.agente_por_defecto || ''}
+        onChange={(e) => guardar({ agente_por_defecto: e.target.value || null })}
+        sx={{ fontSize: '0.8125rem', minWidth: 260, mb: 4 }}
+      >
+        <MenuItem value="" sx={{ fontSize: '0.8125rem' }}>El de siempre</MenuItem>
+        {agentes.map((a) => (
+          <MenuItem key={a.id} value={a.id} sx={{ fontSize: '0.8125rem' }}>{a.name}</MenuItem>
+        ))}
+      </Select>
+
+      <Divider sx={{ borderColor: borde, mb: 3 }} />
+
+      <Etiqueta>Habilidades que aplica siempre</Etiqueta>
+      <Typography sx={{ fontSize: '0.8125rem', color: textMuted, mb: 1.5, mt: -0.75 }}>
+        Se suman a las que cada agente ya trae. Se crean en Admin › Agentes › Habilidades.
+      </Typography>
+      {habilidades.length === 0 ? (
+        <Typography sx={{ fontSize: '0.875rem', color: textMuted, fontStyle: 'italic', mb: 4 }}>
+          Todavía no hay habilidades en esta empresa.
+        </Typography>
+      ) : (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 4 }}>
+          {habilidades.map((h) => {
+            const activa = (sesion.habilidad_ids || []).includes(h.id);
+            return (
+              <Chip
+                key={h.id} label={h.name}
+                onClick={() => guardar({
+                  habilidad_ids: activa
+                    ? (sesion.habilidad_ids || []).filter((i) => i !== h.id)
+                    : [...(sesion.habilidad_ids || []), h.id],
+                })}
+                variant={activa ? 'filled' : 'outlined'}
+                sx={{
+                  borderRadius: '8px', fontSize: '0.8125rem', cursor: 'pointer',
+                  ...(activa
+                    ? { bgcolor: 'rgba(88, 106, 208, 0.16)', color: '#586AD0', border: '1px solid rgba(88, 106, 208, 0.4)', fontWeight: 600 }
+                    : { borderColor: borde, color: textMuted }),
+                }}
+              />
+            );
+          })}
+        </Box>
+      )}
 
       <Divider sx={{ borderColor: borde, mb: 3 }} />
 
