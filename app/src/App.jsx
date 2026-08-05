@@ -42,6 +42,7 @@ import PaymentResultPage from './pages/PaymentResultPage';
 import TrabajoHome from './pages/trabajo/TrabajoHome';
 import AgentesPage from './pages/trabajo/AgentesPage';
 import AgenteNuevoPage from './pages/trabajo/AgenteNuevoPage';
+import SesionPage from './pages/sesiones/SesionPage';
 import PersonasPage from './pages/admin/PersonasPage';
 import WorkspacePage from './pages/admin/WorkspacePage';
 import AgentesAdminPage from './pages/admin/AgentesAdminPage';
@@ -100,6 +101,9 @@ export default function App() {
             <Route path="tablero"            element={<TablondePage />} />
             <Route path="contexto"           element={<ContextoHubPage />} />
             <Route path="espacios/:spaceSlug" element={<EspacioDetallePage />} />
+            {/* Sesiones: donde trabaja el equipo. El Espacio es permisos sobre el
+                conocimiento; la Sesion es la superficie de trabajo. */}
+            <Route path="sesiones/:sesionSlug" element={<SesionPage />} />
             <Route path="automatizaciones"   element={<AutomationsPage />} />
             <Route path="perfil"             element={<ProfilePage />} />
             <Route path="configuracion"      element={<SettingsPage />} />

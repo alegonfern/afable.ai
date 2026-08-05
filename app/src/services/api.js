@@ -159,6 +159,42 @@ export const api = {
   updateSkill: (id, data) => apiClient.patch(`/agents/habilidades/${id}/`, data),
   deleteSkill: (id) => apiClient.delete(`/agents/habilidades/${id}/`),
 
+  // ── Sesiones ──
+  // Donde trabaja el equipo: conversaciones, tareas y archivos. El Workspace va como
+  // `?workspace=`, no en la ruta (ver apps/sesiones/urls.py).
+  getSesiones: (workspace, opts = {}) =>
+    apiClient.get('/sesiones/', { params: { workspace, ...opts } }),
+  createSesion: (data) => apiClient.post('/sesiones/', data),
+  getSesion: (slug, workspace) =>
+    apiClient.get(`/sesiones/${slug}/`, { params: { workspace } }),
+  updateSesion: (slug, data) => apiClient.patch(`/sesiones/${slug}/`, data),
+  deleteSesion: (slug, workspace) =>
+    apiClient.delete(`/sesiones/${slug}/`, { params: { workspace } }),
+  getSesionDisponibles: (slug, workspace) =>
+    apiClient.get(`/sesiones/${slug}/disponibles/`, { params: { workspace } }),
+  addSesionMiembros: (slug, data) => apiClient.post(`/sesiones/${slug}/miembros/`, data),
+  removeSesionMiembros: (slug, data) =>
+    apiClient.delete(`/sesiones/${slug}/miembros/`, { data }),
+  // Tareas de la Sesion. `mias` y `estado` son los filtros de la pantalla.
+  getSesionTareas: (slug, workspace, opts = {}) =>
+    apiClient.get(`/sesiones/${slug}/tareas/`, { params: { workspace, ...opts } }),
+  createSesionTarea: (slug, data) => apiClient.post(`/sesiones/${slug}/tareas/`, data),
+  updateSesionTarea: (slug, id, data) =>
+    apiClient.patch(`/sesiones/${slug}/tareas/${id}/`, data),
+  deleteSesionTarea: (slug, id, workspace) =>
+    apiClient.delete(`/sesiones/${slug}/tareas/${id}/`, { params: { workspace } }),
+  runSesionTarea: (slug, id, workspace) =>
+    apiClient.post(`/sesiones/${slug}/tareas/${id}/ejecutar/`, { workspace }),
+  // Archivos de la Sesion (son CompanyDocument, con su texto extraido e indexado).
+  getSesionArchivos: (slug, workspace, opts = {}) =>
+    apiClient.get(`/sesiones/${slug}/archivos/`, { params: { workspace, ...opts } }),
+  uploadSesionArchivo: (slug, workspace, formData) =>
+    apiClient.post(`/sesiones/${slug}/archivos/?workspace=${workspace}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  deleteSesionArchivo: (slug, id, workspace) =>
+    apiClient.delete(`/sesiones/${slug}/archivos/${id}/`, { params: { workspace } }),
+
   // ── Espacios ──
   getSpaces: (slug) => apiClient.get(`/workspaces/${slug}/espacios/`),
   createSpace: (slug, data) => apiClient.post(`/workspaces/${slug}/espacios/`, data),
@@ -168,17 +204,6 @@ export const api = {
   getSpaceAvailable: (slug, space) => apiClient.get(`/workspaces/${slug}/espacios/${space}/disponibles/`),
   getSpaceConversations: (slug, space) =>
     apiClient.get(`/workspaces/${slug}/espacios/${space}/conversaciones/`),
-  // Tareas del Espacio: el pendiente que toma una persona o un agente.
-  getSpaceTasks: (slug, space) =>
-    apiClient.get(`/workspaces/${slug}/espacios/${space}/tareas/`),
-  createSpaceTask: (slug, space, data) =>
-    apiClient.post(`/workspaces/${slug}/espacios/${space}/tareas/`, data),
-  updateSpaceTask: (slug, space, id, data) =>
-    apiClient.patch(`/workspaces/${slug}/espacios/${space}/tareas/${id}/`, data),
-  deleteSpaceTask: (slug, space, id) =>
-    apiClient.delete(`/workspaces/${slug}/espacios/${space}/tareas/${id}/`),
-  runSpaceTask: (slug, space, id) =>
-    apiClient.post(`/workspaces/${slug}/espacios/${space}/tareas/${id}/ejecutar/`, {}),
   // coleccion: conexiones | documentos | agentes | personas
   addToSpace: (slug, space, coleccion, ids) =>
     apiClient.post(`/workspaces/${slug}/espacios/${space}/${coleccion}/`, { ids }),

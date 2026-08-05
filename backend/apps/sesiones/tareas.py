@@ -1,18 +1,15 @@
-"""Tareas del Espacio: el pendiente que una persona o un agente puede tomar.
+"""Tareas de la Sesión: el pendiente que toma una persona o un agente.
 
-El Espacio ya tenia fuentes, agentes, personas y las conversaciones del equipo. Lo
-que no tenia era donde anotar el trabajo que todavia no se hizo, asi que cada
-pendiente vivia fuera de Afable, en la cabeza de alguien o en otra herramienta.
+Nacieron colgadas del Espacio y se mudaron acá, que es su lugar: el pendiente es del
+trabajo (la Sesión), no del contenedor de permisos (el Espacio).
 
 Lo que separa esto de un tablero de tareas cualquiera: **un agente puede tomar una
-tarea y ejecutarla**. La descripcion es su instruccion, el resultado queda guardado
-en la tarea, y el equipo lo lee sin abrir ninguna conversacion.
+tarea y ejecutarla**. La descripción es su instrucción, el resultado queda guardado en
+la tarea, y el equipo lo lee sin abrir ninguna conversación.
 
-Permisos: los del Espacio y nada mas. Cualquier miembro del Espacio crea, edita y
-completa tareas — son items de trabajo livianos, no configuracion de la empresa. Lo
-unico que se comprueba aparte es que el agente asignado sea uno que el Espacio
-alcanza (si no, ejecutar una tarea seria la forma de hacer trabajar a un agente que
-no me corresponde).
+Permisos: los de la Sesión, resueltos en `permissions.py`. Cualquier miembro crea,
+edita y completa tareas — son items de trabajo livianos, no configuración. Lo único
+que se comprueba aparte es que el agente asignado sea uno de la empresa.
 """
 
 import logging
@@ -23,18 +20,20 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.workspaces.permissions import require_membership
+
 from .models import TAREA_ESTADOS, TAREA_LISTA, TAREA_PENDIENTE, Task
-from .permissions import IsMember, require_space
+from .permissions import require_sesion
 
 logger = logging.getLogger(__name__)
 
-# Pendientes primero, listas al final: la lista se lee para saber que falta.
+# Pendientes primero, listas al final: la lista se lee para saber qué falta.
 PRIORIDAD_DE_ESTADO = {'pendiente': 0, 'en_curso': 1, 'lista': 2}
 
 MAX_RESULTADO = 8000
 
 
-def serializar(tarea):
+def serializar(tarea, quien=None):
     return {
         'id': tarea.id,
         'title': tarea.title,
@@ -53,14 +52,15 @@ def serializar(tarea):
             (tarea.created_by.get_full_name() or tarea.created_by.email)
             if tarea.created_by else None
         ),
+        'es_mia': tarea.assignee_id == quien.id if quien is not None else None,
         'created_at': tarea.created_at,
     }
 
 
 def _ordenadas(qs):
-    """Por estado (pendiente → en curso → lista) y dentro de cada uno, lo mas nuevo.
+    """Por estado (pendiente → en curso → lista) y dentro de cada uno, lo más nuevo.
 
-    El orden se arma aca y no en el `Meta` del modelo porque ahi `state` se ordenaria
+    El orden se arma acá y no en el `Meta` del modelo porque ahí `state` se ordenaría
     por su texto, o sea 'en_curso' < 'lista' < 'pendiente': las tareas ya hechas antes
     que las que faltan.
     """
@@ -74,48 +74,51 @@ def _ordenadas(qs):
     ).order_by('prioridad', '-created_at')
 
 
-def _agente_del_espacio(espacio, agent_id):
-    """El agente que se le puede asignar a una tarea de este Espacio.
+def resolver(request, sesion_slug):
+    """Los dos niveles de permiso: el Workspace y después la Sesión.
 
-    Devuelve (agente, error). Un agente que el Espacio no alcanza no se asigna: si
-    no, asignar y ejecutar seria la manera de poner a trabajar a un agente ajeno con
-    su propio acceso a datos.
+    Devuelve (sesion, error). El Workspace llega por `?workspace=` o en el cuerpo,
+    igual que en el resto de la API.
+    """
+    slug = request.query_params.get('workspace') or request.data.get('workspace')
+    if not slug:
+        return None, Response(
+            {'detail': 'Falta el Workspace.'}, status=status.HTTP_400_BAD_REQUEST,
+        )
+    membership = require_membership(request.user, slug)
+    return require_sesion(membership, sesion_slug), None
 
-    Un Espacio sin agentes propios acepta cualquier agente de la empresa, por la misma
-    razon que `alcance_de_agente` no restringe a un agente sin Espacios: si no, los
-    Espacios que ya existen se quedan sin poder asignar nada.
+
+def _agente(sesion, agent_id):
+    """El agente que se le puede asignar a una tarea. Devuelve (agente, error).
+
+    Solo de la empresa de esta Sesión: asignar y ejecutar sería la forma de poner a
+    trabajar a un agente ajeno con su propio acceso a datos.
     """
     from apps.agents.models import Agent
 
     if agent_id in (None, '', 0):
         return None, None
-    de_la_empresa = Agent.objects.filter(
-        organization_id=espacio.workspace.organization_id, pk=agent_id, is_active=True,
-    )
-    propios = espacio.agents.all()
-    agente = (
-        de_la_empresa.filter(pk__in=propios.values('pk')).first()
-        if propios.exists()
-        else de_la_empresa.first()
-    )
+    org_id = sesion.workspace.organization_id
+    agente = Agent.objects.filter(organization_id=org_id, pk=agent_id, is_active=True).first()
     if agente is None:
-        return None, 'Ese agente no está disponible en este Espacio.'
+        return None, 'Ese agente no está disponible en esta empresa.'
     return agente, None
 
 
-def _persona_del_espacio(espacio, user_id):
+def _persona(sesion, user_id):
     """La persona a la que se le puede asignar: cualquier miembro del Workspace.
 
-    No se exige que este en `space.members` porque en un Espacio abierto esa lista
-    esta vacia y entran todos: exigirla dejaria sin poder asignar a nadie justo en el
-    caso mas comun.
+    No se exige que esté agregada a la Sesión porque en una Sesión abierta esa lista
+    está vacía y entran todos: exigirla dejaría sin poder asignar a nadie justo en el
+    caso más común.
     """
-    from .models import Membership
+    from apps.workspaces.models import Membership
 
     if user_id in (None, '', 0):
         return None, None
     membership = Membership.objects.filter(
-        workspace=espacio.workspace, user_id=user_id,
+        workspace=sesion.workspace, user_id=user_id,
     ).select_related('user').first()
     if membership is None:
         return None, 'Esa persona no es parte de este Workspace.'
@@ -123,24 +126,39 @@ def _persona_del_espacio(espacio, user_id):
 
 
 class TareaListCreateView(APIView):
-    """GET y POST /api/v1/workspaces/<slug>/espacios/<space_slug>/tareas/"""
+    """GET y POST /api/v1/sesiones/<sesion_slug>/tareas/?workspace=<slug>
 
-    permission_classes = [IsAuthenticated, IsMember]
+    `mias=1` deja solo las asignadas a quien pregunta (el "Mine / Everyone" de la
+    pantalla) y `estado=` filtra por estado (`abiertas` = todo lo que no está listo).
+    """
 
-    def get(self, request, slug, space_slug):
-        espacio = require_space(request.membership, space_slug)
-        tareas = _ordenadas(
-            Task.objects.filter(space=espacio).select_related('assignee', 'agent', 'created_by')
-        )
-        pendientes = sum(1 for t in tareas if t.state != TAREA_LISTA)
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, sesion_slug):
+        sesion, error = resolver(request, sesion_slug)
+        if error:
+            return error
+
+        qs = Task.objects.filter(sesion=sesion).select_related('assignee', 'agent', 'created_by')
+        if request.query_params.get('mias') in ('1', 'true'):
+            qs = qs.filter(assignee=request.user)
+        estado = request.query_params.get('estado')
+        if estado == 'abiertas':
+            qs = qs.exclude(state=TAREA_LISTA)
+        elif estado in dict(TAREA_ESTADOS):
+            qs = qs.filter(state=estado)
+
+        tareas = list(_ordenadas(qs))
         return Response({
             'count': len(tareas),
-            'pendientes': pendientes,
-            'results': [serializar(t) for t in tareas],
+            'pendientes': sum(1 for t in tareas if t.state != TAREA_LISTA),
+            'results': [serializar(t, request.user) for t in tareas],
         })
 
-    def post(self, request, slug, space_slug):
-        espacio = require_space(request.membership, space_slug)
+    def post(self, request, sesion_slug):
+        sesion, error = resolver(request, sesion_slug)
+        if error:
+            return error
 
         title = (request.data.get('title') or '').strip()[:255]
         if not title:
@@ -148,40 +166,42 @@ class TareaListCreateView(APIView):
                 {'detail': 'La tarea necesita un título.'}, status=status.HTTP_400_BAD_REQUEST,
             )
 
-        agente, error = _agente_del_espacio(espacio, request.data.get('agent'))
-        if error:
-            return Response({'detail': error}, status=status.HTTP_400_BAD_REQUEST)
-        persona, error = _persona_del_espacio(espacio, request.data.get('assignee'))
-        if error:
-            return Response({'detail': error}, status=status.HTTP_400_BAD_REQUEST)
+        agente, err = _agente(sesion, request.data.get('agent'))
+        if err:
+            return Response({'detail': err}, status=status.HTTP_400_BAD_REQUEST)
+        persona, err = _persona(sesion, request.data.get('assignee'))
+        if err:
+            return Response({'detail': err}, status=status.HTTP_400_BAD_REQUEST)
 
         tarea = Task.objects.create(
-            space=espacio,
+            sesion=sesion,
             title=title,
             description=(request.data.get('description') or '').strip(),
             agent=agente,
             assignee=persona,
             created_by=request.user,
         )
-        return Response(serializar(tarea), status=status.HTTP_201_CREATED)
+        return Response(serializar(tarea, request.user), status=status.HTTP_201_CREATED)
 
 
 class TareaDetailView(APIView):
     """PATCH y DELETE de una tarea."""
 
-    permission_classes = [IsAuthenticated, IsMember]
+    permission_classes = [IsAuthenticated]
 
-    def _tarea(self, request, space_slug, pk):
-        espacio = require_space(request.membership, space_slug)
-        tarea = Task.objects.filter(space=espacio, pk=pk).first()
+    def _tarea(self, request, sesion_slug, pk):
+        sesion, error = resolver(request, sesion_slug)
+        if error:
+            return None, None, error
+        tarea = Task.objects.filter(sesion=sesion, pk=pk).first()
         if tarea is None:
             return None, None, Response(
                 {'detail': 'Tarea no encontrada.'}, status=status.HTTP_404_NOT_FOUND,
             )
-        return tarea, espacio, None
+        return tarea, sesion, None
 
-    def patch(self, request, slug, space_slug, pk):
-        tarea, espacio, error = self._tarea(request, space_slug, pk)
+    def patch(self, request, sesion_slug, pk):
+        tarea, sesion, error = self._tarea(request, sesion_slug, pk)
         if error:
             return error
 
@@ -204,21 +224,21 @@ class TareaDetailView(APIView):
                 )
             tarea.state = estado
         if 'agent' in request.data:
-            agente, err = _agente_del_espacio(espacio, request.data.get('agent'))
+            agente, err = _agente(sesion, request.data.get('agent'))
             if err:
                 return Response({'detail': err}, status=status.HTTP_400_BAD_REQUEST)
             tarea.agent = agente
         if 'assignee' in request.data:
-            persona, err = _persona_del_espacio(espacio, request.data.get('assignee'))
+            persona, err = _persona(sesion, request.data.get('assignee'))
             if err:
                 return Response({'detail': err}, status=status.HTTP_400_BAD_REQUEST)
             tarea.assignee = persona
 
         tarea.save()
-        return Response(serializar(tarea))
+        return Response(serializar(tarea, request.user))
 
-    def delete(self, request, slug, space_slug, pk):
-        tarea, _, error = self._tarea(request, space_slug, pk)
+    def delete(self, request, sesion_slug, pk):
+        tarea, _, error = self._tarea(request, sesion_slug, pk)
         if error:
             return error
         tarea.delete()
@@ -228,20 +248,21 @@ class TareaDetailView(APIView):
 class TareaEjecutarView(APIView):
     """POST .../tareas/<pk>/ejecutar/ — el agente asignado hace la tarea.
 
-    Corre el MISMO agente del chat, con el mismo contexto: el resultado es igual al
-    que daria preguntarselo a mano. Se reusa `automation_runner._run_prompt` a
-    proposito — un segundo camino de ejecucion daria respuestas distintas segun por
-    donde se pidio, que es exactamente el problema que ese modulo evita.
+    Corre el MISMO agente del chat, con el mismo contexto: el resultado es igual al que
+    daría preguntárselo a mano. Se reusa `automation_runner._run_prompt` a propósito —
+    un segundo camino de ejecución daría respuestas distintas según por dónde se pidió.
 
-    Sincronico, como el "ejecutar ahora" de las Automatizaciones: la llamada al modelo
-    puede tardar, y quien apreta el boton esta esperando el resultado.
+    Sincrónico, como el "ejecutar ahora" de las Automatizaciones: la llamada al modelo
+    puede tardar y quien aprieta el botón está esperando el resultado.
     """
 
-    permission_classes = [IsAuthenticated, IsMember]
+    permission_classes = [IsAuthenticated]
 
-    def post(self, request, slug, space_slug, pk):
-        espacio = require_space(request.membership, space_slug)
-        tarea = Task.objects.filter(space=espacio, pk=pk).select_related('agent').first()
+    def post(self, request, sesion_slug, pk):
+        sesion, error = resolver(request, sesion_slug)
+        if error:
+            return error
+        tarea = Task.objects.filter(sesion=sesion, pk=pk).select_related('agent').first()
         if tarea is None:
             return Response(
                 {'detail': 'Tarea no encontrada.'}, status=status.HTTP_404_NOT_FOUND,
@@ -253,7 +274,7 @@ class TareaEjecutarView(APIView):
             )
 
         instruccion = (tarea.description or '').strip() or tarea.title
-        organization = espacio.workspace.organization
+        organization = sesion.workspace.organization
         if organization is None:
             return Response(
                 {'detail': 'Este Workspace todavía no está enlazado a una empresa.'},
@@ -261,13 +282,13 @@ class TareaEjecutarView(APIView):
             )
 
         # Se marca en curso ANTES de llamar al modelo: la llamada tarda, y sin esto la
-        # tarea se ve pendiente mientras alguien mas podria apretar ejecutar de nuevo.
+        # tarea se ve pendiente mientras alguien más podría apretar ejecutar de nuevo.
         Task.objects.filter(pk=tarea.pk).update(state='en_curso')
 
         from services.automation_runner import _run_prompt
 
         try:
-            # El agente corre con el contexto de SU dueño de empresa, igual que en las
+            # El agente corre con el contexto del dueño de la empresa, igual que en las
             # Automatizaciones: es quien tiene la Organization enlazada.
             salida = _run_prompt(organization.owner, organization, instruccion, tarea.agent)
         except Exception as e:
@@ -277,7 +298,8 @@ class TareaEjecutarView(APIView):
             tarea.resultado_error = str(e)[:500]
             tarea.save(update_fields=['state', 'resultado_error', 'updated_at'])
             return Response(
-                {'detail': 'El agente no pudo completar la tarea.', **serializar(tarea)},
+                {'detail': 'El agente no pudo completar la tarea.',
+                 **serializar(tarea, request.user)},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
 
@@ -285,10 +307,10 @@ class TareaEjecutarView(APIView):
         tarea.resultado = (salida or '')[:MAX_RESULTADO]
         tarea.resultado_error = ''
         tarea.ejecutada_at = timezone.now()
-        # Queda LISTA, no pendiente: el agente ya la hizo. Si el resultado no sirve,
-        # se vuelve a pendiente a mano — es una decision de la persona, no del agente.
+        # Queda LISTA, no pendiente: el agente ya la hizo. Si el resultado no sirve, se
+        # vuelve a pendiente a mano — es una decisión de la persona, no del agente.
         tarea.state = TAREA_LISTA
         tarea.save(update_fields=[
             'resultado', 'resultado_error', 'ejecutada_at', 'state', 'updated_at',
         ])
-        return Response(serializar(tarea))
+        return Response(serializar(tarea, request.user))

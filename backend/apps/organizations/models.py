@@ -214,6 +214,15 @@ class CompanyDocument(models.Model):
     summary = models.TextField(blank=True)
     processing_error = models.CharField(max_length=255, blank=True)
     source = models.CharField(max_length=20, choices=SOURCES, default='manual')
+    # El archivo pertenece a una Sesion cuando se subio ahi. Es un campo y no un
+    # modelo aparte a proposito: asi el archivo de una Sesion hereda TODO lo que ya
+    # funciona sobre CompanyDocument — la extraccion de texto, el indexado semantico
+    # (apps.sources) y el alcance de los agentes. Un modelo propio de archivos habria
+    # obligado a duplicar las tres cosas.
+    sesion = models.ForeignKey(
+        'sesiones.Sesion', on_delete=models.CASCADE,
+        null=True, blank=True, related_name='archivos',
+    )
     # id del archivo en el sistema de origen (ej. fileId de Drive) — permite hacer
     # upsert en cada sync sin duplicar el mismo archivo como documento nuevo.
     external_id = models.CharField(max_length=255, blank=True)

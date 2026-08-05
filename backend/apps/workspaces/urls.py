@@ -1,6 +1,5 @@
 from django.urls import path
 
-from .tareas import TareaDetailView, TareaEjecutarView, TareaListCreateView
 from .views import (
     InvitationDetailView, InvitationListCreateView, InvitationResendView,
     MemberDetailView, MemberListView, SectorListView,
@@ -32,20 +31,6 @@ urlpatterns = [
     path(
         '<slug:slug>/espacios/<slug:space_slug>/conversaciones/',
         SpaceConversationsView.as_view(), name='space-conversations',
-    ),
-    # Las tareas van ANTES del comodín `<slug:coleccion>/` de más abajo: si no, esa
-    # ruta se traga `tareas/` y la trata como una colección del Espacio.
-    path(
-        '<slug:slug>/espacios/<slug:space_slug>/tareas/',
-        TareaListCreateView.as_view(), name='space-tasks',
-    ),
-    path(
-        '<slug:slug>/espacios/<slug:space_slug>/tareas/<int:pk>/',
-        TareaDetailView.as_view(), name='space-task-detail',
-    ),
-    path(
-        '<slug:slug>/espacios/<slug:space_slug>/tareas/<int:pk>/ejecutar/',
-        TareaEjecutarView.as_view(), name='space-task-run',
     ),
     path(
         '<slug:slug>/espacios/<slug:space_slug>/<slug:coleccion>/',

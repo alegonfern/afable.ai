@@ -25,10 +25,12 @@ INSTALLED_APPS = [
     # La app que ya existia, que se va reemplazando pantalla por pantalla.
     'apps.organizations',
     'apps.agents',
-    # Apps del enfoque nuevo, todavia vacias: se llenan a medida que cada
-    # funcionalidad nueva reemplaza a la anterior.
+    # Fuentes de conocimiento: el corpus troceado y vectorizado (busqueda semantica).
     'apps.sources',
-    'apps.rooms',
+    # Sesiones: donde se trabaja en equipo — conversaciones, tareas y archivos.
+    # El cascaron se llamaba `rooms` (por "Salas"); se renombro al concepto real.
+    'apps.sesiones',
+    # Todavia vacia.
     'apps.tools',
     'apps.payments',
     'apps.leads',

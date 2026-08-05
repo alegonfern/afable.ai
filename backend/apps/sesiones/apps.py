@@ -1,6 +1,7 @@
 from django.apps import AppConfig
 
 
-class RoomsConfig(AppConfig):
+class SesionesConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'apps.rooms'
+    name = 'apps.sesiones'
+    verbose_name = 'Sesiones'

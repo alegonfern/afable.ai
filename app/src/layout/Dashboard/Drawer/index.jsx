@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import {
   Drawer as MuiDrawer,
@@ -14,10 +14,11 @@ import {
   Menu,
   MenuItem,
   Divider,
+  InputBase,
 } from '@mui/material';
 import {
   MessageSquare, LayoutDashboard, Settings, Search, ChevronLeft, Plus, ChevronDown,
-  ChevronRight, Zap, Bot, History,
+  ChevronRight, Zap, Bot, History, Boxes,
   User, Building2, HelpCircle, LogOut, Timer, Layers, Users,
   Plug, FolderOpen, BookOpen,
 } from 'lucide-react';
@@ -70,6 +71,10 @@ export default function Drawer({ open, handleDrawerToggle }) {
 
   const [conversations, setConversations] = useState([]);
   const [chatOpen, setChatOpen] = useState(true);
+  // Las Sesiones del Workspace activo: es la seccion que las vuelve alcanzables. Sin
+  // esto, una Sesion existe pero no hay por donde llegar a ella.
+  const [sesiones, setSesiones] = useState([]);
+  const [sesionesOpen, setSesionesOpen] = useState(true);
   const [userMenuAnchor, setUserMenuAnchor] = useState(null);
   const [modo, setModoState] = useState(() => localStorage.getItem('afable_modo') || 'trabajo');
 
@@ -88,6 +93,39 @@ export default function Drawer({ open, handleDrawerToggle }) {
   useEffect(() => {
     api.getConversations().then(r => setConversations(r.data.slice(0, 10))).catch(() => {});
   }, []);
+
+  const wsSlug = localStorage.getItem('afable_workspace_slug');
+  const cargarSesiones = useCallback(() => {
+    if (!wsSlug) return;
+    api.getSesiones(wsSlug)
+      .then(r => setSesiones(r.data.results || []))
+      .catch(() => setSesiones([]));
+  }, [wsSlug]);
+
+  useEffect(() => { cargarSesiones(); }, [cargarSesiones]);
+  // Al crear, archivar o borrar una Sesion la barra tiene que reflejarlo sin recargar.
+  useEffect(() => {
+    const alCambiar = () => cargarSesiones();
+    window.addEventListener('afable-sesiones', alCambiar);
+    return () => window.removeEventListener('afable-sesiones', alCambiar);
+  }, [cargarSesiones]);
+
+  // El nombre se escribe EN la barra, no en un `window.prompt`: un prompt del
+  // navegador se ve como un error del sistema, no como una parte de la app.
+  const [nombreNueva, setNombreNueva] = useState(null);   // null = no se está creando
+
+  const crearSesion = async () => {
+    const nombre = (nombreNueva || '').trim();
+    if (!wsSlug || !nombre) return;
+    try {
+      const { data } = await api.createSesion({ workspace: wsSlug, name: nombre });
+      setNombreNueva(null);
+      await cargarSesiones();
+      navigate(`/app/sesiones/${data.slug}`);
+    } catch {
+      toast.error('No se pudo crear la Sesión.');
+    }
+  };
 
 
   // Contraste: los items en reposo estaban al 45% y los iconos al 28% sobre un
@@ -364,6 +402,102 @@ export default function Drawer({ open, handleDrawerToggle }) {
                       </Box>
                     ))}
                   </Box>
+                </Box>
+              </Collapse>
+            )}
+          </Box>
+        )}
+
+        {/* Sesiones: donde trabaja el equipo. Solo en Trabajo, como el chat. */}
+        {enTrabajo && (
+          <Box sx={{ mb: 0.5 }}>
+            <Tooltip title={!open ? 'Sesiones' : ''} placement="right" arrow>
+              <Box sx={itemSx(isActive('/app/sesiones'))} onClick={() => setSesionesOpen(p => !p)}>
+                <Boxes size={15} color={iconColor(isActive('/app/sesiones'))} style={{ flexShrink: 0 }} />
+                {open && (
+                  <>
+                    <Typography sx={{ fontSize: '0.9rem', color: 'inherit', flex: 1 }}>
+                      Sesiones
+                    </Typography>
+                    <Box
+                      onClick={(e) => { e.stopPropagation(); setSesionesOpen(true); setNombreNueva(''); }}
+                      title="Nueva Sesión"
+                      sx={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        width: 18, height: 18, borderRadius: '4px', flexShrink: 0,
+                        color: textDisabled, '&:hover': { bgcolor: bgHover, color: textActive },
+                      }}
+                    >
+                      <Plus size={12} />
+                    </Box>
+                    {sesiones.length > 0 && (
+                      <Box sx={{ display: 'flex', p: 0.25, borderRadius: '4px', flexShrink: 0 }}>
+                        {sesionesOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                      </Box>
+                    )}
+                  </>
+                )}
+              </Box>
+            </Tooltip>
+
+            {open && (
+              <Collapse in={sesionesOpen}>
+                <Box sx={{ pl: 3.5, pr: 0.75, mt: 0.25 }}>
+                  {nombreNueva !== null && (
+                    <InputBase
+                      autoFocus
+                      value={nombreNueva}
+                      onChange={(e) => setNombreNueva(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') crearSesion();
+                        if (e.key === 'Escape') setNombreNueva(null);
+                      }}
+                      onBlur={() => { if (!nombreNueva.trim()) setNombreNueva(null); }}
+                      placeholder="Nombre de la Sesión"
+                      sx={{
+                        px: 1, py: 0.35, mb: 0.25, width: '100%', fontSize: '0.8rem',
+                        borderRadius: '4px', bgcolor: bgHover, color: textActive,
+                      }}
+                    />
+                  )}
+                  {sesiones.length === 0 && nombreNueva === null ? (
+                    <Typography sx={{ fontSize: '0.78rem', color: textDisabled, px: 1, py: 0.4 }}>
+                      Ninguna todavía.
+                    </Typography>
+                  ) : sesiones.map(s => {
+                    const activa = location.pathname === `/app/sesiones/${s.slug}`;
+                    return (
+                      <Box
+                        key={s.id}
+                        onClick={() => navigate(`/app/sesiones/${s.slug}`)}
+                        sx={{
+                          display: 'flex', alignItems: 'center', gap: 0.75,
+                          px: 1, py: 0.35, borderRadius: '4px', cursor: 'pointer',
+                          color: activa ? '#586AD0' : textDisabled,
+                          '&:hover': { bgcolor: bgHover, color: activa ? '#586AD0' : textMuted },
+                          transition: 'all 0.1s',
+                        }}
+                      >
+                        <Typography sx={{ fontSize: '0.8rem', flexShrink: 0 }}>{s.icon || '💠'}</Typography>
+                        <Typography sx={{
+                          fontSize: '0.8rem', lineHeight: 1.4, flex: 1, minWidth: 0,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                          fontWeight: activa ? 600 : 400,
+                        }}>
+                          {s.name}
+                        </Typography>
+                        {s.pendientes > 0 && (
+                          <Typography sx={{
+                            fontSize: '0.68rem', fontWeight: 700, flexShrink: 0,
+                            px: 0.5, borderRadius: '4px',
+                            bgcolor: 'rgba(240, 180, 41, 0.16)', color: '#f0b429',
+                          }}>
+                            {s.pendientes}
+                          </Typography>
+                        )}
+                      </Box>
+                    );
+                  })}
                 </Box>
               </Collapse>
             )}
