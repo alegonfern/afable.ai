@@ -216,6 +216,16 @@ class Permiso(models.Model):
     Dos excepciones, siempre: el administrador del Workspace y quien creo el archivo. El
     primero porque no puede administrar lo que no ve; el segundo porque perder acceso a lo
     que uno mismo subio no se entiende de ninguna manera.
+
+    ## El permiso de "todo el Workspace"
+
+    Un permiso con `user` nulo vale para **cualquier miembro**. Es lo que permite el caso
+    comun sin cargar veinte permisos a mano: "que lo vea todo el equipo, pero que solo
+    Ana y Beto lo editen" son tres permisos, no veintidos.
+
+    Cuando alguien tiene los dos —el suyo y el del Workspace— **gana el mas alto**. Un
+    permiso personal esta puesto a proposito para esa persona: no tiene sentido que le
+    reste.
     """
 
     # Uno de los dos, nunca los dos: el permiso es de una carpeta o de un documento.
@@ -227,8 +237,12 @@ class Permiso(models.Model):
         null=True, blank=True, related_name='permisos',
     )
 
+    # `null` significa **todo el Workspace**: es el permiso de brocha gorda, para el caso
+    # comun de "que lo vea todo el equipo pero que solo estos lo editen". Sin el, dar
+    # acceso a una empresa de veinte personas eran veinte permisos a mano.
     user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='permisos_de_archivos',
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True,
+        related_name='permisos_de_archivos',
     )
     nivel = models.CharField(max_length=10, choices=NIVELES, default=NIVEL_LECTURA)
 
@@ -244,11 +258,21 @@ class Permiso(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=['carpeta', 'user'], name='un_permiso_por_carpeta_y_persona',
-                condition=models.Q(carpeta__isnull=False),
+                condition=models.Q(carpeta__isnull=False, user__isnull=False),
             ),
             models.UniqueConstraint(
                 fields=['document', 'user'], name='un_permiso_por_documento_y_persona',
-                condition=models.Q(document__isnull=False),
+                condition=models.Q(document__isnull=False, user__isnull=False),
+            ),
+            # El de "todo el Workspace" es uno solo por item: en Postgres, dos filas con
+            # `user` nulo NO chocan contra el unico de arriba, asi que hace falta este.
+            models.UniqueConstraint(
+                fields=['carpeta'], name='un_permiso_de_workspace_por_carpeta',
+                condition=models.Q(carpeta__isnull=False, user__isnull=True),
+            ),
+            models.UniqueConstraint(
+                fields=['document'], name='un_permiso_de_workspace_por_documento',
+                condition=models.Q(document__isnull=False, user__isnull=True),
             ),
             # Un permiso que no apunta a nada, o que apunta a las dos cosas, es un error
             # de programacion: mejor que la base lo rechace que descubrirlo despues.
@@ -265,7 +289,11 @@ class Permiso(models.Model):
 
     def __str__(self):
         sobre = self.carpeta or self.document
-        return f'{self.user} — {self.nivel} sobre {sobre}'
+        return f'{self.user or "todo el Workspace"} — {self.nivel} sobre {sobre}'
+
+    @property
+    def es_de_todo_el_workspace(self):
+        return self.user_id is None
 
     @property
     def puede_editar(self):

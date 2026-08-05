@@ -559,8 +559,14 @@ class CompartirView(APIView):
 
     `POST /archivos/compartir/` con `carpeta` o `documento`, y:
       - `restringido`: prende o apaga la restricción.
-      - `ids` + `nivel`: le da permiso a esas personas.
-    `DELETE` con `ids` les saca el permiso.
+      - `ids` + `nivel`: le da permiso a esas personas (varias en un solo pedido).
+      - `workspace_nivel`: el nivel para **todo el Workspace**, o `null` para quitarlo.
+
+    `workspace_nivel` existe porque el caso más común de una empresa es "que lo vea todo el
+    equipo, pero que solo estos dos lo editen", y eso eran tantos permisos como personas.
+
+    `DELETE` con `ids` les saca el permiso; con `todo_el_workspace: true` saca el del
+    Workspace (no `workspace`: esa clave ya es el slug del Workspace del pedido).
 
     Solo quien puede EDITAR el ítem cambia con quién está compartido: dejar que alguien
     con permiso de lectura reparta accesos vaciaría de sentido el nivel.
@@ -618,7 +624,7 @@ class CompartirView(APIView):
         carpeta, doc, error = self._item(request)
         if error:
             return error
-        from .permisos import serializar_permisos
+        from .permisos import nivel_del_workspace, serializar_permisos
         from apps.workspaces.models import Membership
 
         # A quién se le puede dar permiso: la gente del Workspace que todavía no lo tiene.
@@ -630,6 +636,11 @@ class CompartirView(APIView):
         return Response({
             'restringido': carpeta.restringida if carpeta else doc.restringido,
             'nombre': carpeta.name if carpeta else doc.title,
+            'workspace_nivel': nivel_del_workspace(carpeta=carpeta, document=doc),
+            'workspace_nombre': request.membership.workspace.name,
+            'miembros': Membership.objects.filter(
+                workspace=request.membership.workspace,
+            ).count(),
             'compartido_con': serializar_permisos(carpeta=carpeta, document=doc),
             'disponibles': [
                 {
@@ -646,7 +657,7 @@ class CompartirView(APIView):
         if error:
             return error
 
-        from .models import NIVELES, Permiso
+        from .models import NIVEL_EDICION, NIVELES, Permiso
 
         if 'restringido' in request.data:
             valor = bool(request.data.get('restringido'))
@@ -656,6 +667,44 @@ class CompartirView(APIView):
             else:
                 doc.restringido = valor
                 doc.save(update_fields=['restringido'])
+
+            # Quien restringe NO se queda afuera de lo que acaba de restringir.
+            #
+            # Sin esto, un miembro común que restringía una carpeta que no había creado se
+            # cerraba la puerta en el mismo clic: la respuesta salía 404 porque al releer
+            # el ítem ya no lo veía, y la carpeta le desaparecía de la pantalla. Solo hace
+            # falta cuando pasaría de verdad — al administrador y a quien lo creó ya les
+            # alcanza su propia regla, y agregarles un permiso ensuciaría la lista.
+            if valor:
+                from .permisos import nivel_sobre_carpeta, nivel_sobre_documento
+
+                nivel_ahora = (
+                    nivel_sobre_carpeta(request.user, carpeta, request.membership) if carpeta
+                    else nivel_sobre_documento(request.user, doc, request.membership)
+                )
+                if nivel_ahora != NIVEL_EDICION:
+                    Permiso.objects.update_or_create(
+                        carpeta=carpeta, document=doc, user=request.user,
+                        defaults={'nivel': NIVEL_EDICION, 'otorgado_por': request.user},
+                    )
+
+        # El de todo el Workspace: `null` explícito lo quita, un nivel lo pone.
+        if 'workspace_nivel' in request.data:
+            valor = request.data.get('workspace_nivel')
+            if valor in (None, '', False):
+                Permiso.objects.filter(
+                    carpeta=carpeta, document=doc, user__isnull=True,
+                ).delete()
+            elif valor not in dict(NIVELES):
+                return Response(
+                    {'detail': f'Nivel desconocido: {valor}.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            else:
+                Permiso.objects.update_or_create(
+                    carpeta=carpeta, document=doc, user=None,
+                    defaults={'nivel': valor, 'otorgado_por': request.user},
+                )
 
         ids = request.data.get('ids')
         if ids:
@@ -691,9 +740,12 @@ class CompartirView(APIView):
             return error
         from .models import Permiso
 
-        Permiso.objects.filter(
-            carpeta=carpeta, document=doc, user_id__in=_ids(request.data.get('ids')),
-        ).delete()
+        if request.data.get('todo_el_workspace'):
+            Permiso.objects.filter(carpeta=carpeta, document=doc, user__isnull=True).delete()
+        else:
+            Permiso.objects.filter(
+                carpeta=carpeta, document=doc, user_id__in=_ids(request.data.get('ids')),
+            ).delete()
         return self.get(request)
 
 

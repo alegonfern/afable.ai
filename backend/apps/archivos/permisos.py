@@ -17,6 +17,16 @@ vistas es una regla que en la séptima se olvida — y acá lo que se olvida es 
    ve) y quien subió el archivo (perder acceso a lo propio no se entiende de ninguna
    manera).
 
+## El permiso de brocha gorda
+
+Un `Permiso` **sin persona** (`user=None`) vale para cualquier miembro del Workspace. Es
+lo que hace practicable el caso más común de una empresa: "que lo vea todo el equipo, pero
+que solo estos dos lo editen". Sin él, eso eran tantos permisos como personas, cargados de
+a uno — y una lista así nadie la mantiene al día.
+
+Cuando alguien tiene los dos, **gana el más alto**: un permiso personal está puesto a
+propósito para esa persona, así que no puede restarle lo que el Workspace ya le daba.
+
 ## La propiedad que este módulo existe para garantizar
 
 **Nadie puede usar un agente para leer lo que él mismo no puede leer.** El alcance de
@@ -33,6 +43,23 @@ from .models import NIVEL_EDICION, NIVEL_LECTURA, ORDEN_DE_NIVELES, Carpeta, Per
 
 def _es_admin(membership):
     return membership is not None and membership.role == ROLE_ADMIN
+
+
+def _mejor(permisos):
+    """El nivel más alto de una lista de permisos, o None si está vacía.
+
+    Sirve para juntar el permiso personal con el de todo el Workspace: quien tiene lectura
+    por ser del equipo y edición a nombre propio, edita.
+    """
+    niveles = [p.nivel for p in permisos if p.nivel in ORDEN_DE_NIVELES]
+    if not niveles:
+        return None
+    return max(niveles, key=lambda n: ORDEN_DE_NIVELES[n])
+
+
+def _mios_y_del_workspace(user):
+    """Filtro de los permisos que le sirven a esta persona: el suyo y el del Workspace."""
+    return Q(user=user) | Q(user__isnull=True)
 
 
 def _cadena_de_carpetas(carpeta):
@@ -60,8 +87,7 @@ def nivel_sobre_carpeta(user, carpeta, membership=None):
             continue
         if nodo.created_by_id and user is not None and nodo.created_by_id == user.id:
             return NIVEL_EDICION
-        permiso = Permiso.objects.filter(carpeta=nodo, user=user).first()
-        return permiso.nivel if permiso else None
+        return _mejor(Permiso.objects.filter(_mios_y_del_workspace(user), carpeta=nodo))
 
     # Ninguna restringida en toda la cadena.
     return NIVEL_EDICION
@@ -75,8 +101,7 @@ def nivel_sobre_documento(user, doc, membership=None):
         return NIVEL_EDICION
 
     if doc.restringido:
-        permiso = Permiso.objects.filter(document=doc, user=user).first()
-        return permiso.nivel if permiso else None
+        return _mejor(Permiso.objects.filter(_mios_y_del_workspace(user), document=doc))
 
     # Sin restricción propia, hereda la de su carpeta.
     return nivel_sobre_carpeta(user, doc.carpeta, membership)
@@ -109,7 +134,7 @@ def carpetas_visibles(user, org, membership=None):
 
     por_id = {c.pk: c for c in todas}
     con_permiso = set(
-        Permiso.objects.filter(carpeta__organization=org, user=user)
+        Permiso.objects.filter(_mios_y_del_workspace(user), carpeta__organization=org)
         .values_list('carpeta_id', flat=True)
     )
 
@@ -147,7 +172,7 @@ def documentos_visibles(user, org, membership=None):
         return qs
 
     con_permiso = set(
-        Permiso.objects.filter(document__organization=org, user=user)
+        Permiso.objects.filter(_mios_y_del_workspace(user), document__organization=org)
         .values_list('document_id', flat=True)
     )
 
@@ -163,12 +188,20 @@ def documentos_visibles(user, org, membership=None):
     ).distinct()
 
 
-def serializar_permisos(carpeta=None, document=None):
-    """La lista de con quién está compartido, para la pantalla."""
-    qs = (
+def _permisos_de(carpeta=None, document=None):
+    return (
         Permiso.objects.filter(carpeta=carpeta) if carpeta is not None
         else Permiso.objects.filter(document=document)
     )
+
+
+def serializar_permisos(carpeta=None, document=None):
+    """Con quién está compartido, para la pantalla.
+
+    El de todo el Workspace queda FUERA de esta lista y se informa aparte
+    (`nivel_del_workspace`): meterlo como una fila más, sin nombre, se leería como una
+    persona rara — y lo que hay que entender es que es de otra clase.
+    """
     return [
         {
             'user': p.user_id,
@@ -176,5 +209,11 @@ def serializar_permisos(carpeta=None, document=None):
             'email': p.user.email,
             'nivel': p.nivel,
         }
-        for p in qs.select_related('user')
+        for p in _permisos_de(carpeta, document).exclude(user__isnull=True).select_related('user')
     ]
+
+
+def nivel_del_workspace(carpeta=None, document=None):
+    """El nivel que tiene todo el Workspace sobre el ítem, o None si no tiene."""
+    p = _permisos_de(carpeta, document).filter(user__isnull=True).first()
+    return p.nivel if p else None

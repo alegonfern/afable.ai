@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent,
-  DialogTitle, IconButton, MenuItem, Select, Stack, Switch, Typography, useTheme,
+  Alert, Box, Button, Checkbox, CircularProgress, Dialog, DialogActions,
+  DialogContent, DialogTitle, IconButton, ListItemText, MenuItem, Select, Stack, Switch,
+  Typography, useTheme,
 } from '@mui/material';
-import { Globe, Lock, Trash2, UserPlus } from 'lucide-react';
+import { Building2, Globe, Lock, Trash2, UserPlus } from 'lucide-react';
 import { api } from '../../services/api';
 
 /**
@@ -16,6 +17,17 @@ import { api } from '../../services/api';
  *
  * Si eso no se entiende de un vistazo, la gente va a restringir cosas sin querer o va a
  * creer que restringió algo que sigue a la vista de todos.
+ *
+ * ## Dos formas de dar acceso, y por qué hacen falta las dos
+ *
+ * Persona por persona sirve para las excepciones. Pero el caso más común de una empresa es
+ * "que lo vea todo el equipo, y que solo estos dos lo editen", y eso, de a una persona a la
+ * vez, son tantas cargas como gente haya — una lista que además hay que recordar actualizar
+ * cada vez que entra alguien nuevo. Para eso está **Todo el Workspace**: una casilla que
+ * vale para cualquier miembro, presente y futuro.
+ *
+ * Va arriba de la lista porque es la decisión gruesa: primero cuánto se abre para el
+ * equipo, después a quién se le da algo más.
  */
 export default function DialogoPermisos({ abierto, onCerrar, slug, carpeta, documento, onCambio }) {
   const theme = useTheme();
@@ -26,7 +38,8 @@ export default function DialogoPermisos({ abierto, onCerrar, slug, carpeta, docu
 
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState('');
-  const [aAgregar, setAAgregar] = useState('');
+  // Varias a la vez: dar acceso a cinco personas eran cinco vueltas por este formulario.
+  const [aAgregar, setAAgregar] = useState([]);
   const [nivel, setNivel] = useState('lectura');
 
   const objetivo = carpeta ? { carpeta } : { documento };
@@ -124,11 +137,54 @@ export default function DialogoPermisos({ abierto, onCerrar, slug, carpeta, docu
                   Quiénes entran
                 </Typography>
 
-                <Stack spacing={0.75} sx={{ mb: 2 }}>
-                  {datos.compartido_con.length === 0 ? (
-                    <Typography sx={{ fontSize: '0.875rem', color: textMuted, fontStyle: 'italic' }}>
-                      Nadie todavía. Solo usted y los administradores.
+                {/* La decisión gruesa primero: cuánto se abre para el equipo entero. */}
+                <Stack
+                  direction="row" spacing={1} alignItems="center"
+                  sx={{
+                    p: 1, pl: 0.5, mb: 1.25, borderRadius: '8px',
+                    bgcolor: datos.workspace_nivel ? 'rgba(88,106,208,0.07)' : bgSuave,
+                    border: `1px solid ${datos.workspace_nivel ? 'rgba(88,106,208,0.35)' : borde}`,
+                  }}
+                >
+                  <Checkbox
+                    size="small"
+                    checked={Boolean(datos.workspace_nivel)}
+                    onChange={(e) => cambiar({ workspace_nivel: e.target.checked ? 'lectura' : null })}
+                  />
+                  <Box sx={{ color: '#586AD0', display: 'flex', mt: 0.25 }}>
+                    <Building2 size={16} />
+                  </Box>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography sx={{ fontSize: '0.9rem', fontWeight: 600 }}>
+                      Todo el Workspace
                     </Typography>
+                    <Typography sx={{ fontSize: '0.78rem', color: textMuted }}>
+                      {datos.miembros === 1
+                        ? '1 persona, y quien entre más adelante'
+                        : `Las ${datos.miembros} personas de ${datos.workspace_nombre}, y quien entre más adelante`}
+                    </Typography>
+                  </Box>
+                  {/* Sin la casilla marcada el nivel no significa nada, así que no se ofrece. */}
+                  {datos.workspace_nivel && (
+                    <Select
+                      size="small" value={datos.workspace_nivel}
+                      onChange={(e) => cambiar({ workspace_nivel: e.target.value })}
+                      sx={{ fontSize: '0.8rem', minWidth: 122 }}
+                    >
+                      <MenuItem value="lectura" sx={{ fontSize: '0.8rem' }}>Puede ver</MenuItem>
+                      <MenuItem value="edicion" sx={{ fontSize: '0.8rem' }}>Puede editar</MenuItem>
+                    </Select>
+                  )}
+                </Stack>
+
+                <Stack spacing={0.75} sx={{ mb: 2 }}>
+                  {/* Con el equipo adentro, "nadie todavía" sería falso: lo dice la casilla. */}
+                  {datos.compartido_con.length === 0 ? (
+                    !datos.workspace_nivel && (
+                      <Typography sx={{ fontSize: '0.875rem', color: textMuted, fontStyle: 'italic' }}>
+                        Nadie todavía. Solo usted y los administradores.
+                      </Typography>
+                    )
                   ) : datos.compartido_con.map((p) => (
                     <Stack
                       key={p.user} direction="row" spacing={1} alignItems="center"
@@ -156,14 +212,27 @@ export default function DialogoPermisos({ abierto, onCerrar, slug, carpeta, docu
                 {datos.disponibles.length > 0 && (
                   <Stack direction="row" spacing={1}>
                     <Select
-                      size="small" displayEmpty value={aAgregar}
+                      multiple size="small" displayEmpty value={aAgregar}
                       onChange={(e) => setAAgregar(e.target.value)}
+                      // Con `multiple`, MUI muestra los ids crudos si nadie le dice cómo
+                      // pintar la selección.
+                      renderValue={(elegidos) => (
+                        elegidos.length === 0
+                          ? <Box component="span" sx={{ color: textMuted }}>Elegir personas…</Box>
+                          : elegidos.length === 1
+                            ? datos.disponibles.find((p) => p.id === elegidos[0])?.name
+                            : `${elegidos.length} personas`
+                      )}
                       sx={{ fontSize: '0.85rem', flex: 1 }}
                     >
-                      <MenuItem value="" sx={{ fontSize: '0.85rem' }}>Elegir a alguien…</MenuItem>
                       {datos.disponibles.map((p) => (
-                        <MenuItem key={p.id} value={p.id} sx={{ fontSize: '0.85rem' }}>
-                          {p.name} · {p.email}
+                        <MenuItem key={p.id} value={p.id} sx={{ fontSize: '0.85rem', py: 0.25 }}>
+                          <Checkbox size="small" checked={aAgregar.includes(p.id)} sx={{ mr: 0.5 }} />
+                          <ListItemText
+                            primary={p.name} secondary={p.email}
+                            primaryTypographyProps={{ fontSize: '0.85rem' }}
+                            secondaryTypographyProps={{ fontSize: '0.75rem' }}
+                          />
                         </MenuItem>
                       ))}
                     </Select>
@@ -175,9 +244,9 @@ export default function DialogoPermisos({ abierto, onCerrar, slug, carpeta, docu
                       <MenuItem value="edicion" sx={{ fontSize: '0.85rem' }}>Puede editar</MenuItem>
                     </Select>
                     <Button
-                      onClick={() => { cambiar({ ids: [aAgregar], nivel }); setAAgregar(''); }}
-                      disabled={!aAgregar} startIcon={<UserPlus size={14} />}
-                      sx={{ textTransform: 'none', fontWeight: 600 }}
+                      onClick={() => { cambiar({ ids: aAgregar, nivel }); setAAgregar([]); }}
+                      disabled={aAgregar.length === 0} startIcon={<UserPlus size={14} />}
+                      sx={{ textTransform: 'none', fontWeight: 600, whiteSpace: 'nowrap' }}
                     >
                       Dar acceso
                     </Button>

@@ -724,3 +724,224 @@ class NadieUsaUnAgenteParaSaltearUnPermisoTests(PermisosBase):
             allowed_doc_ids=contexto.get('allowed_doc_ids'),
         )
         self.assertIn('error', r)
+
+
+class PermisoDeTodoElWorkspaceTests(PermisosBase):
+    """Un permiso sin persona vale para cualquier miembro.
+
+    Existe para el caso más común de una empresa: "que lo vea todo el equipo, pero que solo
+    estos dos lo editen". Antes eso eran tantos permisos como personas.
+    """
+
+    def crear_del_workspace(self, nivel='lectura', carpeta=None, document=None):
+        from apps.archivos.models import Permiso
+
+        return Permiso.objects.create(
+            carpeta=carpeta or (self.rrhh if document is None else None),
+            document=document, user=None, nivel=nivel,
+        )
+
+    def test_alcanza_a_alguien_sin_permiso_propio(self):
+        self.assertIsNone(self.nivel_doc(self.ana, self.sueldos))
+        self.crear_del_workspace('lectura')
+        self.assertEqual(self.nivel_doc(self.ana, self.sueldos), 'lectura')
+        # Y a la otra persona también: no hace falta repetirlo para cada una.
+        self.assertEqual(self.nivel_doc(self.beto, self.sueldos), 'lectura')
+
+    def test_tambien_alcanza_a_lo_que_hay_mas_abajo(self):
+        """Puesto en la carpeta de arriba, baja igual que la restricción."""
+        adentro = CompanyDocument.objects.create(
+            organization=self.org, title='Anexo', file='a.md',
+            content_type='text/markdown', editable=True, carpeta=self.contratos,
+        )
+        self.assertIsNone(self.nivel_doc(self.ana, adentro))
+        self.crear_del_workspace('lectura')
+        self.assertEqual(self.nivel_doc(self.ana, adentro), 'lectura')
+
+    def test_el_permiso_propio_suma_pero_no_resta(self):
+        """Lectura para el equipo y edición a nombre propio: esa persona edita."""
+        from apps.archivos.models import Permiso
+
+        self.crear_del_workspace('lectura')
+        Permiso.objects.create(carpeta=self.rrhh, user=self.ana, nivel='edicion')
+
+        self.assertEqual(self.nivel_doc(self.ana, self.sueldos), 'edicion')
+        self.assertEqual(self.nivel_doc(self.beto, self.sueldos), 'lectura')
+
+    def test_el_propio_mas_bajo_no_le_quita_lo_del_equipo(self):
+        """Al revés: el equipo edita y esta persona tiene solo lectura → sigue editando.
+
+        Un permiso personal está puesto para DAR acceso, no para recortarlo. Si hiciera
+        falta recortar, se saca el del equipo.
+        """
+        from apps.archivos.models import Permiso
+
+        self.crear_del_workspace('edicion')
+        Permiso.objects.create(carpeta=self.rrhh, user=self.ana, nivel='lectura')
+        self.assertEqual(self.nivel_doc(self.ana, self.sueldos), 'edicion')
+
+    def test_aparece_en_lo_que_la_persona_ve(self):
+        self.assertNotIn('Sueldos 2026', self.visibles(self.ana))
+        self.crear_del_workspace('lectura')
+        self.assertIn('Sueldos 2026', self.visibles(self.ana))
+
+    def test_sobre_un_documento_restringido_solo(self):
+        self.publico.restringido = True
+        self.publico.save(update_fields=['restringido'])
+        self.assertIsNone(self.nivel_doc(self.ana, self.publico))
+
+        self.crear_del_workspace('edicion', carpeta=None, document=self.publico)
+        self.assertEqual(self.nivel_doc(self.ana, self.publico), 'edicion')
+
+    def test_no_alcanza_a_quien_no_es_del_workspace(self):
+        """"Todo el Workspace" es el Workspace, no cualquiera con una sesión abierta."""
+        self.crear_del_workspace('edicion')
+        self.como(self.ajeno)
+        r = self.client.get(URL, self.q())
+        self.assertEqual(r.status_code, 404)
+
+
+class CompartirConTodoElWorkspaceTests(PermisosBase):
+    """El endpoint: poner, cambiar y quitar el permiso del Workspace desde la pantalla."""
+
+    def compartir(self, **extra):
+        self.como()
+        return self.client.post(
+            '/api/v1/archivos/compartir/',
+            {'workspace': self.ws.slug, 'carpeta': self.rrhh.pk, **extra}, format='json',
+        )
+
+    def test_se_le_da_acceso_a_todo_el_workspace_de_una_vez(self):
+        r = self.compartir(workspace_nivel='lectura')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data['workspace_nivel'], 'lectura')
+        self.assertEqual(self.nivel_doc(self.ana, self.sueldos), 'lectura')
+
+    def test_no_se_cuenta_como_una_persona_en_la_lista(self):
+        """Sin nombre ni correo, una fila más se leería como una persona rota."""
+        r = self.compartir(workspace_nivel='lectura')
+        self.assertEqual(r.data['compartido_con'], [])
+
+    def test_se_sube_de_lectura_a_edicion_sin_duplicar(self):
+        from apps.archivos.models import Permiso
+
+        self.compartir(workspace_nivel='lectura')
+        r = self.compartir(workspace_nivel='edicion')
+        self.assertEqual(r.data['workspace_nivel'], 'edicion')
+        self.assertEqual(
+            Permiso.objects.filter(carpeta=self.rrhh, user__isnull=True).count(), 1,
+        )
+
+    def test_se_quita_mandando_null(self):
+        self.compartir(workspace_nivel='lectura')
+        r = self.compartir(workspace_nivel=None)
+        self.assertIsNone(r.data['workspace_nivel'])
+        self.assertIsNone(self.nivel_doc(self.ana, self.sueldos))
+
+    def test_tambien_se_quita_con_delete(self):
+        self.compartir(workspace_nivel='lectura')
+        self.como()
+        r = self.client.delete(
+            '/api/v1/archivos/compartir/',
+            {'workspace': self.ws.slug, 'carpeta': self.rrhh.pk, 'todo_el_workspace': True},
+            format='json',
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(r.data['workspace_nivel'])
+
+    def test_un_nivel_inventado_no_pasa(self):
+        r = self.compartir(workspace_nivel='dueno')
+        self.assertEqual(r.status_code, 400)
+
+    def test_quien_solo_lee_no_le_da_acceso_al_equipo(self):
+        from apps.archivos.models import Permiso
+
+        Permiso.objects.create(carpeta=self.rrhh, user=self.ana, nivel='lectura')
+        self.como(self.ana)
+        r = self.client.post(
+            '/api/v1/archivos/compartir/',
+            {'workspace': self.ws.slug, 'carpeta': self.rrhh.pk, 'workspace_nivel': 'edicion'},
+            format='json',
+        )
+        self.assertEqual(r.status_code, 403)
+
+    def test_se_le_da_acceso_a_varias_personas_en_un_pedido(self):
+        """La otra mitad del pedido: elegir de a varias, no de a una."""
+        r = self.compartir(ids=[self.ana.pk, self.beto.pk], nivel='lectura')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(r.data['compartido_con']), 2)
+
+    def test_la_pantalla_sabe_a_cuanta_gente_alcanza(self):
+        """Sin el número, "todo el Workspace" no dice nada sobre cuánto se está abriendo."""
+        r = self.compartir(workspace_nivel='lectura')
+        self.assertEqual(r.data['miembros'], 3)
+        self.assertEqual(r.data['workspace_nombre'], self.ws.name)
+
+
+class QuienRestringeNoSeQuedaAfueraTests(PermisosBase):
+    """Restringir algo no puede dejar afuera a quien apretó el botón.
+
+    Era un defecto real: un miembro común que restringía una carpeta que no había creado se
+    cerraba la puerta en el mismo clic. La respuesta salía 404 —al releer el ítem ya no lo
+    veía— y la carpeta le desaparecía de la pantalla.
+    """
+
+    def setUp(self):
+        super().setUp()
+        # Una carpeta abierta, creada por otra persona: el caso que fallaba.
+        self.comun = Carpeta.objects.create(
+            organization=self.org, name='Ventas', created_by=self.user,
+        )
+
+    def restringir(self, quien, **item):
+        self.como(quien)
+        r = self.client.post(
+            '/api/v1/archivos/compartir/',
+            {'workspace': self.ws.slug, 'restringido': True, **item}, format='json',
+        )
+        # Sin releer, el objeto de la prueba sigue con `restringida=False` y CUALQUIER
+        # comprobación de nivel da 'edicion' — la prueba pasaría sin probar nada.
+        self.comun.refresh_from_db()
+        self.publico.refresh_from_db()
+        return r
+
+    def nivel_carp(self, quien, carpeta):
+        from apps.archivos.permisos import nivel_sobre_carpeta
+        from apps.workspaces.permissions import membership_por_organizacion
+
+        return nivel_sobre_carpeta(quien, carpeta, membership_por_organizacion(quien, self.org))
+
+    def test_un_miembro_restringe_una_carpeta_ajena_y_sigue_entrando(self):
+        r = self.restringir(self.ana, carpeta=self.comun.pk)
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.data['restringido'])
+        self.assertTrue(self.comun.restringida)
+        self.assertEqual(self.nivel_carp(self.ana, self.comun), 'edicion')
+
+    def test_y_los_demas_si_quedan_afuera(self):
+        """La otra mitad: el permiso automático es para quien restringió, no para todos."""
+        self.restringir(self.ana, carpeta=self.comun.pk)
+        self.assertIsNone(self.nivel_carp(self.beto, self.comun))
+
+    def test_tambien_al_restringir_un_documento(self):
+        r = self.restringir(self.ana, documento=self.publico.pk)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(self.nivel_doc(self.ana, self.publico), 'edicion')
+
+    def test_al_administrador_no_se_le_agrega_un_permiso_de_adorno(self):
+        """Ya entra por ser admin: una fila más solo ensuciaría «quiénes entran»."""
+        r = self.restringir(self.user, carpeta=self.comun.pk)
+        self.assertEqual(r.data['compartido_con'], [])
+
+    def test_a_quien_la_creo_tampoco(self):
+        from apps.workspaces.models import ROLE_MEMBER
+
+        suya = Carpeta.objects.create(
+            organization=self.org, name='Lo de Ana', created_by=self.ana,
+        )
+        self.assertEqual(self.ws.memberships.get(user=self.ana).role, ROLE_MEMBER)
+        r = self.restringir(self.ana, carpeta=suya.pk)
+        self.assertEqual(r.data['compartido_con'], [])
+        suya.refresh_from_db()
+        self.assertTrue(suya.restringida)
+        self.assertEqual(self.nivel_carp(self.ana, suya), 'edicion')
