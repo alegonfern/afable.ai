@@ -334,20 +334,24 @@ Sé conversacional, breve y entusiasta."""
     from services.connector_registry import get_connections_context
     # google_drive no es un sistema "consultable en vivo" (no tiene run_sql/query_odoo) —
     # su contenido llega vía CompanyDocument (sync) y el tool read_company_document,
-    # no por este modo. Si es la única conexión, no debe forzar 'connected_systems'.
+    # no por este modo: no cuenta como sistema consultable en vivo.
     connections = SystemConnection.objects.filter(organization=org, is_active=True).exclude(connector_type='google_drive')
     # El Espacio recorta antes que cualquier otra cosa: lo que no está en el Espacio
     # del agente no existe para ese agente, ni siquiera para nombrarlo en el prompt.
     if espacio_conns is not None:
         connections = connections.filter(id__in=espacio_conns)
 
-    # Solo el modo 'connected_systems' corre con la capa de herramientas
-    # (`run_agent_live`). En los demás no hay ninguna herramienta que ejecutar, así que
-    # el contexto NO puede decirle al agente que llame a `buscar_en_fuentes`: cuando lo
-    # hacía, un modelo como gpt-oss se gastaba el turno escribiendo la invocación como
-    # texto y contestaba nada. Se vio en el resultado de una Tarea, que quedó con un
-    # `__ACTION__` pelado en vez de una respuesta.
-    con_herramientas = connections.exists()
+    # El agente corre CON la capa de herramientas (`run_agent_live`) siempre que tenga
+    # algo que hacer con ellas — y con documentos siempre lo tiene: leer, buscar, crear
+    # y editar archivos no necesita ningún ERP conectado.
+    #
+    # Antes esto era `connections.exists()`, o sea que una empresa con solo documentos
+    # tenía un agente SIN herramientas: no podía buscar en las fuentes ni, desde que
+    # existe la edición, escribir un documento. `_tools_spec` es el que decide qué
+    # herramientas entrega según lo que haya conectado, así que acá alcanza con abrir la
+    # puerta; el prompt de abajo se adapta a que no haya sistemas.
+    hay_conexiones = connections.exists()
+    con_herramientas = True
     org_ctx = _get_org_context(
         org, allowed_doc_ids=espacio_docs, inyectados=docs_en_prompt, consulta=consulta,
         con_herramientas=con_herramientas,
@@ -403,7 +407,7 @@ Sé conversacional, breve y entusiasta."""
             )
 
     if con_herramientas:
-        conn_ctx = get_connections_context(org, espacio_conns) or ''
+        conn_ctx = (get_connections_context(org, espacio_conns) or '') if hay_conexiones else ''
 
         # A QUE sistemas puede mirar: esto si es propio del modo con herramientas.
         allowed_ids = None
@@ -435,16 +439,8 @@ Sé conversacional, breve y entusiasta."""
                 allowed_ids = [mentioned.id]
                 agent_block += f"\nEl usuario mencionó explícitamente el sistema «{mentioned.name}» en este mensaje: consulta SOLO ese sistema.\n"
 
-        return {
-            'mode': 'connected_systems',
-            'org': org,
-            'allowed_ids': allowed_ids,
-            'allowed_doc_ids': espacio_docs,
-            'docs_en_prompt': docs_en_prompt,
-            'agent_model': agent_model,
-            'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
-{perm_ctx}{agent_block}
-{org_ctx}Tienes estos sistemas conectados (resumen de su esquema):
+        bloque_sistemas = (
+            f"""Tienes estos sistemas conectados (resumen de su esquema):
 
 {conn_ctx}
 
@@ -465,6 +461,42 @@ PRIMERO obtén el dato real: usa run_sql si el sistema es PostgreSQL/MSSQL, o qu
 sistema es Odoo. Explora con list_tables/describe_table si hace falta. NUNCA inventes un dato: si
 una consulta no devuelve resultados o falla, dilo con claridad. NO escribas tú una línea de
 fuente — el sistema la añade automáticamente con la tabla y la hora reales.
+"""
+            if hay_conexiones else
+            'NO tienes ningún sistema (ERP, CRM o base de datos) conectado, así que no puedes '
+            'responder con cifras de ventas, stock ni facturación al día. Si te piden algo de '
+            'eso, dilo con claridad y menciona que se conecta desde Espacios › Conexiones. '
+            'Nunca inventes una cifra.\n'
+        )
+
+        return {
+            # Se llamaba 'connected_systems', y desde que el agente corre con
+            # herramientas TAMBIÉN sin sistemas conectados ese nombre mentía: el modo es
+            # "el agente con herramientas", tenga o no un ERP enchufado.
+            'mode': 'con_herramientas',
+            'org': org,
+            'allowed_ids': allowed_ids,
+            'allowed_doc_ids': espacio_docs,
+            'docs_en_prompt': docs_en_prompt,
+            'agent_model': agent_model,
+            'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
+{perm_ctx}{agent_block}
+{org_ctx}{bloque_sistemas}
+HERRAMIENTAS DE ARCHIVOS — puedes leer y también ESCRIBIR documentos:
+- buscar_en_fuentes: busca por significado en los documentos y archivos de la empresa.
+- read_company_document(id): el contenido completo de un documento.
+- crear_documento(titulo, contenido): crea un documento de texto NUEVO y lo guarda. Úsala
+  cuando el usuario pida redactar o preparar algo que quiera conservar.
+- editar_documento(id, viejo, nuevo, mensaje): cambia un fragmento EXACTO por otro sin tocar
+  el resto. Lee el documento primero y copia el fragmento tal como está.
+- reescribir_documento(id, contenido, mensaje): reemplaza todo el texto. Solo cuando el
+  documento se reescribe de punta a punta.
+
+Cada cambio que hagas queda guardado como una versión FIRMADA con tu nombre, y el equipo
+puede ver qué cambiaste y volver atrás. Por eso: nunca cambies algo que el usuario no pidió
+cambiar, y di siempre qué cambiaste. Si un documento no es editable (un PDF, un Excel), no
+insistas: ofrécele crear uno nuevo.
+
 Responde siempre en español, conciso. Usa markdown para respuestas largas.{ACTIONS_PROMPT}""",
         }
 
@@ -829,11 +861,14 @@ class DirectChatView(APIView):
         model = (request.data.get('model') or '').strip() or context.get('agent_model')
         _, resolved_model = resolve_model(model)
 
-        if context.get('mode') == 'connected_systems':
+        if context.get('mode') == 'con_herramientas':
             from services.agent_service import run_agent_live
             response_text = run_agent_live(
                 full_history, context['org'], system_prompt, model,
                 context.get('allowed_ids'), context.get('allowed_doc_ids'),
+                # Para firmar las versiones que escriba: el historial de un documento
+                # dice qué agente lo tocó, no solo que "lo tocó la IA".
+                agente=agent,
             )
         else:
             response_text = chat_direct(full_history, system_prompt, model)
@@ -927,13 +962,14 @@ class DirectChatStreamView(APIView):
             accumulated = []
             yield f"data: {json.dumps({'conversation_id': conv_id, 'model': resolved_model, 'agent': agente_payload})}\n\n"
 
-            if mode == 'connected_systems':
+            if mode == 'con_herramientas':
                 # Agente con datos en vivo: emite estados de progreso por cada herramienta
                 # mientras consulta los sistemas, y al final el texto en trozos (efecto typing).
                 from services.agent_service import run_agent_live_events
                 full_text = ''
                 for event in run_agent_live_events(
                     full_history, org, system_prompt, model, allowed_ids, allowed_doc_ids,
+                    agente=agent,
                 ):
                     if 'status' in event:
                         yield f"data: {json.dumps({'status': event['status']})}\n\n"

@@ -422,7 +422,7 @@ def _provider_for_model(model: str) -> str:
     return 'ollama'
 
 
-def run_agent_live_events(history: list[dict], organization, system_prompt: str, model: str = None, allowed_ids=None, allowed_doc_ids=None):
+def run_agent_live_events(history: list[dict], organization, system_prompt: str, model: str = None, allowed_ids=None, allowed_doc_ids=None, agente=None):
     """
     Generador del agente con datos en vivo. Va emitiendo dicts de progreso
     {'status': '...'} mientras consulta los sistemas conectados vía tool-use, y al
@@ -432,23 +432,25 @@ def run_agent_live_events(history: list[dict], organization, system_prompt: str,
     """
     provider = _provider_for_model(model) if model else getattr(settings, 'AI_PROVIDER', 'ollama')
     if provider == 'anthropic':
-        yield from _run_anthropic_agent_live_events(history, system_prompt, organization, model, allowed_ids, allowed_doc_ids)
+        yield from _run_anthropic_agent_live_events(history, system_prompt, organization, model, allowed_ids, allowed_doc_ids, agente)
     elif provider == 'deepseek':
-        yield from _run_deepseek_agent_events(history, system_prompt, organization, model, allowed_ids, allowed_doc_ids)
+        yield from _run_deepseek_agent_events(history, system_prompt, organization, model, allowed_ids, allowed_doc_ids, agente)
     else:
-        yield from _run_ollama_agent_events(history, system_prompt, organization, model, allowed_ids, allowed_doc_ids)
+        yield from _run_ollama_agent_events(history, system_prompt, organization, model, allowed_ids, allowed_doc_ids, agente)
 
 
-def run_agent_live(history: list[dict], organization, system_prompt: str, model: str = None, allowed_ids=None, allowed_doc_ids=None) -> str:
+def run_agent_live(history: list[dict], organization, system_prompt: str, model: str = None, allowed_ids=None, allowed_doc_ids=None, agente=None) -> str:
     """Versión no-streaming: drena el generador y devuelve solo el texto final."""
     final = ''
-    for event in run_agent_live_events(history, organization, system_prompt, model, allowed_ids, allowed_doc_ids):
+    for event in run_agent_live_events(
+        history, organization, system_prompt, model, allowed_ids, allowed_doc_ids, agente,
+    ):
         if 'final' in event:
             final = event['final']
     return final
 
 
-def _run_ollama_agent_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None):
+def _run_ollama_agent_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None, agente=None):
     from services import agent_tools
 
     base_url, model, headers = _ollama_config(model)
@@ -501,7 +503,7 @@ def _run_ollama_agent_events(history, system_prompt, organization, model=None, a
                     continue
                 seen_calls.add(sig)
                 yield {'status': _tool_status(name, args)}
-                result = agent_tools.execute_tool(name, args, organization, provenance, allowed_ids, artifacts, allowed_doc_ids)
+                result = agent_tools.execute_tool(name, args, organization, provenance, allowed_ids, artifacts, allowed_doc_ids, agente)
                 messages.append({"role": "tool", "content": _tool_result_json(result)})
 
         yield {'final': _finalize(
@@ -517,7 +519,7 @@ def _run_ollama_agent_events(history, system_prompt, organization, model=None, a
         yield {'final': f"Error al consultar los sistemas: {str(e)}"}
 
 
-def _run_deepseek_agent_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None):
+def _run_deepseek_agent_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None, agente=None):
     """
     API de DeepSeek — compatible con el formato de chat completions de OpenAI.
     Reusa `tools_for_ollama` porque el esquema de herramientas es idéntico
@@ -595,7 +597,7 @@ def _run_deepseek_agent_events(history, system_prompt, organization, model=None,
                     continue
                 seen_calls.add(sig)
                 yield {'status': _tool_status(name, args)}
-                result = agent_tools.execute_tool(name, args, organization, provenance, allowed_ids, artifacts, allowed_doc_ids)
+                result = agent_tools.execute_tool(name, args, organization, provenance, allowed_ids, artifacts, allowed_doc_ids, agente)
                 messages.append({
                     "role": "tool", "tool_call_id": tc.get('id'),
                     "content": _tool_result_json(result),
@@ -614,7 +616,7 @@ def _run_deepseek_agent_events(history, system_prompt, organization, model=None,
         yield {'final': f"Error al consultar los sistemas: {str(e)}"}
 
 
-def _run_anthropic_agent_live_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None):
+def _run_anthropic_agent_live_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None, agente=None):
     from services import agent_tools
 
     tools = agent_tools.tools_for_anthropic(organization, allowed_ids)
@@ -641,7 +643,7 @@ def _run_anthropic_agent_live_events(history, system_prompt, organization, model
             for block in response.content:
                 if getattr(block, 'type', None) == "tool_use":
                     yield {'status': _tool_status(block.name, block.input)}
-                    result = agent_tools.execute_tool(block.name, block.input, organization, provenance, allowed_ids, artifacts, allowed_doc_ids)
+                    result = agent_tools.execute_tool(block.name, block.input, organization, provenance, allowed_ids, artifacts, allowed_doc_ids, agente)
                     results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,

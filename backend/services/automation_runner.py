@@ -37,11 +37,11 @@ def _run_prompt(user, organization, prompt: str, agent=None) -> str:
     # cabe en el contexto, es lo que decide que fragmentos entran.
     ctx = _build_onboarding_context(user, agent, consulta=prompt)
     system_prompt = ctx.get('system_prompt', '')
-    if ctx.get('mode') == 'connected_systems':
+    if ctx.get('mode') == 'con_herramientas':
         salida = run_agent_live(
             [{'role': 'user', 'content': prompt}], organization, system_prompt,
             model=ctx.get('agent_model'), allowed_ids=ctx.get('allowed_ids'),
-            allowed_doc_ids=ctx.get('allowed_doc_ids'),
+            allowed_doc_ids=ctx.get('allowed_doc_ids'), agente=agent,
         )
     else:
         salida = chat_direct([{'role': 'user', 'content': prompt}], system_prompt)

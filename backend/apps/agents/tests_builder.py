@@ -506,7 +506,9 @@ class QuienEsElAgenteEnTodosLosModosTests(BaseConstructor):
 
     def test_sin_sistemas_conectados_el_agente_sigue_siendo_el_agente(self):
         modo, prompt = self.prompt()
-        self.assertNotEqual(modo, 'connected_systems')
+        # El agente corre con herramientas aunque no haya ERP conectado: sin eso no
+        # podría ni buscar en los documentos ni escribir uno.
+        self.assertEqual(modo, 'con_herramientas')
         self.assertIn('tres lineas', prompt)
         self.assertIn('facturas del SII', prompt)
         self.assertIn('Trate de usted', prompt)
@@ -517,7 +519,7 @@ class QuienEsElAgenteEnTodosLosModosTests(BaseConstructor):
             organization=self.org, name='Odoo', connector_type='odoo', is_active=True,
         )
         modo, prompt = self.prompt()
-        self.assertEqual(modo, 'connected_systems')
+        self.assertEqual(modo, 'con_herramientas')
         self.assertIn('tres lineas', prompt)
         self.assertIn('facturas del SII', prompt)
 

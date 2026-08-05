@@ -54,10 +54,18 @@ def _odoo_client(conn):
 
 # ── Definición neutral de herramientas ────────────────────────────────────────
 
+# Las que solo sirven si hay un sistema conectado que consultar. Sin conexiones se
+# retiran: ofrecerle a un modelo una herramienta que no puede usar hace que gaste el
+# turno intentando invocarla — se vio pasar exactamente eso con el prompt.
+SOLO_CON_CONEXIONES = (
+    'list_systems', 'list_tables', 'describe_table', 'run_sql', 'query_odoo', 'run_python',
+)
+
+
 def _tools_spec(org, allowed_ids=None):
     conns = _active_connections(org, allowed_ids)
     systems = ', '.join(f'"{c.name}" ({c.connector_type})' for c in conns) or 'ninguno'
-    return [
+    todas = [
         {
             "name": "list_systems",
             "description": "Lista los sistemas conectados de la empresa y su tipo. Úsalo si no sabes qué hay disponible.",
@@ -206,6 +214,66 @@ def _tools_spec(org, allowed_ids=None):
             },
         },
         {
+            "name": "crear_documento",
+            "description": (
+                "Crea un documento de texto NUEVO en los archivos de la empresa y lo guarda. "
+                "Úsala cuando el usuario pida escribir, redactar o preparar algo que quiera "
+                "conservar: un informe, una propuesta, un procedimiento, una minuta. Devuelve "
+                "el id, con el que después puedes editarlo. NO la uses para responder en el "
+                "chat: solo cuando el usuario quiera que quede guardado."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "titulo": {"type": "string", "description": "Nombre del documento"},
+                    "contenido": {"type": "string", "description": "El texto completo, en markdown"},
+                },
+                "required": ["titulo", "contenido"],
+            },
+        },
+        {
+            "name": "editar_documento",
+            "description": (
+                "Cambia un fragmento EXACTO del texto de un documento por otro, sin tocar el "
+                "resto. Primero lee el documento con read_company_document para copiar el "
+                "fragmento tal como está, con sus espacios y saltos de línea. El fragmento "
+                "tiene que aparecer UNA sola vez: si aparece más, incluye más texto alrededor "
+                "para que sea único. Cada edición queda registrada con tu nombre y se puede "
+                "revertir, así que no tengas miedo de equivocarte — pero nunca cambies algo "
+                "que el usuario no pidió cambiar."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer", "description": "id del documento"},
+                    "viejo": {"type": "string", "description": "El fragmento tal como está hoy"},
+                    "nuevo": {"type": "string", "description": "Con qué reemplazarlo"},
+                    "mensaje": {
+                        "type": "string",
+                        "description": "Qué cambiaste y por qué, en una línea",
+                    },
+                },
+                "required": ["id", "viejo", "nuevo"],
+            },
+        },
+        {
+            "name": "reescribir_documento",
+            "description": (
+                "Reemplaza TODO el texto de un documento. Úsala solo cuando el documento se "
+                "reescribe de punta a punta; para un cambio puntual usa editar_documento, que "
+                "no puede perder por accidente lo que no tocaste."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer", "description": "id del documento"},
+                    "contenido": {"type": "string", "description": "El texto completo nuevo"},
+                    "mensaje": {"type": "string", "description": "Qué cambiaste, en una línea"},
+                },
+                "required": ["id", "contenido"],
+            },
+        },
+        {
             "name": "actualizar_documentos",
             "description": (
                 "Vuelve a bajar desde Google Drive los archivos conectados y devuelve el contenido "
@@ -222,6 +290,12 @@ def _tools_spec(org, allowed_ids=None):
             },
         },
     ]
+    if conns:
+        return todas
+    # Sin conexiones queda el juego de documentos, que es lo que hace falta para leer,
+    # crear y editar archivos — y es todo lo que una empresa que solo subió documentos
+    # necesita del agente.
+    return [t for t in todas if t['name'] not in SOLO_CON_CONEXIONES]
 
 
 def tools_for_ollama(org, allowed_ids=None):
@@ -262,6 +336,21 @@ _ALIAS_ARGS = {
     'buscar_en_fuentes': {'consulta': ('query', 'q', 'busqueda', 'search', 'texto', 'termino')},
     'actualizar_documentos': {'id': ('document_id', 'doc_id', 'documento_id')},
     'read_company_document': {'id': ('document_id', 'doc_id', 'documento_id')},
+    'crear_documento': {
+        'titulo': ('title', 'nombre', 'name'),
+        'contenido': ('content', 'texto', 'body'),
+    },
+    'editar_documento': {
+        'id': ('document_id', 'doc_id', 'documento_id'),
+        'viejo': ('old', 'old_string', 'anterior', 'buscar', 'original'),
+        'nuevo': ('new', 'new_string', 'reemplazo', 'replace'),
+        'mensaje': ('message', 'motivo', 'descripcion'),
+    },
+    'reescribir_documento': {
+        'id': ('document_id', 'doc_id', 'documento_id'),
+        'contenido': ('content', 'texto', 'body'),
+        'mensaje': ('message', 'motivo', 'descripcion'),
+    },
 }
 
 
@@ -294,12 +383,14 @@ def _documentos(org, allowed_doc_ids=None):
     return qs
 
 
-def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None, artifacts: dict = None, allowed_doc_ids=None) -> dict:
+def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None, artifacts: dict = None, allowed_doc_ids=None, agente=None) -> dict:
     """Ejecuta una herramienta y registra procedencia en `provenance`.
     `allowed_ids` (si viene) limita a qué sistemas conectados puede acceder el agente.
     `allowed_doc_ids` hace lo mismo con los documentos: los dos salen del Espacio
     del agente (ver `apps/workspaces/permissions.alcance_de_agente`).
-    `artifacts` (si viene) acumula figuras generadas: marcador → PNG base64."""
+    `artifacts` (si viene) acumula figuras generadas: marcador → PNG base64.
+    `agente` es quien está ejecutando: se usa para FIRMAR las versiones que escriba, así
+    el historial de un documento dice qué agente lo tocó y no solo que "lo tocó la IA"."""
     args = _normalizar_args(name, args)
     now = datetime.now().strftime('%H:%M')
     try:
@@ -436,6 +527,9 @@ def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None,
                 "errores": errores or None,
             }
 
+        if name in ('crear_documento', 'editar_documento', 'reescribir_documento'):
+            return _escribir_documento(name, args or {}, org, provenance, allowed_doc_ids, now, agente)
+
         if name == 'read_company_document':
             from apps.organizations.models import CompanyDocument
             doc_id = (args or {}).get('id')
@@ -569,3 +663,89 @@ def build_citation(provenance: list) -> str:
             parts.append(f"{prefix}·{label}" if prefix else label)
     when = provenance[-1].get('at')
     return f"\n\n_[Fuente: {', '.join(parts)} · consultado {when}]_"
+
+
+# ── Escribir documentos ───────────────────────────────────────────────────────
+
+def _escribir_documento(name, args, org, provenance, allowed_doc_ids, now, agente=None):
+    """Las tres herramientas de escritura: crear, editar por reemplazo y reescribir.
+
+    Todo pasa por `services/documentos.py`, que es lo que garantiza que cada cambio
+    quede como una versión firmada. Un camino de escritura que no pase por ahí dejaría
+    cambios sin historial, y el historial es justo lo que hace razonable que un agente
+    edite documentos de la empresa.
+    """
+    from apps.organizations.models import CompanyDocument
+    from services.documentos import (
+        NoEditable, TextoNoEncontrado, asegurar_version_inicial, editar_por_reemplazo,
+        escribir, es_editable,
+    )
+
+    if name == 'crear_documento':
+        titulo = (args.get('titulo') or '').strip()[:255]
+        contenido = args.get('contenido') or ''
+        if not titulo:
+            return {"error": "Falta el título del documento."}
+        if not contenido.strip():
+            return {"error": "No se crea un documento vacío: escribe su contenido."}
+
+        # Un documento que escribe la IA nace editable y sin archivo adjunto: su
+        # contenido ES el texto, no hay un original binario del que extraerlo.
+        doc = CompanyDocument.objects.create(
+            organization=org, title=titulo, category='otro',
+            content_type='text/markdown', editable=True,
+            source='manual', is_public=True,
+        )
+        escribir(doc, contenido, agente=agente, mensaje='Creado por el agente')
+        provenance.append({
+            "system": f'Documento «{doc.title}» (creado)', "category": "otro",
+            "tables": None, "rows": None, "at": now,
+        })
+        return {
+            "ok": True, "id": doc.id, "titulo": doc.title,
+            "nota": f'Documento creado con id={doc.id}. Para cambiarlo usa '
+                    f'editar_documento con ese id.',
+        }
+
+    doc_id = args.get('id')
+    doc = _documentos(org, allowed_doc_ids).filter(id=doc_id).first()
+    if doc is None:
+        return {"error": f"No existe un documento con id={doc_id} al que puedas acceder."}
+    if not doc.editable:
+        return {
+            "error": f'«{doc.title}» no es un documento de texto editable (es '
+                     f'{doc.content_type or "un archivo binario"}). Puedes leerlo, y si hay '
+                     f'que cambiarlo, crear uno nuevo con crear_documento.',
+        }
+
+    # Sin versión 1 no habría a dónde volver despues del primer cambio del agente.
+    asegurar_version_inicial(doc)
+
+    try:
+        if name == 'editar_documento':
+            version = editar_por_reemplazo(
+                doc, args.get('viejo') or '', args.get('nuevo') or '',
+                agente=agente, mensaje=args.get('mensaje') or '',
+            )
+        else:
+            contenido = args.get('contenido') or ''
+            if not contenido.strip():
+                return {"error": "No se reescribe un documento a vacío."}
+            version = escribir(
+                doc, contenido, agente=agente,
+                mensaje=args.get('mensaje') or 'Reescrito por el agente',
+            )
+    except TextoNoEncontrado as e:
+        return {"error": str(e)}
+    except NoEditable as e:
+        return {"error": str(e)}
+
+    provenance.append({
+        "system": f'Documento «{doc.title}» (editado)', "category": "otro",
+        "tables": None, "rows": None, "at": now,
+    })
+    return {
+        "ok": True, "id": doc.id, "titulo": doc.title, "version": version.numero,
+        "nota": f'Guardado como versión {version.numero}. El equipo puede ver qué '
+                f'cambiaste y volver atrás.',
+    }

@@ -223,6 +223,17 @@ class CompanyDocument(models.Model):
         'sesiones.Sesion', on_delete=models.CASCADE,
         null=True, blank=True, related_name='archivos',
     )
+    # Donde vive el archivo en el arbol. `null` = la raiz. Al borrar la carpeta el
+    # documento NO se borra: sube a la raiz (SET_NULL). Borrar una carpeta no puede
+    # llevarse el trabajo que hay dentro sin avisar.
+    carpeta = models.ForeignKey(
+        'archivos.Carpeta', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='documentos',
+    )
+    # Si el texto de este documento se puede editar en Afable. Lo decide el tipo de
+    # archivo al subirlo: un .md o .txt si, un PDF/Word/Excel no — se les extrae el
+    # texto para leerlos, pero escribirles de vuelta les rompe el formato.
+    editable = models.BooleanField(default=False)
     # id del archivo en el sistema de origen (ej. fileId de Drive) — permite hacer
     # upsert en cada sync sin duplicar el mismo archivo como documento nuevo.
     external_id = models.CharField(max_length=255, blank=True)

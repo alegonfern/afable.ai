@@ -27,6 +27,8 @@ INSTALLED_APPS = [
     'apps.agents',
     # Fuentes de conocimiento: el corpus troceado y vectorizado (busqueda semantica).
     'apps.sources',
+    # Archivos: carpetas, versiones y la edicion de documentos (tambien por la IA).
+    'apps.archivos',
     # Sesiones: donde se trabaja en equipo — conversaciones, tareas y archivos.
     # El cascaron se llamaba `rooms` (por "Salas"); se renombro al concepto real.
     'apps.sesiones',

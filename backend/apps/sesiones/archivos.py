@@ -93,14 +93,18 @@ class ArchivoListCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        from services.documentos import es_editable
+
+        content_type = getattr(archivo, 'content_type', '') or ''
         doc = CompanyDocument.objects.create(
             organization=organization, sesion=sesion, uploaded_by=request.user,
             title=(request.data.get('title') or archivo.name)[:255],
             category=request.data.get('category') or 'otro',
             file=archivo,
-            content_type=getattr(archivo, 'content_type', '') or '',
+            content_type=content_type,
             # Visible para el equipo de la Sesión: quien entra a la Sesión lo ve.
             is_public=True,
+            editable=es_editable(archivo.name, content_type),
         )
 
         from services.document_processing import process_document
@@ -116,6 +120,10 @@ class ArchivoListCreateView(APIView):
         from services.indexing import indexar_documento_sin_ruido
 
         indexar_documento_sin_ruido(doc)
+
+        from services.documentos import asegurar_version_inicial
+
+        asegurar_version_inicial(doc, autor=request.user)
 
         return Response(serializar(doc, request), status=status.HTTP_201_CREATED)
 

@@ -12,6 +12,7 @@ urlpatterns = [
         path('invitations/', include('apps.workspaces.invitation_urls')),
         path('organizations/', include('apps.organizations.urls')),
         path('sources/', include('apps.sources.urls')),
+        path('archivos/', include('apps.archivos.urls')),
         path('agents/', include('apps.agents.urls')),
         path('sesiones/', include('apps.sesiones.urls')),
         path('tools/', include('apps.tools.urls')),
