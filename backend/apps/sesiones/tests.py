@@ -674,3 +674,88 @@ class LaSesionPrestaContextoTests(BaseSesiones):
             self.url(), {**self.q(), 'instrucciones_para_agentes': 'Mías'}, format='json',
         )
         self.assertEqual(r.status_code, 403)
+
+
+class CompartirUnaConversacionTests(BaseSesiones):
+    """Compartir un hilo = moverlo a una Sesión.
+
+    No hay un enlace público ni un permiso nuevo: se apoya en lo que la Sesión ya
+    significa — lo que está en ella lo ve su equipo.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from apps.agents.models import Conversation
+
+        self.conv = Conversation.objects.create(
+            user=self.admin, agent=self.agente, title='Mi hilo privado',
+        )
+        self.url_conv = f'/api/v1/agents/conversations/{self.conv.pk}/'
+
+    def test_mover_el_hilo_a_una_sesion_lo_comparte(self):
+        self.como(self.admin)
+        r = self.client.patch(
+            self.url_conv, {'workspace': self.ws.slug, 'sesion': self.sesion.slug}, format='json',
+        )
+        self.assertEqual(r.status_code, 200)
+        self.conv.refresh_from_db()
+        self.assertEqual(self.conv.sesion_id, self.sesion.id)
+
+    def test_mandar_nulo_lo_devuelve_al_historial_privado(self):
+        self.conv.sesion = self.sesion
+        self.conv.save(update_fields=['sesion'])
+
+        self.como(self.admin)
+        self.client.patch(self.url_conv, {'workspace': self.ws.slug, 'sesion': None}, format='json')
+        self.conv.refresh_from_db()
+        self.assertIsNone(self.conv.sesion_id)
+
+    def test_no_se_comparte_en_una_sesion_que_no_se_alcanza(self):
+        """Meter el hilo en una Sesión restringida ajena sería ponerlo donde no va."""
+        self.sesion.visibility = VISIBILIDAD_RESTRINGIDA
+        self.sesion.save(update_fields=['visibility'])
+
+        from apps.agents.models import Conversation
+
+        del_colega = Conversation.objects.create(
+            user=self.colega, agent=self.agente, title='Hilo del colega',
+        )
+        self.como(self.colega)
+        r = self.client.patch(
+            f'/api/v1/agents/conversations/{del_colega.pk}/',
+            {'workspace': self.ws.slug, 'sesion': self.sesion.slug}, format='json',
+        )
+        self.assertEqual(r.status_code, 400)
+        del_colega.refresh_from_db()
+        self.assertIsNone(del_colega.sesion_id)
+
+    def test_solo_el_dueño_del_hilo_lo_comparte(self):
+        """Compartir el trabajo de otro no es una decisión de quien lo lee."""
+        self.como(self.colega)
+        r = self.client.patch(
+            self.url_conv, {'workspace': self.ws.slug, 'sesion': self.sesion.slug}, format='json',
+        )
+        self.assertEqual(r.status_code, 404)
+
+    def test_se_renombra_el_hilo(self):
+        self.como(self.admin)
+        r = self.client.patch(self.url_conv, {'title': 'Otro nombre'}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.conv.refresh_from_db()
+        self.assertEqual(self.conv.title, 'Otro nombre')
+
+    def test_un_nombre_vacio_no_pasa(self):
+        self.como(self.admin)
+        r = self.client.patch(self.url_conv, {'title': '   '}, format='json')
+        self.assertEqual(r.status_code, 400)
+
+    def test_la_lista_dice_en_que_sesion_esta(self):
+        """La barra lateral lo usa para distinguir lo compartido de lo privado."""
+        self.conv.sesion = self.sesion
+        self.conv.save(update_fields=['sesion'])
+
+        self.como(self.admin)
+        r = self.client.get('/api/v1/agents/conversations/')
+        fila = next(c for c in r.data if c['id'] == self.conv.pk)
+        self.assertEqual(fila['sesion_nombre'], self.sesion.name)
+        self.assertEqual(fila['sesion_slug'], self.sesion.slug)

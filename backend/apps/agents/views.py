@@ -1298,6 +1298,53 @@ class UserConversationDetailView(APIView):
         conv = get_object_or_404(Conversation, pk=conv_id, user=request.user)
         return Response(ConversationSerializer(conv).data)
 
+    def patch(self, request, conv_id):
+        """Renombra el hilo, o lo mueve a una Sesión.
+
+        Mover a una Sesión es lo que significa COMPARTIR una conversación: deja de ser
+        del historial privado de quien la escribió y pasa a verla el equipo de esa Sesión.
+        Mandar `sesion: null` la vuelve personal.
+
+        Solo el dueño del hilo puede hacerlo (`user=request.user`): compartir el trabajo
+        de otro no es una decisión de quien lo lee.
+        """
+        conv = get_object_or_404(Conversation, pk=conv_id, user=request.user)
+
+        if 'title' in request.data:
+            titulo = (request.data.get('title') or '').strip()[:500]
+            if not titulo:
+                return Response(
+                    {'detail': 'La conversación necesita un nombre.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            conv.title = titulo
+
+        if 'sesion' in request.data:
+            pedida = request.data.get('sesion')
+            if pedida in (None, '', 0):
+                conv.sesion = None
+            else:
+                # La Sesión tiene que ser una que esta persona alcance: compartir en una
+                # Sesión ajena sería meter su conversación donde no le corresponde.
+                from apps.sesiones.models import Sesion
+                from apps.workspaces.permissions import resolve_membership
+
+                slug = (request.data.get('workspace') or '').strip()
+                membership = resolve_membership(request.user, slug) if slug else None
+                sesion = (
+                    Sesion.objects.filter(workspace=membership.workspace, slug=pedida).first()
+                    if membership else None
+                )
+                if sesion is None or sesion.rol_de(request.user, membership) is None:
+                    return Response(
+                        {'detail': 'Esa Sesión no existe o no tiene acceso.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                conv.sesion = sesion
+
+        conv.save()
+        return Response(ConversationListSerializer(conv).data)
+
     def delete(self, request, conv_id):
         conv = get_object_or_404(Conversation, pk=conv_id, user=request.user)
         conv.delete()

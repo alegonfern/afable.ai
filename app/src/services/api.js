@@ -73,6 +73,9 @@ export const api = {
   getConversations: () => apiClient.get('/agents/conversations/'),
   getConversationMessages: (id) => apiClient.get(`/agents/conversations/${id}/messages/`),
   deleteConversation: (id) => apiClient.delete(`/agents/conversations/${id}/`),
+  // Renombrar el hilo, o moverlo a una Sesión — que es lo que significa COMPARTIRLO:
+  // deja de ser del historial privado y pasa a verlo el equipo de esa Sesión.
+  updateConversation: (id, data) => apiClient.patch(`/agents/conversations/${id}/`, data),
   getAgentConversations: (agentId) => apiClient.get(`/agents/${agentId}/conversations/`),
   // Ramificar: copia el hilo hasta ese mensaje a una conversación nueva.
   branchConversation: (id, messageId) =>

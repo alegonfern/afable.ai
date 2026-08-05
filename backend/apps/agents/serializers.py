@@ -56,10 +56,15 @@ class ConversationSerializer(serializers.ModelSerializer):
 class ConversationListSerializer(serializers.ModelSerializer):
     last_message = serializers.SerializerMethodField()
     agent_name = serializers.CharField(source='agent.name', read_only=True)
+    # La Sesión en la que vive el hilo, si está compartido. La barra lateral la usa para
+    # distinguir de un vistazo lo personal de lo que ve el equipo.
+    sesion_nombre = serializers.CharField(source='sesion.name', read_only=True, default=None)
+    sesion_slug = serializers.CharField(source='sesion.slug', read_only=True, default=None)
 
     class Meta:
         model = Conversation
-        fields = ['id', 'agent', 'agent_name', 'title', 'last_message', 'created_at', 'updated_at']
+        fields = ['id', 'agent', 'agent_name', 'title', 'last_message',
+                  'sesion', 'sesion_nombre', 'sesion_slug', 'created_at', 'updated_at']
 
     def get_last_message(self, obj):
         msg = obj.messages.last()

@@ -28,6 +28,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { DRAWER_WIDTH, MINI_DRAWER_WIDTH } from '../../../config';
 import { useApp } from '../../../context/AppContext';
 import { api } from '../../../services/api';
+import MenuDeFila, { DialogoCompartir } from './MenuDeFila';
 
 const openedMixin = (theme) => ({
   width: DRAWER_WIDTH,
@@ -113,6 +114,68 @@ export default function Drawer({ open, handleDrawerToggle }) {
   // El nombre se escribe EN la barra, no en un `window.prompt`: un prompt del
   // navegador se ve como un error del sistema, no como una parte de la app.
   const [nombreNueva, setNombreNueva] = useState(null);   // null = no se está creando
+  // La fila sobre la que está el mouse: los tres puntos solo se muestran ahí. Un icono
+  // fijo en cada línea hace la lista más difícil de leer que la lista sola.
+  const [encima, setEncima] = useState(null);
+  const [compartiendo, setCompartiendo] = useState(null);   // la conversación a compartir
+
+  const accionDeConversacion = async (conv, clave) => {
+    try {
+      if (clave === 'eliminar') {
+        await api.deleteConversation(conv.id);
+        setConversations((cs) => cs.filter((c) => c.id !== conv.id));
+        toast.success('Conversación eliminada.');
+        if (location.pathname.startsWith('/app/chat')) navigate('/app/chat');
+      }
+      if (clave === 'compartir') setCompartiendo(conv);
+    } catch {
+      toast.error('No se pudo completar la acción.');
+    }
+  };
+
+  const compartir = async (sesionSlug) => {
+    const conv = compartiendo;
+    setCompartiendo(null);
+    try {
+      await api.updateConversation(conv.id, {
+        workspace: wsSlug, sesion: sesionSlug,
+      });
+      const { data } = await api.getConversations();
+      setConversations(data.slice(0, 10));
+      toast.success(
+        sesionSlug ? 'La conversación ahora la ve el equipo de la Sesión.'
+                   : 'Volvió a su historial privado.',
+      );
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'No se pudo compartir.');
+    }
+  };
+
+  const accionDeSesion = async (sesion, clave) => {
+    try {
+      if (clave === 'copiar') {
+        await navigator.clipboard.writeText(`${window.location.origin}/app/sesiones/${sesion.slug}`);
+        toast.success('Enlace copiado.');
+        return;
+      }
+      if (clave === 'archivar') {
+        await api.updateSesion(sesion.slug, { workspace: wsSlug, archivada: !sesion.archivada });
+        toast.success(sesion.archivada ? 'Sesión desarchivada.' : 'Sesión archivada.');
+      }
+      if (clave === 'eliminar') {
+        await api.deleteSesion(sesion.slug, wsSlug);
+        toast.success('Sesión eliminada.');
+        if (location.pathname === `/app/sesiones/${sesion.slug}`) navigate('/app');
+      }
+      await cargarSesiones();
+    } catch (e) {
+      toast.error(
+        e.response?.status === 403
+          ? 'Solo un administrador del Workspace puede eliminar una Sesión.'
+          : 'No se pudo completar la acción.',
+      );
+    }
+  };
 
   const crearSesion = async () => {
     const nombre = (nombreNueva || '').trim();
@@ -390,15 +453,44 @@ export default function Drawer({ open, handleDrawerToggle }) {
                       <Box
                         key={conv.id}
                         onClick={() => navigate('/app/chat', { state: { conversationId: conv.id } })}
+                        onMouseEnter={() => setEncima(`conv-${conv.id}`)}
+                        onMouseLeave={() => setEncima(null)}
                         sx={{
+                          display: 'flex', alignItems: 'center', gap: 0.5,
                           px: 1, py: 0.35, borderRadius: '4px', cursor: 'pointer',
                           color: textDisabled, '&:hover': { bgcolor: bgHover, color: textMuted },
                           transition: 'all 0.1s',
                         }}
                       >
-                        <Typography sx={{ fontSize: '0.8rem', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
-                          {(conv.title || 'Conversación').slice(0, 30)}
+                        <Typography sx={{ fontSize: '0.8rem', lineHeight: 1.4, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {(conv.title || 'Conversación').slice(0, 28)}
                         </Typography>
+                        {/* Un hilo compartido se distingue de un vistazo: si no, no hay
+                            forma de saber qué ve el equipo y qué no. */}
+                        {conv.sesion_nombre && (
+                          <Typography
+                            title={`Compartida en ${conv.sesion_nombre}`}
+                            sx={{ fontSize: '0.7rem', flexShrink: 0, color: '#9BA6E3' }}
+                          >
+                            ●
+                          </Typography>
+                        )}
+                        <MenuDeFila
+                          visible={encima === `conv-${conv.id}`}
+                          titulo={conv.title || 'Conversación'}
+                          acciones={[
+                            {
+                              clave: 'compartir',
+                              label: conv.sesion_nombre ? 'Cambiar de Sesión…' : 'Compartir con el equipo…',
+                            },
+                            {
+                              clave: 'eliminar', label: 'Eliminar', color: '#e5484d',
+                              confirmar: true,
+                              aviso: 'Se borran los mensajes de esta conversación. No se puede deshacer.',
+                            },
+                          ]}
+                          onElegir={(clave) => accionDeConversacion(conv, clave)}
+                        />
                       </Box>
                     ))}
                   </Box>
@@ -470,6 +562,8 @@ export default function Drawer({ open, handleDrawerToggle }) {
                       <Box
                         key={s.id}
                         onClick={() => navigate(`/app/sesiones/${s.slug}`)}
+                        onMouseEnter={() => setEncima(`ses-${s.id}`)}
+                        onMouseLeave={() => setEncima(null)}
                         sx={{
                           display: 'flex', alignItems: 'center', gap: 0.75,
                           px: 1, py: 0.35, borderRadius: '4px', cursor: 'pointer',
@@ -486,6 +580,25 @@ export default function Drawer({ open, handleDrawerToggle }) {
                         }}>
                           {s.name}
                         </Typography>
+                        <MenuDeFila
+                          visible={encima === `ses-${s.id}`}
+                          titulo={s.name}
+                          acciones={[
+                            { clave: 'copiar', label: 'Copiar enlace' },
+                            {
+                              clave: 'archivar',
+                              label: s.archivada ? 'Desarchivar' : 'Archivar',
+                              aviso: 'Sale de la barra lateral. Su contenido queda intacto.',
+                            },
+                            {
+                              clave: 'eliminar', label: 'Eliminar', color: '#e5484d',
+                              confirmar: true,
+                              aviso: 'Se llevan las conversaciones, las tareas y los archivos de '
+                                   + 'esta Sesión. No se puede deshacer.',
+                            },
+                          ]}
+                          onElegir={(clave) => accionDeSesion(s, clave)}
+                        />
                         {s.pendientes > 0 && (
                           <Typography sx={{
                             fontSize: '0.68rem', fontWeight: 700, flexShrink: 0,
@@ -556,6 +669,16 @@ export default function Drawer({ open, handleDrawerToggle }) {
           )}
         </Box>
       </Box>
+
+      {/* Compartir una conversación = moverla a una Sesión: deja el historial privado
+          y pasa a verla el equipo de esa Sesión. */}
+      <DialogoCompartir
+        abierto={Boolean(compartiendo)}
+        onCerrar={() => setCompartiendo(null)}
+        sesiones={sesiones}
+        sesionActual={compartiendo?.sesion_slug || ''}
+        onCompartir={compartir}
+      />
 
       {/* User menu */}
       <Menu
