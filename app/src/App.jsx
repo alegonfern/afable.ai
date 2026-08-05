@@ -43,6 +43,8 @@ import TrabajoHome from './pages/trabajo/TrabajoHome';
 import AgentesPage from './pages/trabajo/AgentesPage';
 import AgenteNuevoPage from './pages/trabajo/AgenteNuevoPage';
 import SesionPage from './pages/sesiones/SesionPage';
+import ArchivosPage from './pages/archivos/ArchivosPage';
+import DocumentoPage from './pages/archivos/DocumentoPage';
 import PersonasPage from './pages/admin/PersonasPage';
 import WorkspacePage from './pages/admin/WorkspacePage';
 import AgentesAdminPage from './pages/admin/AgentesAdminPage';
@@ -99,6 +101,10 @@ export default function App() {
             <Route path="agentes/nuevo"      element={<AgenteNuevoPage />} />
             <Route path="agentes/:id/editar" element={<AgenteNuevoPage />} />
             <Route path="tablero"            element={<TablondePage />} />
+            {/* Archivos: EL lugar de los archivos de la empresa, con carpetas,
+                versiones y edición. La pestaña Documentos del hub redirige acá. */}
+            <Route path="archivos"           element={<ArchivosPage />} />
+            <Route path="archivos/:docId"    element={<DocumentoPage />} />
             <Route path="contexto"           element={<ContextoHubPage />} />
             <Route path="espacios/:spaceSlug" element={<EspacioDetallePage />} />
             {/* Sesiones: donde trabaja el equipo. El Espacio es permisos sobre el

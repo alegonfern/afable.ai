@@ -3,11 +3,12 @@ from django.urls import path
 
 from .views import (
     CarpetaDetailView, CarpetaListCreateView, ContenidoView, DocumentoDetailView,
-    ExploradorView, VersionDetailView, VersionesView,
+    ExploradorView, SubirView, VersionDetailView, VersionesView,
 )
 
 urlpatterns = [
     path('', ExploradorView.as_view(), name='explorador'),
+    path('subir/', SubirView.as_view(), name='subir'),
     path('carpetas/', CarpetaListCreateView.as_view(), name='carpetas'),
     path('carpetas/<int:pk>/', CarpetaDetailView.as_view(), name='carpeta'),
     path('documentos/<int:pk>/', DocumentoDetailView.as_view(), name='documento'),

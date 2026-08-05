@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Divider, TextField, CircularProgress, useTheme, MenuItem, Select,
 } from '@mui/material';
@@ -78,6 +79,7 @@ function ContextForm({ fields, form, setForm, inputSx, textMuted, disabled }) {
 }
 
 export default function MiContextoPage({ hideHeader = false }) {
+  const navigate = useNavigate();
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const { selectedOrganization } = useApp();
@@ -239,83 +241,24 @@ export default function MiContextoPage({ hideHeader = false }) {
 
               <Divider sx={{ borderColor, mb: 3 }} />
 
-              <SectionLabel>Repositorio de archivos</SectionLabel>
-              <Typography sx={{ fontSize: '0.8rem', color: textMuted, mb: 2, mt: -1 }}>
-                Sube políticas, manuales, catálogos o cualquier documento — Afable genera un resumen automático que
-                el agente siempre ve, y puede leer el contenido completo cuando lo necesite. Máx. 20 archivos, 10MB c/u.
+              <SectionLabel>Archivos</SectionLabel>
+              <Typography sx={{ fontSize: '0.8rem', color: textMuted, mb: 1.5, mt: -1 }}>
+                Las políticas, manuales y catálogos viven en Archivos, con carpetas,
+                versiones y edición. El agente los lee desde ahí.
               </Typography>
-
-              {canEdit && (
-                <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mb: 2.5, flexWrap: 'wrap' }}>
-                  <Select
-                    size="small" value={uploadCategory} onChange={e => setUploadCategory(e.target.value)}
-                    sx={{ ...inputSx, minWidth: 160, '& .MuiOutlinedInput-notchedOutline': { borderColor } }}
-                  >
-                    {CATEGORIES.map(c => <MenuItem key={c.value} value={c.value}>{c.label}</MenuItem>)}
-                  </Select>
-                  <Box
-                    component="button" onClick={() => fileRef.current?.click()} disabled={uploading}
-                    sx={{
-                      px: 2, py: 0.9, borderRadius: '8px', cursor: uploading ? 'default' : 'pointer',
-                      border: `1px solid ${borderColor}`, bgcolor: 'transparent', color: theme.palette.text.primary,
-                      fontSize: '0.8rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 0.75,
-                      '&:hover:not(:disabled)': { borderColor: '#586AD0', color: '#9BA6E3' },
-                    }}
-                  >
-                    {uploading ? <CircularProgress size={14} sx={{ color: '#9BA6E3' }} /> : <Upload size={14} />}
-                    {uploading ? 'Procesando...' : 'Subir archivo'}
-                  </Box>
-                  <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={handleUpload} />
-                </Box>
-              )}
-
-              {loadingDocs ? (
-                <CircularProgress size={20} sx={{ color: '#9BA6E3' }} />
-              ) : docs.length === 0 ? (
-                <Typography sx={{ fontSize: '0.8rem', color: textMuted }}>Todavía no hay archivos.</Typography>
-              ) : (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  {docs.map(doc => {
-                    const Icon = categoryMeta(doc.category).icon;
-                    return (
-                      <Box
-                        key={doc.id}
-                        sx={{
-                          display: 'flex', alignItems: 'flex-start', gap: 1.5, p: 1.5, borderRadius: '8px',
-                          bgcolor: bgCard, border: `1px solid ${borderColor}`,
-                        }}
-                      >
-                        <Box sx={{ color: '#9BA6E3', mt: 0.25, flexShrink: 0 }}><Icon size={16} /></Box>
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                            <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: theme.palette.text.primary }}>
-                              {doc.title}
-                            </Typography>
-                            <Typography sx={{ fontSize: '0.7rem', color: textMuted, px: 0.75, py: 0.1, borderRadius: '4px', bgcolor: 'rgba(88, 106, 208,0.12)' }}>
-                              {doc.category_display}
-                            </Typography>
-                          </Box>
-                          {doc.processing_error ? (
-                            <Typography sx={{ fontSize: '0.75rem', color: '#e57373', mt: 0.5 }}>{doc.processing_error}</Typography>
-                          ) : (
-                            <Typography sx={{ fontSize: '0.75rem', color: textSemi, mt: 0.5, lineHeight: 1.4 }}>
-                              {doc.summary}
-                            </Typography>
-                          )}
-                        </Box>
-                        {canEdit && (
-                          <Box
-                            onClick={() => handleDelete(doc.id)}
-                            sx={{ color: textMuted, cursor: 'pointer', flexShrink: 0, display: 'flex', p: 0.5, '&:hover': { color: '#e57373' } }}
-                          >
-                            <Trash2 size={14} />
-                          </Box>
-                        )}
-                      </Box>
-                    );
-                  })}
-                </Box>
-              )}
+              <Box
+                component="button"
+                onClick={() => navigate('/app/archivos')}
+                sx={{
+                  border: `1px solid ${borderColor}`, bgcolor: 'transparent',
+                  px: 2, py: 0.9, borderRadius: '8px', cursor: 'pointer',
+                  fontFamily: 'inherit', fontSize: '0.875rem', fontWeight: 600,
+                  color: '#586AD0', mb: 3,
+                  '&:hover': { borderColor: '#586AD0' },
+                }}
+              >
+                Ir a Archivos
+              </Box>
             </>
           )}
         </Box>

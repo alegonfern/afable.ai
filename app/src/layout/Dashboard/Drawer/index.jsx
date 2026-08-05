@@ -203,7 +203,7 @@ export default function Drawer({ open, handleDrawerToggle }) {
       items: [
         { path: '/app/contexto?tab=espacios',     label: 'Espacios',    icon: <Layers size={15} /> },
         { path: '/app/contexto?tab=integraciones', label: 'Conexiones', icon: <Plug size={15} /> },
-        { path: '/app/contexto?tab=documentos',   label: 'Documentos',  icon: <FolderOpen size={15} /> },
+        { path: '/app/archivos',                  label: 'Archivos',    icon: <FolderOpen size={15} /> },
         { path: '/app/contexto?tab=mi-contexto',  label: 'Contexto de la empresa', icon: <BookOpen size={15} /> },
       ],
     },

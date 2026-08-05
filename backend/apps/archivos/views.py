@@ -6,6 +6,7 @@ edición) son el bloque siguiente — hasta que existan, esto NO es un lugar par
 algo que no pueda ver el resto del equipo, y la pantalla lo dice.
 """
 from rest_framework import status
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -420,3 +421,70 @@ class VersionDetailView(APIView):
             'contenido': doc.extracted_text or '',
             'version': {'numero': nueva.numero, 'quien': nueva.quien},
         })
+
+
+MAX_ARCHIVO_MB = 10
+
+
+class SubirView(APIView):
+    """POST /api/v1/archivos/subir/ — sube un archivo a una carpeta.
+
+    Endpoint propio y no el del repositorio de la empresa: ese pide el id de la
+    Organization en la URL y no sabe de carpetas, así que subir desde el explorador
+    habría sido "subir y después mover", dos viajes y un estado intermedio raro si el
+    segundo falla.
+    """
+
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        org, error = _org(request)
+        if error:
+            return error
+
+        archivo = request.data.get('file')
+        if not archivo:
+            return Response(
+                {'detail': 'No llegó ningún archivo.'}, status=status.HTTP_400_BAD_REQUEST,
+            )
+        if archivo.size > MAX_ARCHIVO_MB * 1024 * 1024:
+            return Response(
+                {'detail': f'El archivo pasa los {MAX_ARCHIVO_MB}MB.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        carpeta = None
+        if request.data.get('carpeta'):
+            carpeta = Carpeta.objects.filter(
+                organization=org, pk=request.data['carpeta'],
+            ).first()
+            if carpeta is None:
+                return Response(
+                    {'detail': 'La carpeta no existe.'}, status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        from services.documentos import asegurar_version_inicial, es_editable
+
+        content_type = getattr(archivo, 'content_type', '') or ''
+        doc = CompanyDocument.objects.create(
+            organization=org, uploaded_by=request.user, carpeta=carpeta,
+            title=(request.data.get('title') or archivo.name)[:255],
+            category='otro', file=archivo, content_type=content_type,
+            is_public=True, editable=es_editable(archivo.name, content_type),
+        )
+
+        from services.document_processing import process_document
+
+        resultado = process_document(doc.file, doc.content_type)
+        doc.extracted_text = resultado['extracted_text']
+        doc.summary = resultado['summary']
+        doc.processing_error = resultado['error']
+        doc.save(update_fields=['extracted_text', 'summary', 'processing_error'])
+
+        from services.indexing import indexar_documento_sin_ruido
+
+        indexar_documento_sin_ruido(doc)
+        asegurar_version_inicial(doc, autor=request.user)
+
+        return Response(serializar_documento(doc, request), status=status.HTTP_201_CREATED)

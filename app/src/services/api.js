@@ -159,6 +159,30 @@ export const api = {
   updateSkill: (id, data) => apiClient.patch(`/agents/habilidades/${id}/`, data),
   deleteSkill: (id) => apiClient.delete(`/agents/habilidades/${id}/`),
 
+  // ── Archivos: carpetas, contenido e historial ──
+  // El explorador trae en un viaje el árbol completo (panel izquierdo) y el contenido
+  // de la carpeta abierta, que es como se usa la pantalla.
+  getExplorador: (workspace, opts = {}) =>
+    apiClient.get('/archivos/', { params: { workspace, ...opts } }),
+  subirArchivo: (workspace, formData) =>
+    apiClient.post(`/archivos/subir/?workspace=${workspace}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  createCarpeta: (data) => apiClient.post('/archivos/carpetas/', data),
+  updateCarpeta: (id, data) => apiClient.patch(`/archivos/carpetas/${id}/`, data),
+  deleteCarpeta: (id, workspace) =>
+    apiClient.delete(`/archivos/carpetas/${id}/`, { params: { workspace } }),
+  updateArchivo: (id, data) => apiClient.patch(`/archivos/documentos/${id}/`, data),
+  getContenido: (id, workspace) =>
+    apiClient.get(`/archivos/documentos/${id}/contenido/`, { params: { workspace } }),
+  saveContenido: (id, data) => apiClient.put(`/archivos/documentos/${id}/contenido/`, data),
+  getVersiones: (id, workspace) =>
+    apiClient.get(`/archivos/documentos/${id}/versiones/`, { params: { workspace } }),
+  getVersion: (id, numero, workspace) =>
+    apiClient.get(`/archivos/documentos/${id}/versiones/${numero}/`, { params: { workspace } }),
+  restaurarVersion: (id, numero, workspace) =>
+    apiClient.post(`/archivos/documentos/${id}/versiones/${numero}/`, { workspace }),
+
   // ── Sesiones ──
   // Donde trabaja el equipo: conversaciones, tareas y archivos. El Workspace va como
   // `?workspace=`, no en la ruta (ver apps/sesiones/urls.py).

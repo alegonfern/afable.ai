@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
 import IntegrationsPage from './IntegrationsPage';
 import MiContextoPage from './MiContextoPage';
-import DocumentosTab from './DocumentosTab';
 import EspaciosTab from './espacios/EspaciosTab';
 
 // De donde sale lo que el agente sabe. Cada pestaña es también un item del menú
@@ -11,7 +10,6 @@ import EspaciosTab from './espacios/EspaciosTab';
 const TABS = [
   { value: 'espacios',      label: 'Espacios',              titulo: 'Espacios' },
   { value: 'integraciones', label: 'Conexiones',            titulo: 'Conexiones' },
-  { value: 'documentos',    label: 'Documentos',            titulo: 'Documentos' },
   { value: 'mi-contexto',   label: 'Contexto de la empresa', titulo: 'Contexto de la empresa' },
 ];
 
@@ -45,11 +43,6 @@ export default function ContextoHubPage() {
       {tab === 'espacios' && <EspaciosTab />}
       {tab === 'integraciones' && <IntegrationsPage hideHeader />}
       {tab === 'mi-contexto' && <MiContextoPage hideHeader />}
-      {tab === 'documentos' && (
-        <Box sx={{ pt: 2.5, pb: 5, px: { xs: 2, sm: 3 }, maxWidth: 860, width: '100%' }}>
-          <DocumentosTab />
-        </Box>
-      )}
     </Box>
   );
 }
