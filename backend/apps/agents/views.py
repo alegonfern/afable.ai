@@ -287,9 +287,27 @@ def _build_onboarding_context(user, agent=None, mention_system_id=None, consulta
     Sesión presta contexto; el Espacio es el que restringe."""
     from apps.organizations.models import IntegrationScan
 
+    # La empresa sale de la PERTENENCIA primero, y de la propiedad solo como respaldo.
+    #
+    # Antes era solo `filter(owner=user)`, y eso significaba que cualquier miembro del
+    # Workspace que no fuera el dueño recibía el prompt de "todavía no configuraste tu
+    # empresa": en un equipo de cinco, cuatro tenían un agente inútil. Se descubrió
+    # escribiendo las pruebas de permisos, cuando dos miembros comunes no veían ni sus
+    # propios documentos.
+    from apps.workspaces.permissions import membership_por_organizacion  # noqa: F401
+    from apps.workspaces.models import Membership
+
+    del_workspace = (
+        Membership.objects.filter(user=user)
+        .exclude(workspace__organization__isnull=True)
+        .select_related('workspace__organization')
+        .first()
+    )
+    org_de_pertenencia = del_workspace.workspace.organization if del_workspace else None
+
     orgs = Organization.objects.filter(owner=user).exclude(name="Personal")
-    has_org = orgs.exists()
-    # En este contexto el usuario es dueño de la org (filter owner=user) → acceso total.
+    has_org = bool(org_de_pertenencia) or orgs.exists()
+    # Dueño de la empresa o administrador del Workspace → acceso total en el prompt.
     perm_ctx = _get_permissions_context(user, is_owner=has_org)
 
     if not has_org:
@@ -306,8 +324,8 @@ El usuario aún no ha configurado su empresa. Tu objetivo es guiarlo amigablemen
 Sé conversacional, breve y entusiasta."""
         }
 
-    org = orgs.first()
-    scans = IntegrationScan.objects.filter(organization__owner=user)
+    org = org_de_pertenencia or orgs.first()
+    scans = IntegrationScan.objects.filter(organization=org)
     has_scan = scans.exists()
 
     role_ctx = _get_user_role_context(user)
@@ -317,6 +335,28 @@ Sé conversacional, breve y entusiasta."""
     # lo de su empresa (ver `alcance_de_agente`).
     espacio_conns, espacio_docs = alcance_de_agente(agent)
 
+    # ── La regla mas importante de los permisos de archivos ──────────────────────
+    # El alcance del agente se INTERSECTA con lo que ve la persona que esta
+    # conversando. Sin esto, restringir un archivo seria teatro: bastaria con
+    # preguntarselo al agente para leerlo.
+    #
+    # Ojo con quien es `user`: en una Tarea o una Automatizacion es el dueño de la
+    # empresa (ver `automation_runner._run_prompt`), o sea que esas corren con acceso de
+    # la empresa y no de una persona en particular. Es deliberado — una automatizacion
+    # es de la empresa — pero conviene tenerlo presente al restringir algo.
+    from apps.archivos.permisos import documentos_visibles
+    from apps.workspaces.permissions import membership_por_organizacion
+
+    membership_de_quien_pregunta = membership_por_organizacion(user, org)
+    visibles = set(
+        documentos_visibles(user, org, membership_de_quien_pregunta)
+        .values_list('id', flat=True)
+    )
+    espacio_docs = (
+        sorted(visibles) if espacio_docs is None
+        else sorted(set(espacio_docs) & visibles)
+    )
+
     # Los archivos de la Sesion se SUMAN al alcance del agente. Con `espacio_docs` en
     # None el agente ya alcanza todo (incluidos estos), asi que no hay nada que sumar;
     # con una lista, se amplia. Al reves seria un error: una Sesion no puede quitarle
@@ -325,7 +365,9 @@ Sé conversacional, breve y entusiasta."""
         from apps.organizations.models import CompanyDocument
 
         de_la_sesion = CompanyDocument.objects.filter(sesion=sesion).values_list('id', flat=True)
-        espacio_docs = list(set(espacio_docs) | set(de_la_sesion))
+        # Tambien recortados por lo que la persona ve: la Sesion presta sus archivos,
+        # pero no puede prestar uno que quien pregunta no tiene permiso de leer.
+        espacio_docs = sorted((set(espacio_docs) | set(de_la_sesion)) & visibles)
 
     docs_en_prompt = []
 

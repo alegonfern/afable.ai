@@ -171,6 +171,12 @@ export const api = {
     apiClient.post(`/archivos/subir/?workspace=${workspace}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  // Permisos por carpeta y por archivo. `restringido` prende o apaga la restricción;
+  // `ids` + `nivel` reparten el acceso.
+  getCompartido: (workspace, opts) =>
+    apiClient.get('/archivos/compartir/', { params: { workspace, ...opts } }),
+  compartir: (data) => apiClient.post('/archivos/compartir/', data),
+  descompartir: (data) => apiClient.delete('/archivos/compartir/', { data }),
   createCarpeta: (data) => apiClient.post('/archivos/carpetas/', data),
   updateCarpeta: (id, data) => apiClient.patch(`/archivos/carpetas/${id}/`, data),
   deleteCarpeta: (id, workspace) =>

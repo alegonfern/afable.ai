@@ -18,13 +18,18 @@ from .models import Carpeta, Version
 
 
 def _org(request):
-    """La empresa del Workspace que viene en el pedido. Devuelve (org, error)."""
+    """La empresa del Workspace del pedido. Devuelve (org, error).
+
+    Deja el `membership` en `request.membership` para que las vistas resuelvan permisos
+    sin volver a consultarlo — los permisos de archivos necesitan el rol.
+    """
     slug = request.query_params.get('workspace') or request.data.get('workspace')
     if not slug:
         return None, Response(
             {'detail': 'Falta el Workspace.'}, status=status.HTTP_400_BAD_REQUEST,
         )
     membership = require_membership(request.user, slug)
+    request.membership = membership
     org = membership.workspace.organization
     if org is None:
         return None, Response(
@@ -34,20 +39,26 @@ def _org(request):
     return org, None
 
 
-def serializar_carpeta(carpeta):
+def serializar_carpeta(carpeta, nivel=None):
     return {
         'id': carpeta.id,
         'name': carpeta.name,
         'parent': carpeta.parent_id,
         'documentos': carpeta.documentos.count(),
         'hijas': carpeta.hijas.count(),
+        'restringida': carpeta.restringida,
+        'compartida_con': carpeta.permisos.count(),
+        'mi_nivel': nivel,
         'updated_at': carpeta.updated_at,
     }
 
 
-def serializar_documento(doc, request=None):
+def serializar_documento(doc, request=None, nivel=None):
     ultima = doc.versiones.first()   # ordering = ['-numero']
     return {
+        'restringido': doc.restringido,
+        'compartido_con': doc.permisos.count(),
+        'mi_nivel': nivel,
         'id': doc.id,
         'title': doc.title,
         'carpeta': doc.carpeta_id,
@@ -82,10 +93,12 @@ class ExploradorView(APIView):
         if error:
             return error
 
-        todas = list(
-            Carpeta.objects.filter(organization=org)
-            .select_related('parent').prefetch_related('documentos', 'hijas')
-        )
+        from .permisos import carpetas_visibles, documentos_visibles, nivel_sobre_carpeta
+
+        membership = request.membership
+        # Solo lo que esta persona ve: una carpeta restringida ajena no aparece ni en el
+        # árbol. Que no exista para quien no entra es más simple que un "sin acceso".
+        todas = carpetas_visibles(request.user, org, membership)
 
         actual = None
         pedida = request.query_params.get('carpeta')
@@ -96,27 +109,41 @@ class ExploradorView(APIView):
                     {'detail': 'Carpeta no encontrada.'}, status=status.HTTP_404_NOT_FOUND,
                 )
 
-        docs = CompanyDocument.objects.filter(
-            organization=org, carpeta=actual,
-        ).prefetch_related('versiones').order_by('title')
+        # Los documentos también salen del filtro de permisos, no de la tabla entera.
+        alcanzables = documentos_visibles(request.user, org, membership)
+        docs = alcanzables.filter(carpeta=actual).prefetch_related(
+            'versiones', 'permisos',
+        ).order_by('title')
 
         q = (request.query_params.get('q') or '').strip()
         if q:
             # Buscar mira TODA la empresa, no solo la carpeta abierta: quien busca un
-            # archivo no sabe dónde está — si lo supiera, navegaría hasta él.
-            docs = CompanyDocument.objects.filter(
-                organization=org, title__icontains=q,
-            ).prefetch_related('versiones').order_by('title')
+            # archivo no sabe dónde está — si lo supiera, navegaría hasta él. Pero solo
+            # entre los que puede ver.
+            docs = alcanzables.filter(title__icontains=q).prefetch_related(
+                'versiones', 'permisos',
+            ).order_by('title')
+
+        def nivel_de(doc):
+            from .permisos import nivel_sobre_documento
+            return nivel_sobre_documento(request.user, doc, membership)
 
         return Response({
-            'arbol': [serializar_carpeta(c) for c in todas],
-            'carpeta': serializar_carpeta(actual) if actual else None,
+            'arbol': [
+                serializar_carpeta(c, nivel_sobre_carpeta(request.user, c, membership))
+                for c in todas
+            ],
+            'carpeta': (
+                serializar_carpeta(actual, nivel_sobre_carpeta(request.user, actual, membership))
+                if actual else None
+            ),
             'migas': [{'id': c.id, 'name': c.name} for c in (actual.ancestros() if actual else [])],
             'subcarpetas': [
-                serializar_carpeta(c) for c in todas
+                serializar_carpeta(c, nivel_sobre_carpeta(request.user, c, membership))
+                for c in todas
                 if c.parent_id == (actual.pk if actual else None)
             ],
-            'documentos': [serializar_documento(d, request) for d in docs],
+            'documentos': [serializar_documento(d, request, nivel_de(d)) for d in docs],
             'buscando': bool(q),
         })
 
@@ -250,6 +277,18 @@ class DocumentoDetailView(APIView):
                 {'detail': 'Documento no encontrado.'}, status=status.HTTP_404_NOT_FOUND,
             )
 
+        from .permisos import puede_editar, puede_ver
+
+        if not puede_ver(request.user, doc, request.membership):
+            return Response(
+                {'detail': 'Documento no encontrado.'}, status=status.HTTP_404_NOT_FOUND,
+            )
+        if not puede_editar(request.user, doc, request.membership):
+            return Response(
+                {'detail': 'Puede ver este archivo, pero no renombrarlo ni moverlo.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         if 'title' in request.data:
             title = (request.data.get('title') or '').strip()[:255]
             if not title:
@@ -281,7 +320,7 @@ class ContenidoView(APIView):
 
     permission_classes = [IsAuthenticated]
 
-    def _doc(self, request, pk):
+    def _doc(self, request, pk, para_editar=False):
         org, error = _org(request)
         if error:
             return None, error
@@ -289,6 +328,20 @@ class ContenidoView(APIView):
         if doc is None:
             return None, Response(
                 {'detail': 'Documento no encontrado.'}, status=status.HTTP_404_NOT_FOUND,
+            )
+        from .permisos import puede_editar, puede_ver
+
+        # No verlo devuelve 404 y no 403: para quien no entra, el archivo no existe. Un
+        # 403 confirmaría que existe y filtraría su id.
+        if not puede_ver(request.user, doc, request.membership):
+            return None, Response(
+                {'detail': 'Documento no encontrado.'}, status=status.HTTP_404_NOT_FOUND,
+            )
+        # Verlo pero no poder editarlo SÍ es un 403: la diferencia importa.
+        if para_editar and not puede_editar(request.user, doc, request.membership):
+            return None, Response(
+                {'detail': 'Puede ver este archivo, pero no editarlo.'},
+                status=status.HTTP_403_FORBIDDEN,
             )
         return doc, None
 
@@ -305,7 +358,7 @@ class ContenidoView(APIView):
         })
 
     def put(self, request, pk):
-        doc, error = self._doc(request, pk)
+        doc, error = self._doc(request, pk, para_editar=True)
         if error:
             return error
 
@@ -347,7 +400,9 @@ class VersionesView(APIView):
         if error:
             return error
         doc = CompanyDocument.objects.filter(organization=org, pk=pk).first()
-        if doc is None:
+        from .permisos import puede_ver
+
+        if doc is None or not puede_ver(request.user, doc, request.membership):
             return Response(
                 {'detail': 'Documento no encontrado.'}, status=status.HTTP_404_NOT_FOUND,
             )
@@ -381,7 +436,9 @@ class VersionDetailView(APIView):
         if error:
             return None, None, error
         doc = CompanyDocument.objects.filter(organization=org, pk=pk).first()
-        if doc is None:
+        from .permisos import puede_ver
+
+        if doc is None or not puede_ver(request.user, doc, request.membership):
             return None, None, Response(
                 {'detail': 'Documento no encontrado.'}, status=status.HTTP_404_NOT_FOUND,
             )
@@ -408,6 +465,13 @@ class VersionDetailView(APIView):
         doc, version, error = self._version(request, pk, numero)
         if error:
             return error
+        from .permisos import puede_editar
+
+        if not puede_editar(request.user, doc, request.membership):
+            return Response(
+                {'detail': 'Puede ver este archivo, pero no restaurar una versión.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         if not doc.editable:
             return Response(
                 {'detail': 'Este documento no se puede editar, así que tampoco restaurar.'},
@@ -488,3 +552,158 @@ class SubirView(APIView):
         asegurar_version_inicial(doc, autor=request.user)
 
         return Response(serializar_documento(doc, request), status=status.HTTP_201_CREATED)
+
+
+class CompartirView(APIView):
+    """GET, POST y DELETE de con quién está compartida una carpeta o un archivo.
+
+    `POST /archivos/compartir/` con `carpeta` o `documento`, y:
+      - `restringido`: prende o apaga la restricción.
+      - `ids` + `nivel`: le da permiso a esas personas.
+    `DELETE` con `ids` les saca el permiso.
+
+    Solo quien puede EDITAR el ítem cambia con quién está compartido: dejar que alguien
+    con permiso de lectura reparta accesos vaciaría de sentido el nivel.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def _item(self, request):
+        """La carpeta o el documento del pedido, ya comprobado. Devuelve (carpeta, doc, error)."""
+        org, error = _org(request)
+        if error:
+            return None, None, error
+
+        from .permisos import nivel_sobre_carpeta, puede_editar
+        from .models import NIVEL_EDICION
+
+        carpeta_id = request.data.get('carpeta') or request.query_params.get('carpeta')
+        doc_id = request.data.get('documento') or request.query_params.get('documento')
+
+        if carpeta_id:
+            carpeta = Carpeta.objects.filter(organization=org, pk=carpeta_id).first()
+            nivel = nivel_sobre_carpeta(request.user, carpeta, request.membership) if carpeta else None
+            if carpeta is None or nivel is None:
+                return None, None, Response(
+                    {'detail': 'Carpeta no encontrada.'}, status=status.HTTP_404_NOT_FOUND,
+                )
+            if nivel != NIVEL_EDICION:
+                return None, None, Response(
+                    {'detail': 'Puede ver esta carpeta, pero no cambiar con quién está compartida.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            return carpeta, None, None
+
+        if doc_id:
+            doc = CompanyDocument.objects.filter(organization=org, pk=doc_id).first()
+            from .permisos import puede_ver
+
+            if doc is None or not puede_ver(request.user, doc, request.membership):
+                return None, None, Response(
+                    {'detail': 'Documento no encontrado.'}, status=status.HTTP_404_NOT_FOUND,
+                )
+            if not puede_editar(request.user, doc, request.membership):
+                return None, None, Response(
+                    {'detail': 'Puede ver este archivo, pero no cambiar con quién está compartido.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            return None, doc, None
+
+        return None, None, Response(
+            {'detail': 'Falta decir de qué carpeta o documento.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    def get(self, request):
+        carpeta, doc, error = self._item(request)
+        if error:
+            return error
+        from .permisos import serializar_permisos
+        from apps.workspaces.models import Membership
+
+        # A quién se le puede dar permiso: la gente del Workspace que todavía no lo tiene.
+        ya = {p['user'] for p in serializar_permisos(carpeta=carpeta, document=doc)}
+        del_workspace = Membership.objects.filter(
+            workspace=request.membership.workspace,
+        ).exclude(user_id__in=ya).select_related('user')
+
+        return Response({
+            'restringido': carpeta.restringida if carpeta else doc.restringido,
+            'nombre': carpeta.name if carpeta else doc.title,
+            'compartido_con': serializar_permisos(carpeta=carpeta, document=doc),
+            'disponibles': [
+                {
+                    'id': m.user_id,
+                    'name': m.user.get_full_name() or m.user.email,
+                    'email': m.user.email,
+                }
+                for m in del_workspace
+            ],
+        })
+
+    def post(self, request):
+        carpeta, doc, error = self._item(request)
+        if error:
+            return error
+
+        from .models import NIVELES, Permiso
+
+        if 'restringido' in request.data:
+            valor = bool(request.data.get('restringido'))
+            if carpeta:
+                carpeta.restringida = valor
+                carpeta.save(update_fields=['restringida'])
+            else:
+                doc.restringido = valor
+                doc.save(update_fields=['restringido'])
+
+        ids = request.data.get('ids')
+        if ids:
+            nivel = request.data.get('nivel') or 'lectura'
+            if nivel not in dict(NIVELES):
+                return Response(
+                    {'detail': f'Nivel desconocido: {nivel}.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            from apps.workspaces.models import Membership
+
+            # Solo gente del Workspace: compartir un archivo con alguien de afuera es
+            # invitarlo a la empresa, y eso se hace desde Admin > Personas.
+            del_workspace = Membership.objects.filter(
+                workspace=request.membership.workspace, user_id__in=_ids(ids),
+            ).select_related('user')
+            if not del_workspace.exists():
+                return Response(
+                    {'detail': 'Esas personas no son parte de este Workspace.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            for m in del_workspace:
+                Permiso.objects.update_or_create(
+                    carpeta=carpeta, document=doc, user=m.user,
+                    defaults={'nivel': nivel, 'otorgado_por': request.user},
+                )
+
+        return self.get(request)
+
+    def delete(self, request):
+        carpeta, doc, error = self._item(request)
+        if error:
+            return error
+        from .models import Permiso
+
+        Permiso.objects.filter(
+            carpeta=carpeta, document=doc, user_id__in=_ids(request.data.get('ids')),
+        ).delete()
+        return self.get(request)
+
+
+def _ids(valor):
+    if not isinstance(valor, (list, tuple)):
+        return []
+    limpios = []
+    for v in valor:
+        try:
+            limpios.append(int(v))
+        except (TypeError, ValueError):
+            continue
+    return limpios

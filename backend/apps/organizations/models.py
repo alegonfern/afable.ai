@@ -234,6 +234,10 @@ class CompanyDocument(models.Model):
     # archivo al subirlo: un .md o .txt si, un PDF/Word/Excel no — se les extrae el
     # texto para leerlos, pero escribirles de vuelta les rompe el formato.
     editable = models.BooleanField(default=False)
+    # Restringir es la excepcion (ver `apps.archivos.models.Permiso`): sin esto, el
+    # archivo lo ve y lo edita cualquier miembro del Workspace, o hereda la restriccion
+    # de su carpeta si esa esta restringida.
+    restringido = models.BooleanField(default=False)
     # id del archivo en el sistema de origen (ej. fileId de Drive) — permite hacer
     # upsert en cada sync sin duplicar el mismo archivo como documento nuevo.
     external_id = models.CharField(max_length=255, blank=True)

@@ -37,6 +37,23 @@ def resolve_membership(user, workspace_slug):
     )
 
 
+def membership_por_organizacion(user, org):
+    """La `Membership` de esta persona en el Workspace de esa empresa, o `None`.
+
+    Existe porque hay código que solo tiene la `Organization` a mano —el armado del
+    prompt del agente, por ejemplo— y necesita saber el rol para resolver permisos. El
+    puente Workspace↔Organization es 1 a 1 (ver `Workspace.organization`).
+    """
+    if not user or not user.is_authenticated or org is None:
+        return None
+    return (
+        Membership.objects
+        .select_related('workspace', 'user')
+        .filter(workspace__organization=org, user=user)
+        .first()
+    )
+
+
 def require_membership(user, workspace_slug, minimum_role=ROLE_MEMBER):
     """Igual que `resolve_membership`, pero corta la request si no alcanza.
 

@@ -42,6 +42,14 @@ class Carpeta(models.Model):
         'self', on_delete=models.CASCADE, null=True, blank=True, related_name='hijas',
     )
 
+    # Restringir es la EXCEPCION, no el default: sin esto todo lo que ya existia se
+    # habria vuelto invisible de golpe, y los agentes habrian perdido lo que leian.
+    # Sin restringir, la carpeta la ve y la edita cualquier miembro del Workspace.
+    restringida = models.BooleanField(
+        default=False,
+        help_text='Si esta en True, solo entran las personas con permiso.',
+    )
+
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='+',
@@ -172,3 +180,93 @@ class Version(models.Model):
         if self.autor:
             return self.autor.get_full_name() or self.autor.email
         return 'el sistema'
+
+
+# ── Permisos ──────────────────────────────────────────────────────────────────
+
+NIVEL_LECTURA = 'lectura'
+NIVEL_EDICION = 'edicion'
+NIVELES = [
+    (NIVEL_LECTURA, 'Puede ver'),
+    (NIVEL_EDICION, 'Puede editar'),
+]
+ORDEN_DE_NIVELES = {NIVEL_LECTURA: 0, NIVEL_EDICION: 1}
+
+
+class Permiso(models.Model):
+    """Quien entra a una carpeta o a un documento restringido, y con que nivel.
+
+    ## El modelo, en una frase
+
+    **Restringir es la excepcion.** Sin nada restringido, los archivos de la empresa los
+    ve y los edita cualquier miembro del Workspace — que es como venia funcionando. Al
+    marcar una carpeta o un archivo como restringido, ahi si hace falta un permiso.
+
+    ## La regla de herencia: manda la restriccion mas cercana
+
+    Para saber si alguien entra a un archivo se camina hacia arriba: archivo, su carpeta,
+    la carpeta de esa carpeta. **La primera restriccion que se encuentra decide**, y hace
+    falta un permiso en ESE nodo (o mas arriba). Si no hay ninguna restriccion en toda la
+    cadena, entra cualquier miembro.
+
+    Se eligio "la mas cercana manda" en vez de sumar permisos de todos los niveles porque
+    es lo que se puede explicar en una linea en la pantalla: "esta carpeta es restringida,
+    solo estas personas". Un modelo aditivo obliga a que la gente calcule.
+
+    Dos excepciones, siempre: el administrador del Workspace y quien creo el archivo. El
+    primero porque no puede administrar lo que no ve; el segundo porque perder acceso a lo
+    que uno mismo subio no se entiende de ninguna manera.
+    """
+
+    # Uno de los dos, nunca los dos: el permiso es de una carpeta o de un documento.
+    carpeta = models.ForeignKey(
+        Carpeta, on_delete=models.CASCADE, null=True, blank=True, related_name='permisos',
+    )
+    document = models.ForeignKey(
+        'organizations.CompanyDocument', on_delete=models.CASCADE,
+        null=True, blank=True, related_name='permisos',
+    )
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='permisos_de_archivos',
+    )
+    nivel = models.CharField(max_length=10, choices=NIVELES, default=NIVEL_LECTURA)
+
+    otorgado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='+',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'archivos_permisos'
+        ordering = ['user__first_name', 'user__email']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['carpeta', 'user'], name='un_permiso_por_carpeta_y_persona',
+                condition=models.Q(carpeta__isnull=False),
+            ),
+            models.UniqueConstraint(
+                fields=['document', 'user'], name='un_permiso_por_documento_y_persona',
+                condition=models.Q(document__isnull=False),
+            ),
+            # Un permiso que no apunta a nada, o que apunta a las dos cosas, es un error
+            # de programacion: mejor que la base lo rechace que descubrirlo despues.
+            models.CheckConstraint(
+                check=(
+                    models.Q(carpeta__isnull=False, document__isnull=True)
+                    | models.Q(carpeta__isnull=True, document__isnull=False)
+                ),
+                name='el_permiso_es_de_una_carpeta_o_de_un_documento',
+            ),
+        ]
+        verbose_name = 'Permiso'
+        verbose_name_plural = 'Permisos'
+
+    def __str__(self):
+        sobre = self.carpeta or self.document
+        return f'{self.user} — {self.nivel} sobre {sobre}'
+
+    @property
+    def puede_editar(self):
+        return self.nivel == NIVEL_EDICION

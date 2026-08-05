@@ -411,3 +411,316 @@ class EsEditableTests(TestCase):
             ('f.png', 'image/png'),
         ]:
             self.assertFalse(es_editable(nombre, ct), f'{nombre} NO debería ser editable')
+
+
+class PermisosBase(BaseArchivos):
+    """Una empresa con un admin, dos personas comunes, y carpetas para restringir."""
+
+    def setUp(self):
+        super().setUp()
+        from apps.workspaces.models import ROLE_MEMBER
+
+        # `self.user` es ADMIN del Workspace (lo pone BaseArchivos), así que ve todo.
+        self.ana = User.objects.create_user(
+            username='ana@afable.test', email='ana@afable.test', password='afable123',
+        )
+        self.beto = User.objects.create_user(
+            username='beto@afable.test', email='beto@afable.test', password='afable123',
+        )
+        self.ws.add_member(self.ana, ROLE_MEMBER)
+        self.ws.add_member(self.beto, ROLE_MEMBER)
+
+        self.rrhh = Carpeta.objects.create(
+            organization=self.org, name='RRHH', restringida=True, created_by=self.user,
+        )
+        self.contratos = Carpeta.objects.create(
+            organization=self.org, name='Contratos', parent=self.rrhh,
+        )
+        self.sueldos = CompanyDocument.objects.create(
+            organization=self.org, title='Sueldos 2026', file='s.md',
+            content_type='text/markdown', editable=True, carpeta=self.rrhh,
+            extracted_text='El gerente gana 5 millones.',
+        )
+        # Uno público, para comprobar que restringir no arrastra a los demás.
+        self.publico = CompanyDocument.objects.create(
+            organization=self.org, title='Manual de marca', file='m.md',
+            content_type='text/markdown', editable=True,
+            extracted_text='El logo va en indigo.',
+        )
+
+    def nivel_doc(self, quien, doc):
+        from apps.archivos.permisos import nivel_sobre_documento
+        from apps.workspaces.permissions import membership_por_organizacion
+
+        return nivel_sobre_documento(quien, doc, membership_por_organizacion(quien, self.org))
+
+    def visibles(self, quien):
+        from apps.archivos.permisos import documentos_visibles
+        from apps.workspaces.permissions import membership_por_organizacion
+
+        return set(
+            documentos_visibles(quien, self.org, membership_por_organizacion(quien, self.org))
+            .values_list('title', flat=True)
+        )
+
+
+class HerenciaDePermisosTests(PermisosBase):
+    """Manda la restricción más cercana, y restringir es la excepción."""
+
+    def test_sin_restringir_lo_ve_cualquier_miembro(self):
+        self.assertEqual(self.nivel_doc(self.ana, self.publico), 'edicion')
+
+    def test_una_carpeta_restringida_esconde_lo_que_tiene_adentro(self):
+        self.assertIsNone(self.nivel_doc(self.ana, self.sueldos))
+        self.assertNotIn('Sueldos 2026', self.visibles(self.ana))
+
+    def test_pero_no_esconde_lo_de_afuera(self):
+        """Restringir una carpeta no puede volver invisible el resto de la empresa."""
+        self.assertIn('Manual de marca', self.visibles(self.ana))
+
+    def test_la_restriccion_se_hereda_hacia_abajo(self):
+        """Una subcarpeta de una carpeta restringida también queda restringida."""
+        from apps.archivos.permisos import nivel_sobre_carpeta
+        from apps.workspaces.permissions import membership_por_organizacion
+
+        nivel = nivel_sobre_carpeta(
+            self.ana, self.contratos, membership_por_organizacion(self.ana, self.org),
+        )
+        self.assertIsNone(nivel)
+
+    def test_con_permiso_de_lectura_lo_ve_pero_no_lo_edita(self):
+        from apps.archivos.models import Permiso
+
+        Permiso.objects.create(carpeta=self.rrhh, user=self.ana, nivel='lectura')
+        self.assertEqual(self.nivel_doc(self.ana, self.sueldos), 'lectura')
+        self.assertIn('Sueldos 2026', self.visibles(self.ana))
+
+    def test_con_permiso_de_edicion_lo_edita(self):
+        from apps.archivos.models import Permiso
+
+        Permiso.objects.create(carpeta=self.rrhh, user=self.ana, nivel='edicion')
+        self.assertEqual(self.nivel_doc(self.ana, self.sueldos), 'edicion')
+
+    def test_el_permiso_de_una_persona_no_alcanza_a_otra(self):
+        from apps.archivos.models import Permiso
+
+        Permiso.objects.create(carpeta=self.rrhh, user=self.ana, nivel='lectura')
+        self.assertIsNone(self.nivel_doc(self.beto, self.sueldos))
+
+    def test_el_administrador_del_workspace_ve_todo(self):
+        """No puede administrar lo que no ve."""
+        self.assertEqual(self.nivel_doc(self.user, self.sueldos), 'edicion')
+        self.assertIn('Sueldos 2026', self.visibles(self.user))
+
+    def test_quien_subio_el_archivo_no_pierde_el_acceso(self):
+        """Perder acceso a lo propio no se entiende de ninguna manera."""
+        propio = CompanyDocument.objects.create(
+            organization=self.org, title='Lo de Ana', file='a.md',
+            uploaded_by=self.ana, carpeta=self.rrhh, editable=True,
+        )
+        self.assertEqual(self.nivel_doc(self.ana, propio), 'edicion')
+
+    def test_un_documento_se_restringe_por_si_solo(self):
+        """Sin carpeta restringida: la restricción propia del archivo alcanza."""
+        self.publico.restringido = True
+        self.publico.save(update_fields=['restringido'])
+        self.assertIsNone(self.nivel_doc(self.ana, self.publico))
+        self.assertNotIn('Manual de marca', self.visibles(self.ana))
+
+    def test_un_permiso_en_el_documento_gana_sobre_su_carpeta(self):
+        """La restricción MÁS CERCANA manda: la del archivo antes que la de la carpeta."""
+        from apps.archivos.models import Permiso
+
+        self.sueldos.restringido = True
+        self.sueldos.save(update_fields=['restringido'])
+        Permiso.objects.create(document=self.sueldos, user=self.ana, nivel='lectura')
+        self.assertEqual(self.nivel_doc(self.ana, self.sueldos), 'lectura')
+
+
+class ElExploradorRespetaLosPermisosTests(PermisosBase):
+
+    def test_la_carpeta_restringida_no_aparece_en_el_arbol(self):
+        """Que no exista para quien no entra es más simple que un «sin acceso»."""
+        self.client.force_authenticate(user=self.ana)
+        datos = self.client.get(URL, self.q()).data
+        self.assertNotIn('RRHH', [c['name'] for c in datos['arbol']])
+
+    def test_el_administrador_si_la_ve(self):
+        self.client.force_authenticate(user=self.user)
+        datos = self.client.get(URL, self.q()).data
+        self.assertIn('RRHH', [c['name'] for c in datos['arbol']])
+
+    def test_buscar_no_encuentra_lo_restringido(self):
+        """El buscador es el agujero clásico: mira toda la empresa."""
+        self.client.force_authenticate(user=self.ana)
+        datos = self.client.get(URL, {**self.q(), 'q': 'Sueldos'}).data
+        self.assertEqual(datos['documentos'], [])
+
+    def test_leer_un_documento_restringido_da_404_no_403(self):
+        """Un 403 confirmaría que existe y filtraría su id."""
+        self.client.force_authenticate(user=self.ana)
+        r = self.client.get(f'{URL}documentos/{self.sueldos.pk}/contenido/', self.q())
+        self.assertEqual(r.status_code, 404)
+
+    def test_con_lectura_lo_lee_pero_guardar_da_403(self):
+        """Verlo y no poder editarlo SÍ es un 403: la diferencia importa."""
+        from apps.archivos.models import Permiso
+
+        Permiso.objects.create(carpeta=self.rrhh, user=self.ana, nivel='lectura')
+        self.client.force_authenticate(user=self.ana)
+
+        self.assertEqual(
+            self.client.get(f'{URL}documentos/{self.sueldos.pk}/contenido/', self.q()).status_code,
+            200,
+        )
+        r = self.client.put(
+            f'{URL}documentos/{self.sueldos.pk}/contenido/',
+            {**self.q(), 'contenido': 'otra cosa'}, format='json',
+        )
+        self.assertEqual(r.status_code, 403)
+        self.sueldos.refresh_from_db()
+        self.assertIn('5 millones', self.sueldos.extracted_text)
+
+    def test_con_lectura_tampoco_lo_renombra_ni_lo_mueve(self):
+        from apps.archivos.models import Permiso
+
+        Permiso.objects.create(carpeta=self.rrhh, user=self.ana, nivel='lectura')
+        self.client.force_authenticate(user=self.ana)
+        r = self.client.patch(
+            f'{URL}documentos/{self.sueldos.pk}/', {**self.q(), 'title': 'Robado'}, format='json',
+        )
+        self.assertEqual(r.status_code, 403)
+
+    def test_con_lectura_no_restaura_una_version(self):
+        from apps.archivos.models import Permiso
+        from services.documentos import asegurar_version_inicial
+
+        asegurar_version_inicial(self.sueldos)
+        Permiso.objects.create(carpeta=self.rrhh, user=self.ana, nivel='lectura')
+        self.client.force_authenticate(user=self.ana)
+        r = self.client.post(
+            f'{URL}documentos/{self.sueldos.pk}/versiones/1/', self.q(), format='json',
+        )
+        self.assertEqual(r.status_code, 403)
+
+    def test_el_historial_de_lo_restringido_no_se_lee(self):
+        self.client.force_authenticate(user=self.ana)
+        r = self.client.get(f'{URL}documentos/{self.sueldos.pk}/versiones/', self.q())
+        self.assertEqual(r.status_code, 404)
+
+
+class CompartirTests(PermisosBase):
+
+    def test_se_comparte_una_carpeta_con_alguien(self):
+        self.client.force_authenticate(user=self.user)
+        r = self.client.post(
+            f'{URL}compartir/',
+            {**self.q(), 'carpeta': self.rrhh.pk, 'ids': [self.ana.pk], 'nivel': 'lectura'},
+            format='json',
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data['compartido_con'][0]['email'], self.ana.email)
+        self.assertEqual(self.nivel_doc(self.ana, self.sueldos), 'lectura')
+
+    def test_se_sube_de_lectura_a_edicion(self):
+        from apps.archivos.models import Permiso
+
+        Permiso.objects.create(carpeta=self.rrhh, user=self.ana, nivel='lectura')
+        self.client.force_authenticate(user=self.user)
+        self.client.post(
+            f'{URL}compartir/',
+            {**self.q(), 'carpeta': self.rrhh.pk, 'ids': [self.ana.pk], 'nivel': 'edicion'},
+            format='json',
+        )
+        self.assertEqual(self.nivel_doc(self.ana, self.sueldos), 'edicion')
+
+    def test_se_saca_el_permiso(self):
+        from apps.archivos.models import Permiso
+
+        Permiso.objects.create(carpeta=self.rrhh, user=self.ana, nivel='lectura')
+        self.client.force_authenticate(user=self.user)
+        r = self.client.delete(
+            f'{URL}compartir/', {**self.q(), 'carpeta': self.rrhh.pk, 'ids': [self.ana.pk]},
+            format='json',
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(self.nivel_doc(self.ana, self.sueldos))
+
+    def test_no_se_comparte_con_alguien_de_fuera_del_workspace(self):
+        """Compartir con alguien de afuera es invitarlo a la empresa, y eso va en Admin."""
+        self.client.force_authenticate(user=self.user)
+        r = self.client.post(
+            f'{URL}compartir/',
+            {**self.q(), 'carpeta': self.rrhh.pk, 'ids': [self.ajeno.pk]}, format='json',
+        )
+        self.assertEqual(r.status_code, 400)
+
+    def test_quien_solo_lee_no_reparte_accesos(self):
+        """Si no, el nivel de lectura no significaría nada."""
+        from apps.archivos.models import Permiso
+
+        Permiso.objects.create(carpeta=self.rrhh, user=self.ana, nivel='lectura')
+        self.client.force_authenticate(user=self.ana)
+        r = self.client.post(
+            f'{URL}compartir/',
+            {**self.q(), 'carpeta': self.rrhh.pk, 'ids': [self.beto.pk]}, format='json',
+        )
+        self.assertEqual(r.status_code, 403)
+
+    def test_se_restringe_y_se_desrestringe_un_documento(self):
+        self.client.force_authenticate(user=self.user)
+        self.client.post(
+            f'{URL}compartir/',
+            {**self.q(), 'documento': self.publico.pk, 'restringido': True}, format='json',
+        )
+        self.publico.refresh_from_db()
+        self.assertTrue(self.publico.restringido)
+        self.assertIsNone(self.nivel_doc(self.ana, self.publico))
+
+        self.client.post(
+            f'{URL}compartir/',
+            {**self.q(), 'documento': self.publico.pk, 'restringido': False}, format='json',
+        )
+        self.publico.refresh_from_db()
+        self.assertEqual(self.nivel_doc(self.ana, self.publico), 'edicion')
+
+
+class NadieUsaUnAgenteParaSaltearUnPermisoTests(PermisosBase):
+    """La propiedad por la que existe todo este bloque.
+
+    Si el alcance del agente no se intersectara con lo que ve la persona, restringir un
+    archivo sería teatro: bastaría con preguntárselo al agente.
+    """
+
+    def prompt(self, quien):
+        from apps.agents.views import _build_onboarding_context
+
+        return _build_onboarding_context(quien, consulta='¿cuánto gana el gerente?')['system_prompt']
+
+    def test_el_prompt_de_quien_no_ve_el_archivo_no_lo_trae(self):
+        self.assertNotIn('5 millones', self.prompt(self.ana))
+
+    def test_el_prompt_del_administrador_si_lo_trae(self):
+        self.assertIn('5 millones', self.prompt(self.user))
+
+    def test_con_permiso_el_prompt_lo_trae(self):
+        from apps.archivos.models import Permiso
+
+        Permiso.objects.create(carpeta=self.rrhh, user=self.ana, nivel='lectura')
+        self.assertIn('5 millones', self.prompt(self.ana))
+
+    def test_lo_no_restringido_sigue_llegando_a_todos(self):
+        """Restringir uno no puede dejar al agente sin el resto."""
+        self.assertIn('indigo', self.prompt(self.ana))
+
+    def test_las_herramientas_tampoco_lo_alcanzan(self):
+        """`allowed_doc_ids` recortado viaja hasta `_documentos` en agent_tools."""
+        from apps.agents.views import _build_onboarding_context
+        from services.agent_tools import execute_tool
+
+        contexto = _build_onboarding_context(self.ana, consulta='sueldos')
+        r = execute_tool(
+            'read_company_document', {'id': self.sueldos.pk}, self.org, [],
+            allowed_doc_ids=contexto.get('allowed_doc_ids'),
+        )
+        self.assertIn('error', r)

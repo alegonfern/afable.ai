@@ -5,12 +5,13 @@ import {
   Stack, TextField, Typography, useTheme,
 } from '@mui/material';
 import {
-  ChevronDown, ChevronRight, FileText, Folder, FolderPlus, Home,
+  ChevronDown, ChevronRight, FileText, Folder, FolderPlus, Globe, Home, Lock,
   MoreVertical, Search, Upload,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import PageHeader from '../../components/PageHeader';
 import { api } from '../../services/api';
+import DialogoPermisos from './DialogoPermisos';
 import { useWorkspace } from '../../context/WorkspaceContext';
 
 /**
@@ -42,6 +43,7 @@ export default function ArchivosPage() {
   const [menu, setMenu] = useState(null);                 // {tipo, item, anchor}
   const [renombrando, setRenombrando] = useState(null);
   const [subiendo, setSubiendo] = useState(false);
+  const [permisos, setPermisos] = useState(null);   // {carpeta} o {documento}
   const entrada = useRef(null);
 
   const cargar = useCallback(async () => {
@@ -224,6 +226,17 @@ export default function ArchivosPage() {
         }}>
           {esCarpeta ? <Folder size={15} /> : <FileText size={15} />}
         </Box>
+
+        {/* Un candado en la fila: restringido tiene que verse sin abrir nada, o nadie
+            sabe qué está a la vista del equipo y qué no. */}
+        {(esCarpeta ? item.restringida : item.restringido) && (
+          <Box
+            title={`Restringido · ${(esCarpeta ? item.compartida_con : item.compartido_con) || 0} con acceso`}
+            sx={{ display: 'flex', color: '#f0b429', flexShrink: 0 }}
+          >
+            <Lock size={13} />
+          </Box>
+        )}
 
         <Box sx={{ flex: 1, minWidth: 0 }}>
           {editandoNombre ? (
@@ -424,11 +437,20 @@ export default function ArchivosPage() {
 
           <Typography sx={{ fontSize: '0.8rem', color: textMuted, mt: 3 }}>
             Doble clic para abrir. Los archivos se arrastran a una carpeta del árbol para
-            moverlos. Todo lo que hay acá lo ve el equipo de la empresa: los permisos por
-            archivo son lo próximo.
+            moverlos. Lo que no tiene candado lo ve todo el equipo; con «Compartir y
+            permisos» se restringe una carpeta o un archivo suelto.
           </Typography>
         </Box>
       </Box>
+
+      <DialogoPermisos
+        abierto={Boolean(permisos)}
+        onCerrar={() => setPermisos(null)}
+        slug={slug}
+        carpeta={permisos?.carpeta}
+        documento={permisos?.documento}
+        onCambio={cargar}
+      />
 
       <Menu
         anchorEl={menu?.anchor} open={Boolean(menu)} onClose={() => setMenu(null)}
@@ -446,6 +468,17 @@ export default function ArchivosPage() {
             Abrir
           </MenuItem>
         )}
+        <MenuItem
+          onClick={() => {
+            setPermisos(menu.tipo === 'carpeta'
+              ? { carpeta: menu.item.id }
+              : { documento: menu.item.id });
+            setMenu(null);
+          }}
+          sx={{ fontSize: '0.9rem' }}
+        >
+          Compartir y permisos…
+        </MenuItem>
         <MenuItem
           onClick={() => { setRenombrando({ tipo: menu.tipo, id: menu.item.id }); setMenu(null); }}
           sx={{ fontSize: '0.9rem' }}
