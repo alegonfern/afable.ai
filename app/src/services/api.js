@@ -151,6 +151,10 @@ export const api = {
   // Acepta JSON o un FormData (el logo). El cliente fuerza `application/json` por
   // omisión, y con ese encabezado el multipart viaja sin su boundary y el backend
   // responde 400: hay que dejar que axios lo arme cuando el cuerpo es un FormData.
+  // Las tareas cruzando Sesiones: la pantalla "qué tengo pendiente".
+  getTareasDelWorkspace: (workspace, params = {}) =>
+    apiClient.get('/tareas/', { params: { workspace, ...params } }),
+
   updateWorkspace: (slug, data) =>
     apiClient.patch(`/workspaces/${slug}/`, data,
       data instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined),

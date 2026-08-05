@@ -47,6 +47,7 @@ import ArchivosPage from './pages/archivos/ArchivosPage';
 import DocumentoPage from './pages/archivos/DocumentoPage';
 import PersonasPage from './pages/admin/PersonasPage';
 import WorkspacePage from './pages/admin/WorkspacePage';
+import TareasPage from './pages/TareasPage';
 import AgentesAdminPage from './pages/admin/AgentesAdminPage';
 
 export default function App() {
@@ -120,6 +121,9 @@ export default function App() {
             {/* Pantallas nuevas; las rutas viejas redirigen para no romper enlaces */}
             <Route path="admin/personas"     element={<PersonasPage />} />
             <Route path="equipo"             element={<Navigate to="/app/admin/personas" replace />} />
+            {/* Tareas: todo lo pendiente cruzando Sesiones. Las tareas viven dentro de
+                una Sesión, pero "qué tengo pendiente" no es una pregunta sobre una Sesión. */}
+            <Route path="tareas"             element={<TareasPage />} />
             <Route path="admin/workspace"    element={<WorkspacePage />} />
             <Route path="admin/agentes"      element={<AgentesAdminPage />} />
             {/* La ficha de un agente es UNA: el constructor. Admin > Agentes es la

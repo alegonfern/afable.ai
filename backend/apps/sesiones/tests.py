@@ -19,7 +19,7 @@ from apps.agents.models import Agent
 from apps.organizations.models import CompanyDocument, Organization
 from apps.sesiones.models import (
     ROL_EDITOR, ROL_MIEMBRO, VISIBILIDAD_RESTRINGIDA,
-    Sesion, SesionMiembro, Task,
+    Sesion, SesionMiembro, TAREA_LISTA, Task,
 )
 from apps.workspaces.models import ROLE_ADMIN, ROLE_MEMBER, Workspace
 
@@ -759,3 +759,115 @@ class CompartirUnaConversacionTests(BaseSesiones):
         fila = next(c for c in r.data if c['id'] == self.conv.pk)
         self.assertEqual(fila['sesion_nombre'], self.sesion.name)
         self.assertEqual(fila['sesion_slug'], self.sesion.slug)
+
+
+class TareasCruzandoSesionesTests(BaseSesiones):
+    """`GET /api/v1/tareas/` — todo lo pendiente, sin abrir Sesión por Sesión.
+
+    Las tareas existían solo adentro de su Sesión, cuatro niveles adentro de la barra
+    lateral, así que "¿qué tengo pendiente?" no se podía contestar sin recorrer todas las
+    Sesiones y acordarse de todas. Lo que estas pruebas cuidan, en orden: que junte de
+    varias Sesiones, que NO junte de las que la persona no ve, y que los contadores de las
+    pestañas no dependan del filtro que está puesto.
+    """
+
+    URL = '/api/v1/tareas/'
+
+    def setUp(self):
+        super().setUp()
+        self.otra = Sesion.objects.create(
+            workspace=self.ws, name='Cliente Atika', created_by=self.admin,
+        )
+        # Una restringida donde el colega NO está agregado.
+        self.privada = Sesion.objects.create(
+            workspace=self.ws, name='Sueldos', created_by=self.admin,
+            visibility=VISIBILIDAD_RESTRINGIDA,
+        )
+
+        self.mia = Task.objects.create(
+            sesion=self.sesion, title='Llamar al cliente', assignee=self.colega,
+            created_by=self.admin,
+        )
+        self.de_otro = Task.objects.create(
+            sesion=self.otra, title='Revisar la propuesta', assignee=self.admin,
+            created_by=self.admin,
+        )
+        self.del_agente = Task.objects.create(
+            sesion=self.otra, title='Resumir los pagos', agent=self.agente,
+            created_by=self.admin,
+        )
+        self.hecha = Task.objects.create(
+            sesion=self.sesion, title='Enviar el contrato', state=TAREA_LISTA,
+            assignee=self.colega, created_by=self.admin,
+        )
+        self.secreta = Task.objects.create(
+            sesion=self.privada, title='Ajustar sueldos', created_by=self.admin,
+        )
+
+    def pedir(self, quien, **params):
+        self.como(quien)
+        return self.client.get(self.URL, {'workspace': self.ws.slug, **params})
+
+    def titulos(self, r):
+        return {t['title'] for t in r.data['results']}
+
+    def test_junta_las_tareas_de_varias_sesiones(self):
+        r = self.pedir(self.admin)
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('Llamar al cliente', self.titulos(r))
+        self.assertIn('Revisar la propuesta', self.titulos(r))
+
+    def test_cada_tarea_dice_de_que_sesion_es(self):
+        """Sin eso, una lista que cruza Sesiones es una lista sin contexto."""
+        r = self.pedir(self.admin)
+        de = {t['title']: t['sesion']['name'] for t in r.data['results']}
+        self.assertEqual(de['Llamar al cliente'], 'Cliente Rever')
+        self.assertEqual(de['Revisar la propuesta'], 'Cliente Atika')
+
+    def test_no_trae_las_de_una_sesion_que_no_se_ve(self):
+        """Lo que esta vista existe para no romper: cruzar Sesiones no puede ser la
+        forma de leer las tareas de una Sesión restringida ajena."""
+        r = self.pedir(self.colega)
+        self.assertNotIn('Ajustar sueldos', self.titulos(r))
+        # Y el administrador sí, porque ve todo el Workspace.
+        self.assertIn('Ajustar sueldos', self.titulos(self.pedir(self.admin)))
+
+    def test_agregado_a_la_restringida_si_las_ve(self):
+        SesionMiembro.objects.create(sesion=self.privada, user=self.colega)
+        self.assertIn('Ajustar sueldos', self.titulos(self.pedir(self.colega)))
+
+    def test_mias_deja_solo_las_asignadas_a_quien_pregunta(self):
+        r = self.pedir(self.colega, mias=1, estado='abiertas')
+        self.assertEqual(self.titulos(r), {'Llamar al cliente'})
+
+    def test_de_agentes_deja_solo_las_que_ejecuta_un_agente(self):
+        r = self.pedir(self.admin, agente=1, estado='abiertas')
+        self.assertEqual(self.titulos(r), {'Resumir los pagos'})
+
+    def test_abiertas_no_trae_las_hechas(self):
+        r = self.pedir(self.admin, estado='abiertas')
+        self.assertNotIn('Enviar el contrato', self.titulos(r))
+
+    def test_los_contadores_no_dependen_del_filtro_puesto(self):
+        """Son los números de las pestañas: si contaran lo ya filtrado, la pestaña
+        "Del equipo" mostraría 0 justo estando en "Mías" y nadie iría a mirarla."""
+        r = self.pedir(self.colega, mias=1, estado='abiertas')
+        self.assertEqual(len(r.data['results']), 1)              # lo filtrado
+        totales = r.data['totales']
+        self.assertEqual(totales['mias'], 1)
+        self.assertEqual(totales['pendientes'], 3)               # las 3 abiertas que ve
+        self.assertEqual(totales['de_agentes'], 1)
+        self.assertEqual(totales['todas'], 4)                    # sin la de la privada
+
+    def test_las_pendientes_van_antes_que_las_hechas(self):
+        """La lista se lee para saber qué falta."""
+        r = self.pedir(self.admin)
+        estados = [t['state'] for t in r.data['results']]
+        self.assertEqual(estados[-1], TAREA_LISTA)
+
+    def test_sin_workspace_no_adivina(self):
+        self.como(self.admin)
+        self.assertEqual(self.client.get(self.URL).status_code, 400)
+
+    def test_alguien_de_afuera_no_llega(self):
+        self.assertEqual(self.pedir(self.ajeno).status_code, 404)

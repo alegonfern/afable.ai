@@ -33,8 +33,13 @@ PRIORIDAD_DE_ESTADO = {'pendiente': 0, 'en_curso': 1, 'lista': 2}
 MAX_RESULTADO = 8000
 
 
-def serializar(tarea, quien=None):
-    return {
+def serializar(tarea, quien=None, con_sesion=False):
+    """`con_sesion` agrega de qué Sesión es.
+
+    Solo hace falta en la vista que cruza Sesiones: dentro de una Sesión el dato es el
+    encabezado de la pantalla y repetirlo en cada fila sería ruido.
+    """
+    datos = {
         'id': tarea.id,
         'title': tarea.title,
         'description': tarea.description,
@@ -55,6 +60,12 @@ def serializar(tarea, quien=None):
         'es_mia': tarea.assignee_id == quien.id if quien is not None else None,
         'created_at': tarea.created_at,
     }
+    if con_sesion:
+        datos['sesion'] = {
+            'slug': tarea.sesion.slug, 'name': tarea.sesion.name,
+            'archivada': tarea.sesion.archivada,
+        }
+    return datos
 
 
 def _ordenadas(qs):
@@ -314,3 +325,67 @@ class TareaEjecutarView(APIView):
             'resultado', 'resultado_error', 'ejecutada_at', 'state', 'updated_at',
         ])
         return Response(serializar(tarea, request.user))
+
+
+class TareasDelWorkspaceView(APIView):
+    """GET /api/v1/tareas/?workspace=<slug> — TODAS las tareas, cruzando Sesiones.
+
+    Es la pantalla que faltaba. Las tareas solo existían adentro de su Sesión, cuatro
+    niveles adentro de la barra lateral, así que la pregunta que uno se hace de verdad
+    —"¿qué tengo pendiente?"— no se podía contestar sin abrir Sesión por Sesión y acordarse
+    de todas. Una tarea que hay que ir a buscar no es un pendiente: es un papel perdido.
+
+    Solo las Sesiones que la persona ve (`sesiones_visibles`), que es el mismo embudo que
+    usa la barra lateral. Sin eso, una vista que cruza Sesiones sería la forma de leer las
+    tareas de una Sesión restringida.
+
+    `mias=1` deja las asignadas a quien pregunta, `estado=` filtra igual que dentro de una
+    Sesión, y `agente=1` deja solo las que tiene que ejecutar un agente.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        slug = request.query_params.get('workspace')
+        if not slug:
+            return Response(
+                {'detail': 'Falta el Workspace.'}, status=status.HTTP_400_BAD_REQUEST,
+            )
+        membership = require_membership(request.user, slug)
+
+        from .permissions import sesiones_visibles
+
+        # Las archivadas quedan afuera: una Sesión archivada es trabajo cerrado, y sus
+        # pendientes en la lista de pendientes serían ruido permanente.
+        visibles = sesiones_visibles(membership)
+        qs = Task.objects.filter(sesion__in=visibles).select_related(
+            'assignee', 'agent', 'created_by', 'sesion',
+        )
+
+        if request.query_params.get('mias') in ('1', 'true'):
+            qs = qs.filter(assignee=request.user)
+        if request.query_params.get('agente') in ('1', 'true'):
+            qs = qs.filter(agent__isnull=False)
+
+        estado = request.query_params.get('estado')
+        if estado == 'abiertas':
+            qs = qs.exclude(state=TAREA_LISTA)
+        elif estado in dict(TAREA_ESTADOS):
+            qs = qs.filter(state=estado)
+
+        tareas = list(_ordenadas(qs))
+
+        # Los contadores salen SIN los filtros de estado y de a quién: son los que pintan
+        # las pestañas, y una pestaña que cuenta solo lo que ya está filtrado no sirve para
+        # decidir a cuál ir.
+        todas = Task.objects.filter(sesion__in=visibles)
+        return Response({
+            'count': len(tareas),
+            'totales': {
+                'todas': todas.count(),
+                'pendientes': todas.exclude(state=TAREA_LISTA).count(),
+                'mias': todas.filter(assignee=request.user).exclude(state=TAREA_LISTA).count(),
+                'de_agentes': todas.filter(agent__isnull=False).exclude(state=TAREA_LISTA).count(),
+            },
+            'results': [serializar(t, request.user, con_sesion=True) for t in tareas],
+        })

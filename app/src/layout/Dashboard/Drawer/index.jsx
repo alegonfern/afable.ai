@@ -20,7 +20,7 @@ import {
   MessageSquare, LayoutDashboard, Settings, Search, ChevronLeft, Plus, ChevronDown,
   ChevronRight, Zap, Bot, History, Boxes,
   User, Building2, HelpCircle, LogOut, Timer, Layers, Users,
-  Plug, FolderOpen, BookOpen,
+  Plug, FolderOpen, BookOpen, CheckSquare,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { authService } from '../../../services/auth';
@@ -253,6 +253,10 @@ export default function Drawer({ open, handleDrawerToggle }) {
       seccion: null,
       items: [
         { path: '/app/agentes',          label: 'Agentes',      icon: <Bot size={15} /> },
+        // Las Tareas estaban SOLO adentro de su Sesion, cuatro niveles abajo: "que tengo
+        // pendiente" no se podia contestar sin abrir Sesion por Sesion. Sube al menu del
+        // dia a dia, que es cuando se hace esa pregunta.
+        { path: '/app/tareas',           label: 'Tareas',       icon: <CheckSquare size={15} /> },
         // Los Disparadores estaban en el modo Espacios, donde no son un espacio.
         // Automatizar lo que uno quiere OBTENER de Afable es trabajo del dia a dia.
         { path: '/app/automatizaciones', label: 'Disparadores', icon: <Timer size={15} /> },

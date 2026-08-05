@@ -15,6 +15,9 @@ urlpatterns = [
         path('archivos/', include('apps.archivos.urls')),
         path('agents/', include('apps.agents.urls')),
         path('sesiones/', include('apps.sesiones.urls')),
+        # Las tareas cruzando Sesiones. Va en la raíz y no bajo `sesiones/` porque la
+        # pregunta que contesta —"¿qué tengo pendiente?"— no es sobre una Sesión.
+        path('tareas/', include('apps.sesiones.tareas_urls')),
         path('tools/', include('apps.tools.urls')),
         path('payments/', include('apps.payments.urls')),
         path('leads/', include('apps.leads.urls')),
