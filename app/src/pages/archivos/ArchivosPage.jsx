@@ -2,10 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Alert, Box, Button, CircularProgress, IconButton, InputBase, Menu, MenuItem,
-  Stack, TextField, Typography, useTheme,
+  Stack, TextField, ToggleButton, ToggleButtonGroup, Typography, useTheme,
 } from '@mui/material';
 import {
-  ChevronDown, ChevronRight, FileText, Folder, FolderPlus, Globe, Home, Lock,
+  ChevronDown, ChevronRight, FileText, Folder, FolderPlus, Home, LayoutGrid, List, Lock,
   MoreVertical, Search, Upload,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -45,6 +45,14 @@ export default function ArchivosPage() {
   const [renombrando, setRenombrando] = useState(null);
   const [subiendo, setSubiendo] = useState(false);
   const [permisos, setPermisos] = useState(null);   // {carpeta} o {documento}
+  // Cuadrícula o lista. Se recuerda porque es una preferencia de cómo mirar, no del
+  // contenido: quien eligió una vista no quiere volver a elegirla en cada carpeta.
+  const [vista, setVista] = useState(() => localStorage.getItem('afable_vista_archivos') || 'cuadricula');
+
+  const cambiarVista = (cual) => {
+    setVista(cual);
+    localStorage.setItem('afable_vista_archivos', cual);
+  };
   const entrada = useRef(null);
 
   const cargar = useCallback(async () => {
@@ -190,6 +198,103 @@ export default function ArchivosPage() {
         </Box>
       );
     });
+  };
+
+  /**
+   * Una ficha de la cuadrícula: la carpeta se ve como carpeta.
+   *
+   * Comparte con `Fila` el arrastrar y soltar, el doble clic y el menú: lo único que
+   * cambia es la forma. Lo que NO entra acá son las versiones y quién editó último — para
+   * eso está la lista, y por eso las dos vistas se conservan en vez de reemplazarse.
+   */
+  const Ficha = ({ tipo, item }) => {
+    const esCarpeta = tipo === 'carpeta';
+    const nombre = esCarpeta ? item.name : item.title;
+    const restringido = esCarpeta ? item.restringida : item.restringido;
+    const editandoNombre = renombrando?.tipo === tipo && renombrando?.id === item.id;
+
+    return (
+      <Box
+        draggable={!esCarpeta}
+        onDragStart={(e) => { if (!esCarpeta) e.dataTransfer.setData('documento', String(item.id)); }}
+        onDragOver={(e) => { if (esCarpeta) e.preventDefault(); }}
+        onDrop={(e) => {
+          if (!esCarpeta) return;
+          e.preventDefault();
+          const docId = e.dataTransfer.getData('documento');
+          if (docId) mover(Number(docId), item.id);
+        }}
+        onDoubleClick={() => {
+          if (esCarpeta) abrir(item.id);
+          else navigate(`/app/archivos/${item.id}`);
+        }}
+        sx={{
+          position: 'relative', p: 1.75, borderRadius: '12px', cursor: 'pointer',
+          border: `1px solid ${borde}`, bgcolor: bgSuave,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
+          transition: 'border-color .15s, background-color .15s',
+          '&:hover': {
+            borderColor: d ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)',
+            bgcolor: d ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.035)',
+          },
+        }}
+      >
+        <Box sx={{ position: 'absolute', top: 4, right: 4, display: 'flex', alignItems: 'center', gap: 0.25 }}>
+          {restringido && (
+            <Box
+              title={`Restringido · ${(esCarpeta ? item.compartida_con : item.compartido_con) || 0} con acceso`}
+              sx={{ display: 'flex', color: '#f0b429' }}
+            >
+              <Lock size={12} />
+            </Box>
+          )}
+          <IconButton
+            size="small"
+            onClick={(e) => { e.stopPropagation(); setMenu({ tipo, item, anchor: e.currentTarget }); }}
+          >
+            <MoreVertical size={14} />
+          </IconButton>
+        </Box>
+
+        <Box sx={{
+          color: esCarpeta ? '#f0b429' : '#9BA6E3',
+          mt: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          {esCarpeta ? <Folder size={44} strokeWidth={1.5} /> : <FileText size={40} strokeWidth={1.5} />}
+        </Box>
+
+        <Box sx={{ width: '100%', textAlign: 'center', minWidth: 0 }}>
+          {editandoNombre ? (
+            <InputBase
+              autoFocus defaultValue={nombre}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') renombrar(tipo, item, e.target.value);
+                if (e.key === 'Escape') setRenombrando(null);
+              }}
+              onBlur={(e) => renombrar(tipo, item, e.target.value)}
+              sx={{ fontSize: '0.85rem', fontWeight: 600, width: '100%', '& input': { textAlign: 'center' } }}
+            />
+          ) : (
+            <Typography
+              title={nombre}
+              sx={{
+                fontSize: '0.85rem', fontWeight: 600, lineHeight: 1.35,
+                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                overflow: 'hidden', wordBreak: 'break-word',
+              }}
+            >
+              {nombre}
+            </Typography>
+          )}
+          <Typography sx={{ fontSize: '0.72rem', color: textMuted, mt: 0.35 }}>
+            {esCarpeta
+              ? `${item.documentos} archivo${item.documentos === 1 ? '' : 's'}`
+              : (item.editable ? 'editable' : 'solo lectura')}
+          </Typography>
+        </Box>
+      </Box>
+    );
   };
 
   const Fila = ({ tipo, item }) => {
@@ -384,6 +489,25 @@ export default function ArchivosPage() {
               {subiendo ? 'Subiendo…' : 'Subir'}
             </Button>
             <input ref={entrada} type="file" hidden onChange={subir} />
+            {/* Cuadrícula o lista. La lista muestra versiones y quién editó último, que
+                en una ficha no caben: por eso conviven en vez de reemplazarse. */}
+            <ToggleButtonGroup
+              exclusive size="small" value={vista}
+              onChange={(_, v) => { if (v) cambiarVista(v); }}
+              sx={{
+                '& .MuiToggleButton-root': {
+                  px: 1, py: 0.4, borderColor: borde,
+                  '&.Mui-selected': { bgcolor: 'rgba(88,106,208,0.16)', color: '#586AD0' },
+                },
+              }}
+            >
+              <ToggleButton value="cuadricula" title="Ver como carpetas">
+                <LayoutGrid size={15} />
+              </ToggleButton>
+              <ToggleButton value="lista" title="Ver como lista">
+                <List size={15} />
+              </ToggleButton>
+            </ToggleButtonGroup>
           </Stack>
 
           {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
@@ -394,51 +518,69 @@ export default function ArchivosPage() {
             </Typography>
           )}
 
-          <Stack spacing={1}>
-            {nombreNueva !== null && (
-              <Stack direction="row" spacing={1.5} alignItems="center" sx={{
-                px: 1.5, py: 1.25, borderRadius: '9px',
-                border: `1px dashed ${borde}`, bgcolor: bgSuave,
-              }}>
-                <Box sx={{
-                  width: 30, height: 30, borderRadius: '8px', flexShrink: 0,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  bgcolor: 'rgba(240,180,41,0.14)', color: '#f0b429',
-                }}>
-                  <Folder size={15} />
-                </Box>
-                <InputBase
-                  autoFocus value={nombreNueva}
-                  onChange={(e) => setNombreNueva(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') crearCarpeta();
-                    if (e.key === 'Escape') setNombreNueva(null);
-                  }}
-                  onBlur={() => { if (!nombreNueva.trim()) setNombreNueva(null); }}
-                  placeholder="Nombre de la carpeta"
-                  sx={{ fontSize: '0.9375rem', fontWeight: 600, flex: 1 }}
-                />
-              </Stack>
-            )}
-
-            {!datos.buscando && datos.subcarpetas.map((c) => (
-              <Fila key={`c-${c.id}`} tipo="carpeta" item={c} />
-            ))}
-            {datos.documentos.map((doc) => (
-              <Fila key={`d-${doc.id}`} tipo="documento" item={doc} />
-            ))}
-
-            {datos.subcarpetas.length === 0 && datos.documentos.length === 0 && nombreNueva === null && (
+          {/* El campo para nombrar la carpeta nueva, igual en las dos vistas: lo que
+              cambia es cómo se ve lo que ya existe. */}
+          {nombreNueva !== null && (
+            <Stack direction="row" spacing={1.5} alignItems="center" sx={{
+              px: 1.5, py: 1.25, mb: 1.5, borderRadius: '9px',
+              border: `1px dashed ${borde}`, bgcolor: bgSuave,
+            }}>
               <Box sx={{
-                py: 6, textAlign: 'center', borderRadius: '12px',
-                border: `1px dashed ${borde}`, bgcolor: bgSuave,
+                width: 30, height: 30, borderRadius: '8px', flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                bgcolor: 'rgba(240,180,41,0.14)', color: '#f0b429',
               }}>
-                <Typography sx={{ fontSize: '0.9375rem', color: textMuted }}>
-                  {datos.buscando ? 'Nada coincide con la búsqueda.' : 'Esta carpeta está vacía.'}
-                </Typography>
+                <Folder size={15} />
               </Box>
-            )}
-          </Stack>
+              <InputBase
+                autoFocus value={nombreNueva}
+                onChange={(e) => setNombreNueva(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') crearCarpeta();
+                  if (e.key === 'Escape') setNombreNueva(null);
+                }}
+                onBlur={() => { if (!nombreNueva.trim()) setNombreNueva(null); }}
+                placeholder="Nombre de la carpeta"
+                sx={{ fontSize: '0.9375rem', fontWeight: 600, flex: 1 }}
+              />
+            </Stack>
+          )}
+
+          {vista === 'cuadricula' ? (
+            <Box sx={{
+              display: 'grid', gap: 1.25,
+              // Fichas de ~132px que se acomodan solas: en una pantalla angosta entran
+              // tres, en una ancha ocho, sin puntos de corte a mano.
+              gridTemplateColumns: 'repeat(auto-fill, minmax(132px, 1fr))',
+            }}>
+              {!datos.buscando && datos.subcarpetas.map((c) => (
+                <Ficha key={`c-${c.id}`} tipo="carpeta" item={c} />
+              ))}
+              {datos.documentos.map((doc) => (
+                <Ficha key={`d-${doc.id}`} tipo="documento" item={doc} />
+              ))}
+            </Box>
+          ) : (
+            <Stack spacing={1}>
+              {!datos.buscando && datos.subcarpetas.map((c) => (
+                <Fila key={`c-${c.id}`} tipo="carpeta" item={c} />
+              ))}
+              {datos.documentos.map((doc) => (
+                <Fila key={`d-${doc.id}`} tipo="documento" item={doc} />
+              ))}
+            </Stack>
+          )}
+
+          {datos.subcarpetas.length === 0 && datos.documentos.length === 0 && nombreNueva === null && (
+            <Box sx={{
+              py: 6, textAlign: 'center', borderRadius: '12px',
+              border: `1px dashed ${borde}`, bgcolor: bgSuave,
+            }}>
+              <Typography sx={{ fontSize: '0.9375rem', color: textMuted }}>
+                {datos.buscando ? 'Nada coincide con la búsqueda.' : 'Esta carpeta está vacía.'}
+              </Typography>
+            </Box>
+          )}
 
           <Typography sx={{ fontSize: '0.8rem', color: textMuted, mt: 3 }}>
             Doble clic para abrir. Los archivos se arrastran a una carpeta del árbol para
