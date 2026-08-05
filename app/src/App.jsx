@@ -45,7 +45,6 @@ import AgenteNuevoPage from './pages/trabajo/AgenteNuevoPage';
 import PersonasPage from './pages/admin/PersonasPage';
 import WorkspacePage from './pages/admin/WorkspacePage';
 import AgentesAdminPage from './pages/admin/AgentesAdminPage';
-import AgenteConfigPage from './pages/admin/AgenteConfigPage';
 
 export default function App() {
   const [cmdOpen, setCmdOpen] = useState(false);
@@ -113,7 +112,9 @@ export default function App() {
             <Route path="equipo"             element={<Navigate to="/app/admin/personas" replace />} />
             <Route path="admin/workspace"    element={<WorkspacePage />} />
             <Route path="admin/agentes"      element={<AgentesAdminPage />} />
-            <Route path="admin/agentes/:id"  element={<AgenteConfigPage />} />
+            {/* La ficha de un agente es UNA: el constructor. Admin > Agentes es la
+                lista (ahi se ve de un vistazo lo que falta configurar) y abre ahi. */}
+            <Route path="admin/agentes/:id"  element={<Navigate to="/app/agentes" replace />} />
             <Route path="organizaciones"     element={<Navigate to="/app/admin/workspace" replace />} />
           </Route>
 

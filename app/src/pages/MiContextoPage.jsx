@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Box, Typography, Divider, TextField, CircularProgress, useTheme, MenuItem, Select,
-  Tabs, Tab,
 } from '@mui/material';
 import { BookOpen, Package, ShieldCheck, DollarSign, File, Upload, Trash2, Building2, User } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { api } from '../services/api';
 import PageHeader from '../components/PageHeader';
+import ContextoPage from './ContextoPage';
 import { useApp } from '../context/AppContext';
 
 const CATEGORIES = [
@@ -34,11 +34,6 @@ const ORG_FIELDS = [
   { key: 'restrictions',         label: 'Restricciones — qué NUNCA debe hacer', placeholder: 'Ej: Nunca ofrecer descuentos, nunca revelar márgenes o costos internos...', limit: 500, rows: 3 },
 ];
 
-const PERSONAL_FIELDS = [
-  { key: 'about_me',            label: 'Sobre mi trabajo', placeholder: 'Ej: Soy jefe de operaciones; superviso producción, compras y despachos día a día...', limit: 500, rows: 3 },
-  { key: 'priorities',          label: 'Mis prioridades actuales', placeholder: 'Ej: Reducir el quiebre de stock, cerrar el presupuesto de julio, seguimiento a los 3 proyectos grandes...', limit: 500, rows: 3 },
-  { key: 'custom_instructions', label: 'Cómo quiero que me responda la IA', placeholder: 'Ej: Directo al grano, siempre con cifras, avísame si detectas algo raro en los datos...', limit: 500, rows: 3 },
-];
 
 function SaveButton({ saving, onClick, children }) {
   return (
@@ -105,7 +100,6 @@ export default function MiContextoPage({ hideHeader = false }) {
     '& .MuiInputLabel-root.Mui-focused': { color: '#9BA6E3' },
   };
 
-  const [tab, setTab] = useState(0);
 
   // ── Capa empresa ──
   const [orgForm, setOrgForm] = useState({});
@@ -120,12 +114,8 @@ export default function MiContextoPage({ hideHeader = false }) {
   const fileRef = useRef();
 
   // ── Capa personal ──
-  const [meForm, setMeForm] = useState({});
-  const [loadingMe, setLoadingMe] = useState(true);
-  const [savingMe, setSavingMe] = useState(false);
 
   useEffect(() => {
-    api.getUserContext().then(r => setMeForm(r.data)).catch(() => {}).finally(() => setLoadingMe(false));
   }, []);
 
   useEffect(() => {
@@ -159,18 +149,6 @@ export default function MiContextoPage({ hideHeader = false }) {
     }
   };
 
-  const handleSaveMe = async () => {
-    setSavingMe(true);
-    try {
-      const { updated_at, ...data } = meForm;
-      await api.updateUserContext(data);
-      toast.success('Contexto personal guardado. La IA lo usará en tus conversaciones.');
-    } catch {
-      toast.error('Error al guardar el contexto personal');
-    } finally {
-      setSavingMe(false);
-    }
-  };
 
   const handleUpload = async (e) => {
     const file = e.target.files?.[0];
@@ -213,20 +191,11 @@ export default function MiContextoPage({ hideHeader = false }) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-      {!hideHeader && <PageHeader title="Mi contexto" backLabel="Inicio" back="/app" />}
+      {!hideHeader && <PageHeader title="Contexto de la empresa" backLabel="Inicio" back="/app" />}
 
-      <Box sx={{ px: { xs: 2, sm: 3 }, borderBottom: `1px solid ${borderColor}` }}>
-        <Tabs
-          value={tab} onChange={(_, v) => setTab(v)}
-          sx={{ minHeight: 40, '& .MuiTabs-indicator': { bgcolor: '#586AD0' } }}
-        >
-          <Tab icon={<Building2 size={14} />} iconPosition="start" label="Empresa" sx={tabSx} />
-          <Tab icon={<User size={14} />} iconPosition="start" label="Personal" sx={tabSx} />
-        </Tabs>
-      </Box>
 
       {/* ══ Pestaña EMPRESA ══ */}
-      {tab === 0 && (
+      {(
         <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 720 }}>
           {!orgId ? (
             <Typography sx={{ color: textMuted, fontSize: '0.875rem' }}>
@@ -252,6 +221,21 @@ export default function MiContextoPage({ hideHeader = false }) {
                   {canEdit && <SaveButton saving={savingOrg} onClick={handleSaveOrg}>Guardar contexto</SaveButton>}
                 </Box>
               )}
+
+              <Divider sx={{ borderColor, mb: 3 }} />
+
+              {/* Los Cubículos eran una pantalla aparte con su propia pestaña, y
+                  entran al MISMO prompt que el formulario de arriba: dos lugares para
+                  lo mismo, y ninguno mencionaba al otro. Acá son la sección libre de
+                  esta pantalla, para lo que no cabe en un campo del formulario. */}
+              <SectionLabel>Bloques libres</SectionLabel>
+              <Typography sx={{ fontSize: '0.8rem', color: textMuted, mb: 2, mt: -1 }}>
+                Para lo que no entra en los campos de arriba. Cada bloque se le entrega al
+                agente tal como lo escriba.
+              </Typography>
+              <Box sx={{ mb: 3, ml: -3, mr: -3 }}>
+                <ContextoPage hideHeader />
+              </Box>
 
               <Divider sx={{ borderColor, mb: 3 }} />
 
@@ -337,28 +321,6 @@ export default function MiContextoPage({ hideHeader = false }) {
         </Box>
       )}
 
-      {/* ══ Pestaña PERSONAL ══ */}
-      {tab === 1 && (
-        <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 720 }}>
-          <Typography sx={{ fontSize: '0.8rem', color: textMuted, mb: 3 }}>
-            Capa personal: solo aplica a tus conversaciones. La IA la combina con el contexto de la empresa
-            para responderte a ti, con tus prioridades y tu estilo.
-          </Typography>
-
-          <SectionLabel>Formulario</SectionLabel>
-          {loadingMe ? (
-            <CircularProgress size={20} sx={{ color: '#9BA6E3' }} />
-          ) : (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <ContextForm
-                fields={PERSONAL_FIELDS} form={meForm} setForm={setMeForm}
-                inputSx={inputSx} textMuted={textMuted} disabled={false}
-              />
-              <SaveButton saving={savingMe} onClick={handleSaveMe}>Guardar contexto personal</SaveButton>
-            </Box>
-          )}
-        </Box>
-      )}
     </Box>
   );
 }

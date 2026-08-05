@@ -139,7 +139,7 @@ export default function AgentesAdminPage() {
         {filtrados.map((a) => (
           <Box
             key={a.id}
-            onClick={() => navigate(`/app/admin/agentes/${a.id}`)}
+            onClick={() => navigate(`/app/agentes/${a.id}/editar`)}
             sx={{
               display: 'flex', alignItems: 'center', py: 1.75, cursor: 'pointer',
               borderBottom: `1px solid ${borde}`,

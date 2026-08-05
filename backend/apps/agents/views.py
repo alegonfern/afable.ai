@@ -337,16 +337,43 @@ Sé conversacional, breve y entusiasta."""
         con_herramientas=con_herramientas,
     )
 
+    # QUIEN es este agente: sus instrucciones, su area, lo que la empresa le entrego y
+    # sus Habilidades. Se arma ACA, antes de elegir el modo, porque vale en todos.
+    #
+    # Estaba adentro del bloque de "sistemas conectados", asi que una empresa sin un
+    # ERP/SQL enchufado tenia agentes cuyas Instrucciones —el campo que MAS define a un
+    # agente— no llegaban al prompt. El constructor de agentes escribia en el vacio y
+    # la configuracion de Admin > Agentes tampoco cambiaba nada. Es el caso de
+    # cualquier pyme que hoy solo tiene documentos o una carpeta de Drive.
+    agent_block = ''
+    agent_model = None
+    if agent is not None:
+        if getattr(agent, 'model', ''):
+            agent_model = agent.model
+        if getattr(agent, 'area', ''):
+            agent_block += f"\nTu foco es el área de {AREA_NAMES.get(agent.area, agent.area)}.\n"
+        if getattr(agent, 'instructions', ''):
+            agent_block += f"\nInstrucciones del agente «{agent.name}»:\n{agent.instructions}\n"
+        # Lo que la empresa le entrego (los tres campos de la ficha del agente): sus
+        # datos, sus reglas y lo que le conviene saber.
+        config = getattr(agent, 'config', None)
+        if config is not None:
+            del_workspace = config.como_contexto()
+            if del_workspace:
+                agent_block += f"\n{del_workspace}\n"
+        # Las Habilidades van al final, despues de las instrucciones propias: son
+        # transversales a la empresa y no tienen que tapar lo que este agente en
+        # particular tiene que hacer.
+        de_habilidades = habilidades_como_contexto(agent)
+        if de_habilidades:
+            agent_block += f"\n{de_habilidades}\n"
+
     if con_herramientas:
         conn_ctx = get_connections_context(org, espacio_conns) or ''
 
-        # Configuración del agente elegido (si trae instrucciones / scope de sistemas / modelo).
-        agent_block = ''
+        # A QUE sistemas puede mirar: esto si es propio del modo con herramientas.
         allowed_ids = None
-        agent_model = None
         if agent is not None:
-            if getattr(agent, 'model', ''):
-                agent_model = agent.model
             sys_ids = list(agent.systems.values_list('id', flat=True)) if agent.pk else []
             if espacio_conns is not None:
                 # Se intersecta, no se reemplaza: un sistema elegido a mano en la
@@ -358,24 +385,6 @@ Sé conversacional, breve y entusiasta."""
                     connections.filter(id__in=sys_ids).values_list('name', flat=True)
                 )
                 agent_block += f"\nSOLO puedes consultar estos sistemas: {allowed_names}. No consultes otros.\n"
-            if getattr(agent, 'area', ''):
-                agent_block += f"\nTu foco es el área de {AREA_NAMES.get(agent.area, agent.area)}.\n"
-            if getattr(agent, 'instructions', ''):
-                agent_block += f"\nInstrucciones del agente «{agent.name}»:\n{agent.instructions}\n"
-            # Lo que la empresa le entrego al cargarlo (Admin > Agentes): sus datos,
-            # sus reglas y lo que le conviene saber. Sin esto, la configuracion seria
-            # un formulario que no cambia nada.
-            config = getattr(agent, 'config', None)
-            if config is not None:
-                del_workspace = config.como_contexto()
-                if del_workspace:
-                    agent_block += f"\n{del_workspace}\n"
-            # Las Habilidades van al final del bloque, despues de las instrucciones
-            # propias: son transversales a la empresa y no tienen que tapar lo que
-            # este agente en particular tiene que hacer.
-            de_habilidades = habilidades_como_contexto(agent)
-            if de_habilidades:
-                agent_block += f"\n{de_habilidades}\n"
 
         # Sin sistemas elegidos a mano, el alcance sigue siendo el del Espacio: si
         # no viajara acá, las herramientas volverían a ver toda la empresa.
@@ -434,8 +443,9 @@ Responde siempre en español, conciso. Usa markdown para respuestas largas.{ACTI
         return {
             'mode': 'no_integration',
             'docs_en_prompt': docs_en_prompt,
+            'agent_model': agent_model,
             'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
-{perm_ctx}
+{perm_ctx}{agent_block}
 {org_ctx}Trabajas con lo que ves arriba: el contexto de la empresa y sus documentos.
 NO tienes ningún sistema (ERP, CRM o base de datos) conectado para consultar en vivo,
 así que no puedes responder con cifras de ventas, stock ni facturación al día. Si te
@@ -451,8 +461,9 @@ Responde siempre en español, sé conciso y orientado a la acción.{ACTIONS_PROM
     return {
         'mode': 'full',
         'docs_en_prompt': docs_en_prompt,
+        'agent_model': agent_model,
         'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
-{perm_ctx}
+{perm_ctx}{agent_block}
 {org_ctx}Tienes acceso al contexto de datos escaneado de {scan.system_name}:
 {ai_ctx}
 

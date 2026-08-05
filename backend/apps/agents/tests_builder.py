@@ -399,3 +399,133 @@ class QuienVeElLapizTests(BaseConstructor):
         )
         nombres = [a['name'] for a in r.data['results']]
         self.assertEqual(nombres, ['Del Editor'])
+
+
+class ConfigDeEmpresaEnElConstructorTests(BaseConstructor):
+    """Los tres campos de `AgentConfig` se atienden en la ficha del agente.
+
+    Antes vivían en una pantalla aparte (Admin › Agentes › configurar), así que había
+    dos lugares para configurar el mismo agente. Siguen siendo decisión de la empresa:
+    solo un administrador los toca.
+    """
+
+    def test_un_administrador_los_guarda_al_crear(self):
+        r = self.crear(self.admin, datos='Facturas de Odoo.', reglas='Nunca invente montos.')
+        config = AgentConfig.objects.get(agent_id=r.data['id'])
+        self.assertEqual(config.datos, 'Facturas de Odoo.')
+        self.assertEqual(config.reglas, 'Nunca invente montos.')
+        self.assertTrue(config.esta_configurado)
+
+    def test_un_editor_no_los_guarda(self):
+        """No falla el pedido: se ignoran, y el formulario tampoco se los muestra."""
+        r = self.crear(self.editor, datos='Todo lo que quiera ver.')
+        self.assertEqual(r.status_code, 201)
+        config = AgentConfig.objects.get(agent_id=r.data['id'])
+        self.assertEqual(config.datos, '')
+        self.assertFalse(config.esta_configurado)
+
+    def test_un_administrador_los_edita(self):
+        r = self.crear(self.admin)
+        self.client.force_authenticate(user=self.admin)
+        self.client.patch(
+            f'{URL}{r.data["id"]}/',
+            {'workspace': self.ws.slug, 'info_util': 'El año comercial cierra en marzo.'},
+            format='json',
+        )
+        config = AgentConfig.objects.get(agent_id=r.data['id'])
+        self.assertEqual(config.info_util, 'El año comercial cierra en marzo.')
+
+    def test_vaciarlos_devuelve_el_agente_a_pendiente(self):
+        """Es información de la empresa, no una casilla que se marca."""
+        r = self.crear(self.admin, datos='Algo')
+        self.assertTrue(AgentConfig.objects.get(agent_id=r.data['id']).esta_configurado)
+
+        self.client.force_authenticate(user=self.admin)
+        self.client.patch(
+            f'{URL}{r.data["id"]}/', {'workspace': self.ws.slug, 'datos': ''}, format='json',
+        )
+        self.assertFalse(AgentConfig.objects.get(agent_id=r.data['id']).esta_configurado)
+
+    def test_la_ficha_los_devuelve_para_llenar_el_formulario(self):
+        r = self.crear(self.admin, reglas='Sin IVA.')
+        self.client.force_authenticate(user=self.admin)
+        ficha = self.client.get(f'{URL}{r.data["id"]}/', {'workspace': self.ws.slug})
+        self.assertEqual(ficha.data['reglas'], 'Sin IVA.')
+        self.assertTrue(ficha.data['configurado'])
+
+    def test_un_patch_que_no_los_nombra_no_los_borra(self):
+        r = self.crear(self.admin, datos='Facturas de Odoo.')
+        self.client.force_authenticate(user=self.admin)
+        self.client.patch(
+            f'{URL}{r.data["id"]}/', {'workspace': self.ws.slug, 'name': 'Otro nombre'},
+            format='json',
+        )
+        self.assertEqual(AgentConfig.objects.get(agent_id=r.data['id']).datos, 'Facturas de Odoo.')
+
+    def test_las_opciones_dicen_quien_puede_configurarlos(self):
+        for quien, esperado in ((self.admin, True), (self.editor, False)):
+            self.client.force_authenticate(user=quien)
+            r = self.client.get(URL_OPCIONES, {'workspace': self.ws.slug})
+            self.assertEqual(r.data['puede_configurar_empresa'], esperado)
+
+
+class QuienEsElAgenteEnTodosLosModosTests(BaseConstructor):
+    """Las Instrucciones del agente tienen que llegar al prompt SIEMPRE.
+
+    Estaban armadas dentro del bloque de "sistemas conectados", así que una empresa
+    sin ERP/SQL enchufado tenía agentes cuyas Instrucciones —el campo que más define a
+    un agente— no llegaban nunca. El constructor escribía en el vacío, y es el caso de
+    cualquier pyme que hoy solo tiene documentos o una carpeta de Drive.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from apps.agents.models import Skill
+
+        # La empresa de la clase base viene con un Odoo conectado, que es justo el caso
+        # que SI funcionaba. Acá se prueba el otro: una empresa sin nada consultable.
+        SystemConnection.objects.filter(organization=self.org).delete()
+
+        self.agente = Agent.objects.create(
+            organization=self.org, name='Cobranzas',
+            instructions='Responde siempre en tres lineas.',
+        )
+        AgentConfig.objects.create(
+            agent=self.agente, datos='Solo las facturas del SII.',
+        )
+        habilidad = Skill.objects.create(
+            organization=self.org, name='Tono', instructions='Trate de usted.',
+        )
+        habilidad.agents.add(self.agente)
+
+    def prompt(self):
+        from apps.agents.views import _build_onboarding_context
+
+        contexto = _build_onboarding_context(self.admin, self.agente, consulta='hola')
+        return contexto['mode'], contexto['system_prompt']
+
+    def test_sin_sistemas_conectados_el_agente_sigue_siendo_el_agente(self):
+        modo, prompt = self.prompt()
+        self.assertNotEqual(modo, 'connected_systems')
+        self.assertIn('tres lineas', prompt)
+        self.assertIn('facturas del SII', prompt)
+        self.assertIn('Trate de usted', prompt)
+
+    def test_con_sistemas_conectados_tambien(self):
+        """El caso que ya funcionaba: no se puede romper al arreglar el otro."""
+        SystemConnection.objects.create(
+            organization=self.org, name='Odoo', connector_type='odoo', is_active=True,
+        )
+        modo, prompt = self.prompt()
+        self.assertEqual(modo, 'connected_systems')
+        self.assertIn('tres lineas', prompt)
+        self.assertIn('facturas del SII', prompt)
+
+    def test_el_modelo_del_agente_viaja_en_todos_los_modos(self):
+        """Sin esto, elegir un modelo en la ficha no cambiaba nada sin ERP conectado."""
+        from apps.agents.views import _build_onboarding_context
+
+        self.agente.model = 'claude-sonnet-5'
+        self.agente.save(update_fields=['model'])
+        contexto = _build_onboarding_context(self.admin, self.agente, consulta='hola')
+        self.assertEqual(contexto.get('agent_model'), 'claude-sonnet-5')

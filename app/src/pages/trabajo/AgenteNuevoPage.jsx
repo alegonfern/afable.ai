@@ -13,7 +13,33 @@ const DISPLAY = `'Sora', 'Inter', sans-serif`;
 const VACIO = {
   name: '', description: '', instructions: '', model: '',
   system_ids: [], skill_ids: [], space_ids: [],
+  datos: '', reglas: '', info_util: '',
 };
+
+// Lo que la EMPRESA le entrega a este agente. Antes vivía en una pantalla aparte
+// (Admin › Agentes › configurar), así que había dos lugares para configurar el mismo
+// agente y ninguno mencionaba al otro. Solo lo ve un administrador: sigue siendo una
+// decisión de la empresa y no de quien construye el agente.
+const CAMPOS_DE_EMPRESA = [
+  {
+    clave: 'datos',
+    titulo: 'Qué datos puede mirar',
+    ayuda: 'Nombre las tablas, sistemas o documentos que puede consultar, y los que no.',
+    placeholder: 'Ventas y facturas de Odoo. Los documentos de la carpeta Contabilidad.',
+  },
+  {
+    clave: 'reglas',
+    titulo: 'Con qué reglas responde',
+    ayuda: 'Lo que siempre debe hacer y lo que nunca. Es lo que evita respuestas inventadas.',
+    placeholder: 'Nunca invente montos: si falta un dato, dígalo. Los precios se informan sin IVA.',
+  },
+  {
+    clave: 'info_util',
+    titulo: 'Qué le conviene saber',
+    ayuda: 'Lo que su equipo sabe de memoria y no está escrito en ningún sistema.',
+    placeholder: 'Nuestro año comercial cierra en marzo. El cliente grande es Constructora Vera.',
+  },
+];
 
 /**
  * Crear un agente, y editar uno que ya existe.
@@ -69,6 +95,7 @@ export default function AgenteNuevoPage() {
           instructions: a.instructions || '', model: a.model || '',
           system_ids: a.system_ids || [], skill_ids: a.skill_ids || [],
           space_ids: a.space_ids || [],
+          datos: a.datos || '', reglas: a.reglas || '', info_util: a.info_util || '',
         });
       }
     } catch (e) {
@@ -230,6 +257,31 @@ export default function AgenteNuevoPage() {
         elegidos={form.skill_ids}
         onAlternar={(v) => alternar('skill_ids', v)}
       />
+
+      {/* Solo para administradores: el backend ignora estos campos sin ese rol. */}
+      {opciones.puede_configurar_empresa && (
+        <>
+          <Box sx={{ mt: 5, pt: 4, borderTop: `1px solid ${borde}` }}>
+            <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.125rem', fontWeight: 600 }}>
+              Lo que la empresa le entrega
+            </Typography>
+            <Typography sx={{ fontSize: '0.875rem', color: textMuted, mt: 0.5 }}>
+              El agente llega sabiendo su oficio; lo que no sabe es nada de ESTA empresa.
+              Esto entra en cada una de sus respuestas.
+            </Typography>
+          </Box>
+          {CAMPOS_DE_EMPRESA.map((campo) => (
+            <Seccion key={campo.clave} titulo={campo.titulo} ayuda={campo.ayuda}>
+              <TextField
+                value={form[campo.clave]}
+                onChange={(e) => setForm({ ...form, [campo.clave]: e.target.value })}
+                placeholder={campo.placeholder}
+                multiline minRows={3} fullWidth size="small" sx={campoSx}
+              />
+            </Seccion>
+          ))}
+        </>
+      )}
 
       <Elegibles
         titulo="En qué espacios vive"

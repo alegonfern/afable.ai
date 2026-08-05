@@ -19,6 +19,15 @@ const STYLES = [
   { value: 'tecnico',   icon: <Wrench size={18} />,    label: 'Técnico',   desc: 'Terminología especializada' },
 ];
 
+const CAMPOS_PERSONALES = [
+  { key: 'about_me', label: 'Sobre mi trabajo', limit: 500,
+    placeholder: 'Ej: Soy jefe de operaciones; superviso producción, compras y despachos día a día...' },
+  { key: 'priorities', label: 'Mis prioridades actuales', limit: 500,
+    placeholder: 'Ej: Reducir el quiebre de stock, cerrar el presupuesto de julio...' },
+  { key: 'custom_instructions', label: 'Cómo quiero que me responda', limit: 500,
+    placeholder: 'Ej: Directo al grano, siempre con cifras, avísame si detectas algo raro...' },
+];
+
 const SectionLabel = ({ children, muted }) => (
   <Typography sx={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#586AD0', mb: 1.5 }}>
     {children}
@@ -60,6 +69,7 @@ export default function ProfilePage() {
   const [department, setDepartment] = useState('');
   const [objectives, setObjectives] = useState('');
   const [responseStyle, setResponseStyle] = useState('ejecutivo');
+  const [contexto, setContexto]     = useState({ about_me: '', priorities: '', custom_instructions: '' });
   const [saving, setSaving]         = useState(false);
   const [uploading, setUploading]   = useState(false);
   const fileRef = useRef();
@@ -82,6 +92,13 @@ export default function ProfilePage() {
         }
       }
     }).catch(() => {});
+    api.getUserContext()
+      .then(r => setContexto({
+        about_me: r.data.about_me || '',
+        priorities: r.data.priorities || '',
+        custom_instructions: r.data.custom_instructions || '',
+      }))
+      .catch(() => {});
   }, []);
 
   const getInitials = () => {
@@ -111,7 +128,12 @@ export default function ProfilePage() {
     setSaving(true);
     try {
       const finalRole = role === 'Otro' ? customRole : role;
-      await api.updateProfile({ first_name: firstName, last_name: lastName, role: finalRole, department, objectives, response_style: responseStyle });
+      // Los dos van juntos: para quien usa la app es UNA pantalla, aunque atrás sean
+      // dos modelos (User y UserContext).
+      await Promise.all([
+        api.updateProfile({ first_name: firstName, last_name: lastName, role: finalRole, department, objectives, response_style: responseStyle }),
+        api.updateUserContext(contexto),
+      ]);
       toast.success('Perfil actualizado. La IA usará tu contexto en las próximas conversaciones.');
     } catch {
       toast.error('Error al guardar el perfil');
@@ -212,6 +234,29 @@ export default function ProfilePage() {
             {objectives.length}/300
           </Typography>
         </Box>
+
+        <Divider sx={{ borderColor, mb: 3 }} />
+
+        {/* ── Lo que estaba en Mi Contexto › Personal ── */}
+        <SectionLabel>Tu trabajo y tus prioridades</SectionLabel>
+        <Typography sx={{ fontSize: '0.8rem', color: textMuted, mb: 2, mt: -1 }}>
+          Solo aplica a tus conversaciones. La IA lo combina con el contexto de la empresa
+          para responderte a ti.
+        </Typography>
+        {CAMPOS_PERSONALES.map(c => (
+          <Box key={c.key} sx={{ position: 'relative' }}>
+            <TextField
+              label={c.label}
+              value={contexto[c.key]}
+              onChange={e => setContexto({ ...contexto, [c.key]: e.target.value.slice(0, c.limit) })}
+              placeholder={c.placeholder}
+              multiline rows={3} fullWidth sx={{ ...inputSx, mb: 0.5 }}
+            />
+            <Typography sx={{ fontSize: '0.7rem', color: textMuted, textAlign: 'right', mb: 2 }}>
+              {contexto[c.key].length}/{c.limit}
+            </Typography>
+          </Box>
+        ))}
 
         <Divider sx={{ borderColor, mb: 3 }} />
 

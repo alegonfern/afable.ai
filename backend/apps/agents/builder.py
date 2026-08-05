@@ -22,7 +22,10 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from django.utils import timezone as _tz
+
 from apps.organizations.models import SystemConnection
+from apps.workspaces.models import ROLE_ADMIN
 from apps.workspaces.permissions import require_membership, spaces_visible_to
 
 from .gallery import puede_editar_agentes
@@ -33,6 +36,12 @@ from .models import Agent, AgentConfig, Skill
 CAMPOS_TEXTO = ('name', 'description', 'instructions', 'area', 'model', 'tools_summary',
                 'recommended_frequency')
 
+# Lo que la empresa le entrega a ESTE agente (el modelo `AgentConfig`). Estaba en
+# una pantalla aparte, Admin > Agentes, asi que habia dos lugares distintos para
+# configurar un mismo agente. Se atienden aca, pero SOLO para administradores: sigue
+# siendo una decision de la empresa y no de quien construye el agente.
+CAMPOS_DE_EMPRESA = ('datos', 'reglas', 'info_util')
+
 LARGOS = {
     'name': 255,
     'description': 4000,
@@ -41,6 +50,9 @@ LARGOS = {
     'model': 120,
     'tools_summary': 280,
     'recommended_frequency': 60,
+    'datos': 4000,
+    'reglas': 4000,
+    'info_util': 4000,
 }
 
 
@@ -62,6 +74,39 @@ def _membership_que_edita(user, slug):
             'Pidele a un administrador que cambie quien puede crearlos, o que lo cree por ti.'
         )
     return membership
+
+
+def _limpiar_de_empresa(datos):
+    """Los tres campos de `AgentConfig` que vengan en el pedido, recortados."""
+    limpio = {}
+    for campo in CAMPOS_DE_EMPRESA:
+        if campo in datos:
+            valor = datos.get(campo) or ''
+            if not isinstance(valor, str):
+                valor = str(valor)
+            limpio[campo] = valor.strip()[:LARGOS[campo]]
+    return limpio
+
+
+def _guardar_config(agent, datos, user):
+    """Guarda lo que la empresa le entrega al agente y recalcula si esta configurado.
+
+    Queda "configurado" en cuanto se le entrego algo, y vaciarlo todo lo devuelve a
+    pendiente: es informacion de la empresa, no una casilla que se marca.
+    """
+    campos = _limpiar_de_empresa(datos)
+    if not campos:
+        return
+    config, _ = AgentConfig.objects.get_or_create(agent=agent)
+    for campo, valor in campos.items():
+        setattr(config, campo, valor)
+    tiene_algo = any([config.datos, config.reglas, config.info_util])
+    if tiene_algo and not config.completed_at:
+        config.completed_at = _tz.now()
+    elif not tiene_algo:
+        config.completed_at = None
+    config.updated_by = user
+    config.save()
 
 
 def _limpiar(datos):
@@ -100,6 +145,13 @@ def _serializar(agent, detalle=True):
             'system_ids': sorted(agent.systems.values_list('id', flat=True)),
             'skill_ids': sorted(agent.skills.values_list('id', flat=True)),
             'space_ids': sorted(agent.spaces.values_list('id', flat=True)),
+        })
+        config = getattr(agent, 'config', None)
+        datos.update({
+            'datos': config.datos if config else '',
+            'reglas': config.reglas if config else '',
+            'info_util': config.info_util if config else '',
+            'configurado': bool(config and config.esta_configurado),
         })
     return datos
 
@@ -166,6 +218,9 @@ class OpcionesConstructorView(APIView):
 
         return Response({
             'puede_crear': puede_editar_agentes(membership),
+            # Lo que la empresa le entrega al agente (datos/reglas/info) es decision
+            # de la empresa: el formulario solo lo muestra a un administrador.
+            'puede_configurar_empresa': membership.role == ROLE_ADMIN,
             'modelos': modelos_disponibles(),
             'sistemas': [
                 {'id': c.id, 'name': c.name, 'connector_type': c.connector_type}
@@ -222,6 +277,8 @@ class AgenteConstructorListCreateView(APIView):
             # que datos y reglas trabaja. Es el mismo camino que un agente cargado
             # desde una plantilla.
             AgentConfig.objects.get_or_create(agent=agent)
+            if membership.role == ROLE_ADMIN:
+                _guardar_config(agent, request.data, request.user)
 
         return Response(_serializar(agent), status=status.HTTP_201_CREATED)
 
@@ -286,5 +343,10 @@ class AgenteConstructorDetailView(APIView):
             # las conversaciones y cambiarlo rompe los hilos que ya lo nombran.
             agent.save()
             _enganchar(agent, request.data, membership)
+            # Los tres campos de empresa solo los toca un administrador: mandarlos
+            # sin ese rol no falla, simplemente no se guardan (el formulario tampoco
+            # los muestra).
+            if membership.role == ROLE_ADMIN:
+                _guardar_config(agent, request.data, request.user)
 
         return Response(_serializar(agent))
