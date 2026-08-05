@@ -148,7 +148,12 @@ export const api = {
   getSectors: () => apiClient.get('/workspaces/sectores/'),
   createWorkspace: (data) => apiClient.post('/workspaces/', data),
   getWorkspace: (slug) => apiClient.get(`/workspaces/${slug}/`),
-  updateWorkspace: (slug, data) => apiClient.patch(`/workspaces/${slug}/`, data),
+  // Acepta JSON o un FormData (el logo). El cliente fuerza `application/json` por
+  // omisión, y con ese encabezado el multipart viaja sin su boundary y el backend
+  // responde 400: hay que dejar que axios lo arme cuando el cuerpo es un FormData.
+  updateWorkspace: (slug, data) =>
+    apiClient.patch(`/workspaces/${slug}/`, data,
+      data instanceof FormData ? { headers: { 'Content-Type': 'multipart/form-data' } } : undefined),
   getMembers: (slug) => apiClient.get(`/workspaces/${slug}/members/`),
   updateMemberRole: (slug, id, role) => apiClient.patch(`/workspaces/${slug}/members/${id}/`, { role }),
   removeMember: (slug, id) => apiClient.delete(`/workspaces/${slug}/members/${id}/`),

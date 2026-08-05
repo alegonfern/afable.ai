@@ -398,3 +398,79 @@ class EspaciosTests(TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(self.abierto.connections.count(), 0)
+
+
+class LogoDelWorkspaceTests(TestCase):
+    """El logo y lo que el selector necesita para decir en qué empresa se está.
+
+    No existía en ningún modelo —tampoco en `Organization`— y sin él el selector no podía
+    distinguir dos empresas sin obligar a leer el nombre.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = crear_usuario('admin@afable.test', 'Ada')
+        self.miembro = crear_usuario('miembro@afable.test', 'Bruno')
+        self.workspace = Workspace.objects.create(name='Panaderia La Espiga', sector='alimentos')
+        self.workspace.add_member(self.admin, ROLE_ADMIN)
+        self.workspace.add_member(self.miembro, ROLE_MEMBER)
+        self.url = f'/api/v1/workspaces/{self.workspace.slug}/'
+
+    def un_png(self):
+        """Un PNG mínimo de verdad: `ImageField` valida la imagen, no la extensión."""
+        import io
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+
+        buf = io.BytesIO()
+        Image.new('RGB', (12, 12), (216, 120, 58)).save(buf, format='PNG')
+        return SimpleUploadedFile('logo.png', buf.getvalue(), content_type='image/png')
+
+    def test_sin_logo_la_api_devuelve_null_y_no_una_url_rota(self):
+        self.client.force_authenticate(self.miembro)
+        r = self.client.get(self.url)
+        self.assertIsNone(r.data['logo_url'])
+
+    def test_el_administrador_sube_un_logo(self):
+        self.client.force_authenticate(self.admin)
+        r = self.client.patch(self.url, {'logo': self.un_png()}, format='multipart')
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.data['logo_url'])
+
+    def test_se_quita_mandando_null(self):
+        self.client.force_authenticate(self.admin)
+        self.client.patch(self.url, {'logo': self.un_png()}, format='multipart')
+        r = self.client.patch(self.url, {'logo': None}, format='json')
+        self.assertEqual(r.status_code, 200)
+        self.assertIsNone(r.data['logo_url'])
+
+    def test_un_miembro_comun_no_cambia_el_logo(self):
+        self.client.force_authenticate(self.miembro)
+        r = self.client.patch(self.url, {'logo': self.un_png()}, format='multipart')
+        self.assertEqual(r.status_code, 403)
+
+    def test_lo_que_no_es_una_imagen_no_pasa(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        self.client.force_authenticate(self.admin)
+        falso = SimpleUploadedFile('logo.png', b'no soy una imagen', content_type='image/png')
+        r = self.client.patch(self.url, {'logo': falso}, format='multipart')
+        self.assertEqual(r.status_code, 400)
+
+    def test_el_sector_viaja_en_palabras(self):
+        """El selector muestra el sector como subtítulo: 'alimentos' no se lee igual."""
+        self.client.force_authenticate(self.miembro)
+        r = self.client.get(self.url)
+        self.assertEqual(r.data['sector'], 'alimentos')
+        self.assertEqual(r.data['sector_label'], 'Alimentos y bebidas')
+
+    def test_la_lista_del_selector_trae_todo_lo_que_muestra(self):
+        """El selector pinta marca, nombre, rol y cuánta gente: los cuatro sin otro viaje."""
+        self.client.force_authenticate(self.miembro)
+        r = self.client.get('/api/v1/workspaces/')
+        fila = r.data[0]
+        for campo in ('name', 'slug', 'logo_url', 'sector_label', 'my_role', 'member_count'):
+            self.assertIn(campo, fila)
+        self.assertEqual(fila['my_role'], ROLE_MEMBER)
+        self.assertEqual(fila['member_count'], 2)

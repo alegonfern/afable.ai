@@ -2,12 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Box, Button, CircularProgress, Dialog, DialogContent, DialogTitle,
-  IconButton, MenuItem, TextField, Typography, useTheme,
+  IconButton, MenuItem, Stack, TextField, Typography, useTheme,
 } from '@mui/material';
-import { Building2, Plus, Users, X } from 'lucide-react';
+import { Building2, Plus, Upload, Users, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { api } from '../../services/api';
 import { useWorkspace } from '../../context/WorkspaceContext';
+import { MarcaWorkspace } from '../../components/SelectorWorkspace';
 
 const POLITICAS = [
   { value: 'todos', label: 'Todos los miembros' },
@@ -76,6 +77,33 @@ export default function WorkspacePage() {
     }
   }, [form, slug, recargar]);
 
+  /**
+   * Sube (o quita) el logo. Va por su propio pedido y no con el botón "Guardar".
+   *
+   * Dos razones: viaja como `multipart` y el resto del formulario es JSON, y sobre todo,
+   * elegir una imagen en un explorador de archivos ya se siente como haber decidido —
+   * pedir además un Guardar para que aparezca se lee como que no funcionó.
+   */
+  const subirLogo = useCallback(async (archivo) => {
+    if (archivo === undefined) return;
+    try {
+      setGuardando(true);
+      if (archivo) {
+        const fd = new FormData();
+        fd.append('logo', archivo);
+        await api.updateWorkspace(slug, fd);
+      } else {
+        await api.updateWorkspace(slug, { logo: null });
+      }
+      await recargar();
+      toast.success(archivo ? 'Logo actualizado.' : 'Logo quitado.');
+    } catch (e) {
+      toast.error(e.response?.data?.logo?.[0] || 'No se pudo subir el logo.');
+    } finally {
+      setGuardando(false);
+    }
+  }, [slug, recargar]);
+
   const campoSx = {
     '& .MuiOutlinedInput-root': {
       bgcolor: bgSuave,
@@ -128,6 +156,43 @@ export default function WorkspacePage() {
               administrador los edita.
             </Typography>
           )}
+
+          {/* El logo, arriba de los datos: es lo primero que se ve del Workspace en la
+              barra lateral, así que también es lo primero acá. */}
+          <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 3.5 }}>
+            <MarcaWorkspace workspace={workspace} size={56} radio="12px" />
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600 }}>
+                Logo de la empresa
+              </Typography>
+              <Typography sx={{ fontSize: '0.8125rem', color: textMuted, mt: 0.25 }}>
+                Es cómo se reconoce este Workspace en la barra lateral. Sin logo se usa la
+                inicial del nombre.
+              </Typography>
+              {esAdmin && (
+                <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+                  <Button
+                    component="label" size="small" startIcon={<Upload size={14} />}
+                    sx={{ textTransform: 'none', fontWeight: 600 }}
+                  >
+                    {workspace.logo_url ? 'Cambiar' : 'Subir un logo'}
+                    <input
+                      hidden type="file" accept="image/*"
+                      onChange={(e) => subirLogo(e.target.files?.[0])}
+                    />
+                  </Button>
+                  {workspace.logo_url && (
+                    <Button
+                      size="small" onClick={() => subirLogo(null)}
+                      sx={{ textTransform: 'none', fontWeight: 600, color: textMuted }}
+                    >
+                      Quitar
+                    </Button>
+                  )}
+                </Stack>
+              )}
+            </Box>
+          </Stack>
 
           <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, mt: 3.5 }}>
             <TextField

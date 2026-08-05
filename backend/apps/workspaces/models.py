@@ -66,6 +66,15 @@ class Workspace(models.Model):
     employees = models.CharField(max_length=50, blank=True)
     tax_id = models.CharField(max_length=30, blank=True, help_text='RUT / NIF.')
 
+    # El Workspace es la empresa vista desde Afable, así que su marca es la de la empresa.
+    # No estaba en ningún modelo —tampoco en `Organization`— y hace falta para que el
+    # selector pueda decir en qué empresa se está trabajando SIN leerle el nombre: quien
+    # tiene dos Workspaces los distingue de un vistazo por la marca, no por el texto.
+    #
+    # Vacío es lo normal, no un caso de error: sin logo cargado, la pantalla dibuja un
+    # monograma con la inicial y un color derivado del slug (ver `SelectorWorkspace`).
+    logo = models.ImageField(upload_to='workspace_logos/', blank=True, null=True)
+
     # ── Puente hacia la app anterior ──────────────────────────────────────────
     # `Organization` sigue siendo el dueño de las conexiones, los documentos, el
     # contexto y los agentes, y `agent_service` lee su `sector` para el prompt.

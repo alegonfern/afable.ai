@@ -46,18 +46,21 @@ class MembershipRoleSerializer(serializers.Serializer):
 class WorkspaceSerializer(serializers.ModelSerializer):
     my_role = serializers.SerializerMethodField()
     member_count = serializers.SerializerMethodField()
+    logo_url = serializers.SerializerMethodField()
+    sector_label = serializers.SerializerMethodField()
 
     class Meta:
         model = Workspace
         fields = [
-            'id', 'name', 'slug', 'sector', 'description', 'employees', 'tax_id',
-            'agent_creation_policy', 'created_at', 'my_role', 'member_count',
-            'organization_id',
+            'id', 'name', 'slug', 'sector', 'sector_label', 'description', 'employees',
+            'tax_id', 'agent_creation_policy', 'created_at', 'my_role', 'member_count',
+            'organization_id', 'logo', 'logo_url',
         ]
         # `organization_id` es el puente: el frontend lo usa para que, al cambiar de
         # Workspace, las pantallas que todavia consultan por Organization apunten a
         # la correcta. Se expone solo de lectura — el enlace lo maneja el backend.
         read_only_fields = ['id', 'slug', 'created_at', 'organization_id']
+        extra_kwargs = {'logo': {'write_only': True, 'required': False, 'allow_null': True}}
 
     def get_my_role(self, obj):
         """El rol de quien pide, para que el frontend sepa qué mostrar.
@@ -73,6 +76,16 @@ class WorkspaceSerializer(serializers.ModelSerializer):
 
     def get_member_count(self, obj):
         return obj.memberships.count()
+
+    def get_logo_url(self, obj):
+        if not obj.logo:
+            return None
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.logo.url) if request else obj.logo.url
+
+    def get_sector_label(self, obj):
+        """El sector en palabras. El selector muestra esto y no el código guardado."""
+        return dict(SECTOR_CHOICES).get(obj.sector, '')
 
 
 class WorkspaceCreateSerializer(serializers.ModelSerializer):

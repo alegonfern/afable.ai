@@ -29,6 +29,7 @@ import { DRAWER_WIDTH, MINI_DRAWER_WIDTH } from '../../../config';
 import { useApp } from '../../../context/AppContext';
 import { api } from '../../../services/api';
 import MenuDeFila, { DialogoCompartir } from './MenuDeFila';
+import SelectorWorkspace from '../../../components/SelectorWorkspace';
 
 const openedMixin = (theme) => ({
   width: DRAWER_WIDTH,
@@ -308,6 +309,14 @@ export default function Drawer({ open, handleDrawerToggle }) {
 
   const drawer = (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+
+      {/* ── En qué empresa se está trabajando ────────────────────────────────
+          Va antes que todo lo demás porque es el marco: el Workspace decide qué
+          archivos, agentes, conexiones y personas se ven. Faltaba, y con dos
+          empresas no había forma de saber en cuál se estaba escribiendo. */}
+      <Box sx={{ px: 0.75, pt: 0.75, flexShrink: 0 }}>
+        <SelectorWorkspace open={open} />
+      </Box>
 
       {/* ── Conmutador de modos ──────────────────────────────────────────────
           Tres iconos arriba a la izquierda; el activo lleva su etiqueta en una
