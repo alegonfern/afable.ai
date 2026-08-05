@@ -5,6 +5,7 @@ import { ArrowLeft, CheckCircle2, FolderOpen, MessageSquare, Settings } from 'lu
 import { toast } from 'react-toastify';
 import { api } from '../../services/api';
 import { useWorkspace } from '../../context/WorkspaceContext';
+import SesionConversacion from './SesionConversacion';
 import SesionTareas from './SesionTareas';
 import SesionArchivos from './SesionArchivos';
 import SesionAjustes from './SesionAjustes';
@@ -14,6 +15,7 @@ const DISPLAY = `'Sora', 'Inter', sans-serif`;
 // Las pestañas van en icono y solo la activa muestra su etiqueta — el mismo patrón
 // que el conmutador de modos de la barra lateral.
 const PESTANAS = [
+  { value: 'conversacion', label: 'Conversación', icon: MessageSquare },
   { value: 'tareas',    label: 'Tareas',    icon: CheckCircle2 },
   { value: 'archivos',  label: 'Archivos',  icon: FolderOpen },
   { value: 'ajustes',   label: 'Ajustes',   icon: Settings },
@@ -21,9 +23,6 @@ const PESTANAS = [
 
 /**
  * Una Sesión: donde el equipo y sus agentes trabajan sobre algo concreto.
- *
- * La pestaña de Conversación llega en el paso siguiente; mientras no exista de verdad
- * no se dibuja, porque una pestaña que no lleva a nada es peor que una pestaña menos.
  *
  * El `?tab=` es la fuente de verdad y no un estado local: así el enlace a una pestaña
  * se puede compartir y recargar la página no devuelve a la primera.
@@ -42,9 +41,10 @@ export default function SesionPage() {
 
   const [sesion, setSesion] = useState(null);
   const [cargando, setCargando] = useState(true);
+  const [saludo, setSaludo] = useState('');
 
   const pedida = searchParams.get('tab');
-  const tab = PESTANAS.some((p) => p.value === pedida) ? pedida : 'tareas';
+  const tab = PESTANAS.some((p) => p.value === pedida) ? pedida : 'conversacion';
 
   const cargar = useCallback(async () => {
     if (!slug || !sesionSlug) return;
@@ -125,6 +125,11 @@ export default function SesionPage() {
         }}>
           <span>{sesion.icon || '💠'}</span>
           {sesion.name}
+          {tab === 'conversacion' && saludo && (
+            <Box component="span" sx={{ color: textMuted, fontWeight: 500 }}>
+              — {saludo}
+            </Box>
+          )}
         </Typography>
         {sesion.description && (
           <Typography sx={{ color: textMuted, fontSize: '0.9375rem', mt: 0.75, maxWidth: 700 }}>
@@ -138,6 +143,9 @@ export default function SesionPage() {
         )}
       </Box>
 
+      {tab === 'conversacion' && (
+        <SesionConversacion sesion={sesion} slug={slug} onSaludo={setSaludo} />
+      )}
       {tab === 'tareas' && <SesionTareas sesion={sesion} slug={slug} />}
       {tab === 'archivos' && <SesionArchivos sesion={sesion} slug={slug} />}
       {tab === 'ajustes' && (

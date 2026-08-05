@@ -449,6 +449,13 @@ export default function ChatPage() {
   const { focusMode } = useOutletContext() || {};
   const { aiModel } = useApp();
   const { slug, espacioSlug } = useWorkspace();
+  // La Sesion desde la que se abrio el hilo, si vino de una.
+  //
+  // Es una REFERENCIA y no estado a proposito: el mensaje inicial se manda en el mismo
+  // tick en que llega la Sesion, y `setState` no se aplica hasta el dibujado siguiente
+  // — con estado, el primer mensaje salia sin Sesion y la conversacion quedaba
+  // personal. Una ref se lee al instante.
+  const sesionDelHilo = useRef(null);
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -601,6 +608,8 @@ export default function ChatPage() {
           // quienes pertenecen al Espacio. Sin Espacio, el hilo es personal.
           workspace: slug || undefined,
           space: espacioSlug || undefined,
+          // La Sesion: el hilo queda colgado de ella y lo ve cualquiera que entre.
+          sesion: sesionDelHilo.current || undefined,
         }),
       });
 
@@ -740,6 +749,8 @@ export default function ChatPage() {
   const mensajeInicialEnviado = useRef(false);
   useEffect(() => {
     const inicial = location.state?.initialMessage;
+    const deSesion = location.state?.sesionSlug;
+    if (deSesion) sesionDelHilo.current = deSesion;
     if (inicial && !mensajeInicialEnviado.current) {
       mensajeInicialEnviado.current = true;
       navigate(location.pathname, { replace: true, state: {} });

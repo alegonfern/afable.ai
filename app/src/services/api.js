@@ -175,6 +175,9 @@ export const api = {
   addSesionMiembros: (slug, data) => apiClient.post(`/sesiones/${slug}/miembros/`, data),
   removeSesionMiembros: (slug, data) =>
     apiClient.delete(`/sesiones/${slug}/miembros/`, { data }),
+  // El feed: conversaciones y tareas en la misma lista, agrupadas por tiempo.
+  getSesionFeed: (slug, workspace) =>
+    apiClient.get(`/sesiones/${slug}/feed/`, { params: { workspace } }),
   // Tareas de la Sesion. `mias` y `estado` son los filtros de la pantalla.
   getSesionTareas: (slug, workspace, opts = {}) =>
     apiClient.get(`/sesiones/${slug}/tareas/`, { params: { workspace, ...opts } }),

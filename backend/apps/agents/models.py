@@ -116,6 +116,13 @@ class Conversation(models.Model):
         'workspaces.Space', on_delete=models.SET_NULL,
         null=True, blank=True, related_name='conversations',
     )
+    # La Sesion en la que se abrio el hilo. Es lo que lo hace del EQUIPO y no del
+    # historial privado de quien escribio: cualquiera que entre a la Sesion lo ve.
+    # `null` = conversacion personal, como todas las que ya existian.
+    sesion = models.ForeignKey(
+        'sesiones.Sesion', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='conversations',
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='conversations'
     )

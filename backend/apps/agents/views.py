@@ -528,6 +528,29 @@ def _agente_mencionado(user, texto):
     return None
 
 
+def _sesion_del_pedido(request):
+    """La Sesion en la que se abre el hilo, o None.
+
+    Misma prudencia que con el Espacio: si el slug no corresponde a una Sesion que
+    esta persona alcanza, se trata como si no hubiera venido ninguno y la conversacion
+    queda personal — el resultado seguro.
+    """
+    sesion_slug = (request.data.get('sesion') or '').strip()
+    workspace_slug = (request.data.get('workspace') or '').strip()
+    if not sesion_slug or not workspace_slug:
+        return None
+    from apps.sesiones.permissions import require_sesion
+    from apps.workspaces.permissions import resolve_membership
+
+    membership = resolve_membership(request.user, workspace_slug)
+    if membership is None:
+        return None
+    try:
+        return require_sesion(membership, sesion_slug)
+    except Exception:
+        return None
+
+
 def _espacio_del_pedido(request):
     """El Espacio que viene en el pedido del chat, o None.
 
@@ -746,9 +769,10 @@ class DirectChatView(APIView):
             agent = _agente_de_conversacion(request, conversation)
         else:
             espacio = _espacio_del_pedido(request)
+            sesion = _sesion_del_pedido(request)
             agent = _agente_inicial(request, message, espacio, default_agent)
             conversation = Conversation.objects.create(
-                agent=agent, user=request.user, space=espacio,
+                agent=agent, user=request.user, space=espacio, sesion=sesion,
                 title=_conversation_title(agent, message))
 
         mention_system_id = request.data.get('system_id') or None
@@ -820,9 +844,10 @@ class DirectChatStreamView(APIView):
             agent = _agente_de_conversacion(request, conversation)
         else:
             espacio = _espacio_del_pedido(request)
+            sesion = _sesion_del_pedido(request)
             agent = _agente_inicial(request, message, espacio, default_agent)
             conversation = Conversation.objects.create(
-                agent=agent, user=request.user, space=espacio,
+                agent=agent, user=request.user, space=espacio, sesion=sesion,
                 title=_conversation_title(agent, message))
 
         mention_system_id = request.data.get('system_id') or None

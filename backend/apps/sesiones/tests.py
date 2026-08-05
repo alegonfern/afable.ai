@@ -408,3 +408,136 @@ class ArchivosTests(BaseSesiones):
         self.subir()
         self.sesion.delete()
         self.assertEqual(CompanyDocument.objects.filter(title='Contrato').count(), 0)
+
+
+class FeedTests(BaseSesiones):
+    """El feed: una tarea y una conversación son el mismo tipo de item.
+
+    Separarlas en dos listas obliga a mirar en dos lados para saber qué pasó en la
+    Sesión, que es justo lo que la Sesión viene a resolver.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from apps.agents.models import Conversation, Message
+
+        self.tarea = Task.objects.create(
+            sesion=self.sesion, title='Revisar facturas', created_by=self.admin,
+            description='El detalle', resultado='Hay 3 vencidas.', agent=self.agente,
+        )
+        self.conv = Conversation.objects.create(
+            sesion=self.sesion, user=self.admin, agent=self.agente, title='Sobre el contrato',
+        )
+        Message.objects.create(conversation=self.conv, role='user', content='¿Qué dice el plazo?')
+        Message.objects.create(
+            conversation=self.conv, role='assistant', content='45 días.', agent=self.agente,
+        )
+
+    def feed(self, quien=None):
+        self.como(quien or self.admin)
+        return self.client.get(self.url('feed/'), self.q()).data
+
+    def test_trae_tareas_y_conversaciones_juntas(self):
+        datos = self.feed()
+        tipos = {i['tipo'] for g in datos['grupos'] for i in g['items']}
+        self.assertEqual(tipos, {'tarea', 'conversacion'})
+        self.assertEqual(datos['count'], 2)
+
+    def test_una_tarea_con_resultado_cuenta_como_una_respuesta(self):
+        """Es lo que la vuelve equivalente a una conversación en la lista."""
+        item = [i for g in self.feed()['grupos'] for i in g['items'] if i['tipo'] == 'tarea'][0]
+        self.assertEqual(item['respuestas'], 1)
+        self.assertEqual(item['ultima_de'], self.agente.name)
+
+    def test_una_conversacion_cuenta_las_respuestas_del_agente(self):
+        item = [
+            i for g in self.feed()['grupos'] for i in g['items'] if i['tipo'] == 'conversacion'
+        ][0]
+        self.assertEqual(item['respuestas'], 1)
+        self.assertEqual(item['ultima_de'], self.agente.name)
+
+    def test_lo_de_hoy_va_en_el_grupo_de_hoy(self):
+        self.assertEqual(self.feed()['grupos'][0]['titulo'], 'Hoy')
+
+    def test_no_trae_lo_de_otra_sesion(self):
+        from apps.agents.models import Conversation
+
+        otra = Sesion.objects.create(workspace=self.ws, name='Otra')
+        Task.objects.create(sesion=otra, title='De otra')
+        Conversation.objects.create(
+            sesion=otra, user=self.admin, agent=self.agente, title='De otra',
+        )
+
+        titulos = [i['titulo'] for g in self.feed()['grupos'] for i in g['items']]
+        self.assertNotIn('De otra', titulos)
+
+    def test_no_trae_las_conversaciones_personales(self):
+        """Una conversación sin Sesión es del historial privado de quien la escribió."""
+        from apps.agents.models import Conversation
+
+        Conversation.objects.create(
+            user=self.admin, agent=self.agente, title='Mi hilo privado',
+        )
+        titulos = [i['titulo'] for g in self.feed()['grupos'] for i in g['items']]
+        self.assertNotIn('Mi hilo privado', titulos)
+
+    def test_marca_lo_mio(self):
+        """El feed es del equipo: hay que poder distinguir lo propio de un vistazo."""
+        item = [i for g in self.feed()['grupos'] for i in g['items'] if i['tipo'] == 'conversacion'][0]
+        self.assertTrue(item['es_mio'])
+
+        del_colega = [
+            i for g in self.feed(self.colega)['grupos'] for i in g['items']
+            if i['tipo'] == 'conversacion'
+        ][0]
+        self.assertFalse(del_colega['es_mio'])
+
+    def test_quien_no_ve_la_sesion_no_ve_su_feed(self):
+        self.sesion.visibility = VISIBILIDAD_RESTRINGIDA
+        self.sesion.save(update_fields=['visibility'])
+        self.como(self.colega)
+        self.assertEqual(self.client.get(self.url('feed/'), self.q()).status_code, 404)
+
+    def test_el_saludo_viene_del_backend(self):
+        """Se elige acá y no en el navegador para que no cambie en cada dibujado."""
+        self.assertTrue(self.feed()['saludo'])
+
+
+class ConversacionEnLaSesionTests(BaseSesiones):
+    """El chat puede abrir el hilo DENTRO de una Sesión."""
+
+    def test_el_hilo_queda_colgado_de_la_sesion(self):
+        from apps.agents.views import _sesion_del_pedido
+
+        pedido = mock.Mock(user=self.admin, data={
+            'sesion': self.sesion.slug, 'workspace': self.ws.slug,
+        })
+        self.assertEqual(_sesion_del_pedido(pedido), self.sesion)
+
+    def test_una_sesion_que_no_alcanzo_deja_el_hilo_personal(self):
+        """El resultado seguro: personal, no un error ni una Sesión ajena."""
+        from apps.agents.views import _sesion_del_pedido
+
+        self.sesion.visibility = VISIBILIDAD_RESTRINGIDA
+        self.sesion.save(update_fields=['visibility'])
+        pedido = mock.Mock(user=self.colega, data={
+            'sesion': self.sesion.slug, 'workspace': self.ws.slug,
+        })
+        self.assertIsNone(_sesion_del_pedido(pedido))
+
+    def test_sin_sesion_en_el_pedido_no_pasa_nada(self):
+        from apps.agents.views import _sesion_del_pedido
+
+        pedido = mock.Mock(user=self.admin, data={'workspace': self.ws.slug})
+        self.assertIsNone(_sesion_del_pedido(pedido))
+
+    def test_borrar_la_sesion_no_borra_la_conversacion(self):
+        """SET_NULL: el hilo vuelve a ser personal en vez de desaparecer con la Sesión."""
+        from apps.agents.models import Conversation
+
+        conv = Conversation.objects.create(
+            sesion=self.sesion, user=self.admin, agent=self.agente, title='Hilo',
+        )
+        self.sesion.delete()
+        conv.refresh_from_db()
+        self.assertIsNone(conv.sesion_id)
