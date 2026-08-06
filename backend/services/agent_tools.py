@@ -61,8 +61,12 @@ SOLO_CON_CONEXIONES = (
     'list_systems', 'list_tables', 'describe_table', 'run_sql', 'query_odoo', 'run_python',
 )
 
+# Las que solo tienen sentido dentro de una Sesión: sin Sesión no hay dónde anotar la
+# tarea, y ofrecerla igual haría que el modelo la invoque y reciba un error.
+SOLO_EN_SESION = ('crear_tarea',)
 
-def _tools_spec(org, allowed_ids=None):
+
+def _tools_spec(org, allowed_ids=None, sesion=None):
     conns = _active_connections(org, allowed_ids)
     systems = ', '.join(f'"{c.name}" ({c.connector_type})' for c in conns) or 'ninguno'
     todas = [
@@ -274,6 +278,37 @@ def _tools_spec(org, allowed_ids=None):
             },
         },
         {
+            "name": "crear_tarea",
+            "description": (
+                "Anota un pendiente en esta Sesión, para que el equipo lo vea. Úsala cuando de "
+                "la conversación salga algo que HAY QUE HACER y que no se resuelve leyendo la "
+                "respuesta: un pago que falta, un dato que hay que pedirle a alguien, un "
+                "documento por revisar. No la uses para dejar constancia de lo que acabas de "
+                "explicar — eso ya quedó en la conversación."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "titulo": {
+                        "type": "string",
+                        "description": "Qué hay que hacer, en una línea y en imperativo",
+                    },
+                    "detalle": {
+                        "type": "string",
+                        "description": "El contexto que necesita quien la tome (opcional)",
+                    },
+                    "para_mi": {
+                        "type": "boolean",
+                        "description": (
+                            "true si la puedes hacer tú mismo cuando te lo pidan: queda "
+                            "asignada a ti y con el botón para ejecutarla"
+                        ),
+                    },
+                },
+                "required": ["titulo"],
+            },
+        },
+        {
             "name": "actualizar_documentos",
             "description": (
                 "Vuelve a bajar desde Google Drive los archivos conectados y devuelve el contenido "
@@ -290,6 +325,8 @@ def _tools_spec(org, allowed_ids=None):
             },
         },
     ]
+    if not sesion:
+        todas = [t for t in todas if t['name'] not in SOLO_EN_SESION]
     if conns:
         return todas
     # Sin conexiones queda el juego de documentos, que es lo que hace falta para leer,
@@ -298,14 +335,14 @@ def _tools_spec(org, allowed_ids=None):
     return [t for t in todas if t['name'] not in SOLO_CON_CONEXIONES]
 
 
-def tools_for_ollama(org, allowed_ids=None):
-    return [{"type": "function", "function": s} for s in _tools_spec(org, allowed_ids)]
+def tools_for_ollama(org, allowed_ids=None, sesion=None):
+    return [{"type": "function", "function": s} for s in _tools_spec(org, allowed_ids, sesion)]
 
 
-def tools_for_anthropic(org, allowed_ids=None):
+def tools_for_anthropic(org, allowed_ids=None, sesion=None):
     return [
         {"name": s["name"], "description": s["description"], "input_schema": s["parameters"]}
-        for s in _tools_spec(org, allowed_ids)
+        for s in _tools_spec(org, allowed_ids, sesion)
     ]
 
 
@@ -383,14 +420,51 @@ def _documentos(org, allowed_doc_ids=None):
     return qs
 
 
-def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None, artifacts: dict = None, allowed_doc_ids=None, agente=None) -> dict:
+def _crear_tarea(args, sesion, agente, provenance, now):
+    """El agente anota un pendiente en la Sesión.
+
+    La otra mitad de "todo lo que un humano puede hacer, un agente también": el agente ya
+    podía EJECUTAR una tarea que alguien le asignaba; con esto también la crea. Lo que sale
+    de una conversación y hay que hacer deja de depender de que un humano se acuerde de
+    anotarlo.
+
+    Queda firmada por el agente (`created_by` vacío, `agent` puesto) para que en la lista se
+    vea de dónde salió. Con `para_mi`, además queda asignada a él y con el botón para
+    ejecutarla: el agente se compromete a hacerla, no solo la señala.
+    """
+    from apps.sesiones.models import Task
+
+    if sesion is None:
+        return {"error": "Esta conversación no está en una Sesión, así que no hay dónde anotar la tarea."}
+
+    titulo = (args.get('titulo') or '').strip()
+    if not titulo:
+        return {"error": "Falta el título de la tarea."}
+
+    tarea = Task.objects.create(
+        sesion=sesion,
+        title=titulo[:255],
+        description=(args.get('detalle') or '').strip(),
+        agent=agente if args.get('para_mi') else None,
+    )
+    provenance.append({
+        'tipo': 'tarea', 'detalle': f'Anotó la tarea «{titulo}» en {sesion.name}', 'hora': now,
+    })
+    return {
+        'ok': True, 'id': tarea.id, 'titulo': tarea.title,
+        'mensaje': f'Quedó anotada en las Tareas de {sesion.name}.',
+    }
+
+
+def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None, artifacts: dict = None, allowed_doc_ids=None, agente=None, sesion=None) -> dict:
     """Ejecuta una herramienta y registra procedencia en `provenance`.
     `allowed_ids` (si viene) limita a qué sistemas conectados puede acceder el agente.
     `allowed_doc_ids` hace lo mismo con los documentos: los dos salen del Espacio
     del agente (ver `apps/workspaces/permissions.alcance_de_agente`).
     `artifacts` (si viene) acumula figuras generadas: marcador → PNG base64.
     `agente` es quien está ejecutando: se usa para FIRMAR las versiones que escriba, así
-    el historial de un documento dice qué agente lo tocó y no solo que "lo tocó la IA"."""
+    el historial de un documento dice qué agente lo tocó y no solo que "lo tocó la IA".
+    `sesion` es la Sesión de la conversación, si la hay: habilita anotar tareas ahí."""
     args = _normalizar_args(name, args)
     now = datetime.now().strftime('%H:%M')
     try:
@@ -399,6 +473,9 @@ def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None,
 
         if name == 'run_python':
             return _run_python_tool(args or {}, org, provenance, allowed_ids, artifacts, now)
+
+        if name == 'crear_tarea':
+            return _crear_tarea(args or {}, sesion, agente, provenance, now)
 
         if name == 'buscar_en_fuentes':
             from apps.organizations.models import CompanyDocument, SystemConnection

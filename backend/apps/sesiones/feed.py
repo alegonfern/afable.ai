@@ -77,8 +77,14 @@ class FeedView(APIView):
                 'titulo': c.title or 'Conversación',
                 'detalle': (mensajes[0].content[:180] if mensajes else ''),
                 'autor': (c.user.get_full_name() or c.user.email) if c.user else None,
-                'es_mio': c.user_id == request.user.id,
+                # Una conversación que abrió el agente no es "mía" aunque figure a mi
+                # nombre: nadie la escribió.
+                'es_mio': c.user_id == request.user.id and not c.autonoma,
                 'agente': c.agent.name if c.agent else None,
+                # La abrió el agente por su cuenta, sin que nadie preguntara. Es la
+                # diferencia que hay que poder ver en la lista: "lo escribió alguien"
+                # contra "lo trajo un agente solo".
+                'autonoma': c.autonoma,
                 'respuestas': len(respuestas),
                 'ultima_de': (
                     (ultima.agent.name if ultima.agent else None)
@@ -102,6 +108,8 @@ class FeedView(APIView):
                 ),
                 'es_mio': t.assignee_id == request.user.id,
                 'agente': t.agent.name if t.agent else None,
+                # La anotó un agente: `created_by` vacío con un agente puesto.
+                'autonoma': t.created_by_id is None and t.agent_id is not None,
                 # Un resultado del agente es la "respuesta" de una tarea: es lo que la
                 # vuelve equivalente a una conversación en la lista.
                 'respuestas': 1 if t.resultado else 0,

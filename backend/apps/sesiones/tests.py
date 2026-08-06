@@ -871,3 +871,160 @@ class TareasCruzandoSesionesTests(BaseSesiones):
 
     def test_alguien_de_afuera_no_llega(self):
         self.assertEqual(self.pedir(self.ajeno).status_code, 404)
+
+
+class ElAgenteActuaSoloTests(BaseSesiones):
+    """El principio de los Pods: "todo lo que un humano puede hacer, un agente también".
+
+    Estaba a medias. El agente ejecutaba una tarea, pero SOLO si alguien apretaba ▷, y el
+    resultado se iba por correo a una persona: el equipo no se enteraba. Lo que se prueba
+    acá es lo que faltaba — que un Disparador publique en la Sesión sin que nadie lo pida,
+    y que el agente pueda ANOTAR una tarea él mismo.
+    """
+
+    def crear_disparador(self, **extra):
+        from apps.agents.models import Automation
+
+        datos = {
+            'user': self.admin, 'organization': self.org, 'name': 'Facturas sin pagar',
+            'prompt': 'Revisa si hay facturas vencidas.', 'sesion': self.sesion,
+            'agent': self.agente, 'notify_email': '',
+        }
+        datos.update(extra)
+        return Automation.objects.create(**datos)
+
+    # ── El Disparador publica en la Sesión ────────────────────────────────────
+
+    def test_publica_una_conversacion_que_ve_el_equipo(self):
+        from apps.agents.models import Conversation
+        from services.automation_runner import entregar
+
+        d = self.crear_disparador()
+        self.assertEqual(entregar(d, 'Hay 3 facturas vencidas.'), '')
+
+        conv = Conversation.objects.get(sesion=self.sesion)
+        self.assertTrue(conv.autonoma)
+        self.assertEqual(conv.agent, self.agente)
+        # Los DOS turnos: sin el encargo, quien lo lee tres días después no sabe qué se
+        # había pedido.
+        textos = [m.content for m in conv.messages.order_by('created_at')]
+        self.assertEqual(textos, ['Revisa si hay facturas vencidas.', 'Hay 3 facturas vencidas.'])
+
+    def test_aparece_en_el_feed_marcada_como_autonoma(self):
+        from services.automation_runner import entregar
+
+        entregar(self.crear_disparador(), 'Hay 3 facturas vencidas.')
+        self.como(self.colega)
+        r = self.client.get(self.url('feed/'), self.q())
+        item = next(
+            i for g in r.data['grupos'] for i in g['items'] if i['tipo'] == 'conversacion'
+        )
+        self.assertTrue(item['autonoma'])
+        # Y no es "mía" de nadie: no la escribió una persona.
+        self.assertFalse(item['es_mio'])
+
+    def test_ademas_puede_dejar_la_tarea_anotada(self):
+        from services.automation_runner import entregar
+
+        entregar(self.crear_disparador(crear_tarea=True), 'Hay 3 facturas vencidas.')
+        tarea = Task.objects.get(sesion=self.sesion, title='Facturas sin pagar')
+        self.assertEqual(tarea.agent, self.agente)
+        self.assertIn('3 facturas', tarea.resultado)
+
+    def test_sin_crear_tarea_no_anota_nada(self):
+        from services.automation_runner import entregar
+
+        entregar(self.crear_disparador(), 'Hay 3 facturas vencidas.')
+        self.assertFalse(Task.objects.filter(sesion=self.sesion).exists())
+
+    def test_los_dos_destinos_conviven(self):
+        from apps.agents.models import Conversation
+        from django.core import mail
+        from services.automation_runner import entregar
+
+        entregar(self.crear_disparador(notify_email='jefe@afable.test'), 'Todo al día.')
+        self.assertEqual(Conversation.objects.filter(sesion=self.sesion).count(), 1)
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_que_falle_el_correo_no_pierde_la_publicacion(self):
+        """Lo que queda guardado es la publicación: el correo solo avisa afuera."""
+        from apps.agents.models import Conversation
+        from services.automation_runner import entregar
+
+        d = self.crear_disparador(notify_email='jefe@afable.test')
+        with mock.patch('services.automation_runner._send_result_email', side_effect=RuntimeError('SMTP caído')):
+            error = entregar(d, 'Todo al día.')
+        self.assertIn('correo', error)
+        self.assertEqual(Conversation.objects.filter(sesion=self.sesion).count(), 1)
+
+    def test_sin_sesion_sigue_yendo_solo_por_correo(self):
+        """Lo que ya funcionaba no puede cambiar: la mayoría de los encargos no tienen Sesión."""
+        from apps.agents.models import Conversation
+        from django.core import mail
+        from services.automation_runner import entregar
+
+        entregar(self.crear_disparador(sesion=None, notify_email='jefe@afable.test'), 'Listo.')
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertFalse(Conversation.objects.filter(sesion=self.sesion).exists())
+
+    # ── El agente anota tareas él mismo ───────────────────────────────────────
+
+    def test_el_agente_anota_una_tarea(self):
+        from services.agent_tools import execute_tool
+
+        r = execute_tool(
+            'crear_tarea', {'titulo': 'Pagar la factura 4021', 'detalle': 'Vence el viernes'},
+            self.org, [], agente=self.agente, sesion=self.sesion,
+        )
+        self.assertTrue(r['ok'])
+        tarea = Task.objects.get(sesion=self.sesion, title='Pagar la factura 4021')
+        self.assertEqual(tarea.description, 'Vence el viernes')
+        # Sin `para_mi` la señala pero no se compromete: nadie la ejecuta por él.
+        self.assertIsNone(tarea.agent)
+        self.assertIsNone(tarea.created_by)
+
+    def test_con_para_mi_queda_asignada_al_agente(self):
+        from services.agent_tools import execute_tool
+
+        execute_tool(
+            'crear_tarea', {'titulo': 'Resumir los pagos', 'para_mi': True},
+            self.org, [], agente=self.agente, sesion=self.sesion,
+        )
+        self.assertEqual(Task.objects.get(title='Resumir los pagos').agent, self.agente)
+
+    def test_fuera_de_una_sesion_no_hay_donde_anotar(self):
+        from services.agent_tools import execute_tool
+
+        r = execute_tool(
+            'crear_tarea', {'titulo': 'Algo'}, self.org, [], agente=self.agente, sesion=None,
+        )
+        self.assertIn('error', r)
+        self.assertFalse(Task.objects.exists())
+
+    def test_sin_titulo_no_crea_una_tarea_en_blanco(self):
+        from services.agent_tools import execute_tool
+
+        r = execute_tool(
+            'crear_tarea', {'detalle': 'solo detalle'}, self.org, [],
+            agente=self.agente, sesion=self.sesion,
+        )
+        self.assertIn('error', r)
+        self.assertFalse(Task.objects.exists())
+
+    def test_la_herramienta_no_se_ofrece_fuera_de_una_sesion(self):
+        """Prometerle una herramienta que no tiene lo hace gastar el turno invocándola."""
+        from services.agent_tools import tools_for_anthropic
+
+        sin = {t['name'] for t in tools_for_anthropic(self.org, None, None)}
+        con = {t['name'] for t in tools_for_anthropic(self.org, None, self.sesion)}
+        self.assertNotIn('crear_tarea', sin)
+        self.assertIn('crear_tarea', con)
+
+    def test_el_prompt_le_cuenta_de_la_sesion_solo_si_hay_sesion(self):
+        from apps.agents.views import _build_onboarding_context
+
+        con = _build_onboarding_context(self.admin, sesion=self.sesion)['system_prompt']
+        sin = _build_onboarding_context(self.admin)['system_prompt']
+        self.assertIn('crear_tarea', con)
+        self.assertIn(self.sesion.name, con)
+        self.assertNotIn('crear_tarea', sin)

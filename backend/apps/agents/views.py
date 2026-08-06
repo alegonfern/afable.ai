@@ -369,6 +369,21 @@ Sé conversacional, breve y entusiasta."""
         # pero no puede prestar uno que quien pregunta no tiene permiso de leer.
         espacio_docs = sorted((set(espacio_docs) | set(de_la_sesion)) & visibles)
 
+    # Dentro de una Sesión el agente puede ANOTAR pendientes. Se le dice solo cuando hay
+    # Sesión: prometerle una herramienta que no tiene lo hace gastar el turno intentando
+    # invocarla — ya se vio pasar exactamente eso con las herramientas de sistemas.
+    bloque_tareas = ''
+    if sesion is not None:
+        bloque_tareas = (
+            f'\nESTÁS EN LA SESIÓN «{sesion.name}», que es el trabajo de un equipo.\n'
+            '- crear_tarea(titulo, detalle, para_mi): anota un pendiente que el equipo ve.\n'
+            '  Úsala cuando de la conversación salga algo que HAY QUE HACER y no se resuelva\n'
+            '  leyendo tu respuesta: un pago que falta, un dato que hay que pedir, algo por\n'
+            '  revisar. Con para_mi=true queda asignada a ti y podrán pedirte que la hagas.\n'
+            '  NO la uses para dejar constancia de lo que acabas de explicar: eso ya quedó\n'
+            '  escrito acá.\n'
+        )
+
     docs_en_prompt = []
 
     # Primero intenta SystemConnection (arquitectura nueva)
@@ -534,6 +549,7 @@ HERRAMIENTAS DE ARCHIVOS — puedes leer y también ESCRIBIR documentos:
 - reescribir_documento(id, contenido, mensaje): reemplaza todo el texto. Solo cuando el
   documento se reescribe de punta a punta.
 
+{bloque_tareas}
 Cada cambio que hagas queda guardado como una versión FIRMADA con tu nombre, y el equipo
 puede ver qué cambiaste y volver atrás. Por eso: nunca cambies algo que el usuario no pidió
 cambiar, y di siempre qué cambiaste. Si un documento no es editable (un PDF, un Excel), no
@@ -911,6 +927,10 @@ class DirectChatView(APIView):
                 # Para firmar las versiones que escriba: el historial de un documento
                 # dice qué agente lo tocó, no solo que "lo tocó la IA".
                 agente=agent,
+                # Y para que pueda ANOTAR una tarea: dentro de una Sesión, lo que sale de
+                # la conversación y hay que hacer deja de depender de que un humano se
+                # acuerde de anotarlo.
+                sesion=conversation.sesion,
             )
         else:
             response_text = chat_direct(full_history, system_prompt, model)
@@ -1011,7 +1031,7 @@ class DirectChatStreamView(APIView):
                 full_text = ''
                 for event in run_agent_live_events(
                     full_history, org, system_prompt, model, allowed_ids, allowed_doc_ids,
-                    agente=agent,
+                    agente=agent, sesion=conversation.sesion,
                 ):
                     if 'status' in event:
                         yield f"data: {json.dumps({'status': event['status']})}\n\n"

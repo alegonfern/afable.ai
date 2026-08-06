@@ -128,14 +128,18 @@ class AutomationSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(ruta) if request else ruta
 
     connection_name = serializers.CharField(source='connection.name', read_only=True)
+    sesion_name = serializers.CharField(source='sesion.name', read_only=True)
+    agent_name = serializers.CharField(source='agent.name', read_only=True)
 
     class Meta:
         model = Automation
         fields = ['id', 'organization', 'name', 'prompt', 'interval_minutes', 'notify_email',
                   'schedule_config', 'webhook_url', 'disparador',
+                  'sesion', 'sesion_name', 'crear_tarea', 'agent', 'agent_name',
                   'is_active', 'trigger_type', 'connection', 'connection_name', 'event_type',
                   'event_config', 'last_run_at', 'last_result', 'last_error', 'run_count', 'created_at']
         read_only_fields = ['id', 'connection_name', 'webhook_url', 'disparador',
+                            'sesion_name', 'agent_name',
                             'last_run_at', 'last_result', 'last_error',
                             'run_count', 'created_at']
 
@@ -155,6 +159,25 @@ class AutomationSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({'event_config': 'Indica la tabla (o modelo Odoo) a vigilar.'})
         elif not get('prompt').strip():
             raise serializers.ValidationError({'prompt': 'El prompt es obligatorio en las programadas.'})
+
+        # Un encargo cuyo resultado no va a ninguna parte no es un encargo. Antes el
+        # correo era obligatorio y esto no podía pasar; desde que se puede publicar en una
+        # Sesión, se puede quedar sin ninguno de los dos.
+        if not get('notify_email').strip() and not get('sesion', None):
+            raise serializers.ValidationError({
+                'notify_email': 'Di a dónde llega el resultado: un correo, una Sesión, o los dos.',
+            })
+
+        # La Sesión tiene que ser del Workspace de esta empresa. Sin esto, alguien podría
+        # hacer publicar a un agente en la Sesión de otra empresa mandando un id.
+        sesion = get('sesion', None)
+        if sesion is not None:
+            org = get('organization', None)
+            org_id = getattr(org, 'pk', org)
+            if sesion.workspace.organization_id != org_id:
+                raise serializers.ValidationError({
+                    'sesion': 'Esa Sesión no es de esta empresa.',
+                })
         return data
 
 

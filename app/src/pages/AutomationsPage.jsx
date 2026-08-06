@@ -3,7 +3,7 @@ import {
   Box, Typography, TextField, CircularProgress, useTheme, Collapse, Switch, MenuItem,
 } from '@mui/material';
 import { Timer, Plus, Play, Trash2, ChevronDown, ChevronRight, Mail, Clock, Zap, ArrowRight,
-  MessageSquare, Database, CalendarClock, Webhook, Copy } from 'lucide-react';
+  MessageSquare, Database, CalendarClock, Webhook, Copy, Users } from 'lucide-react';
 
 // Lunes = 0, igual que `weekday()` en el backend: la conversión es directa.
 const DIAS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
@@ -13,6 +13,7 @@ import { toast } from 'react-toastify';
 import { api } from '../services/api';
 import PageHeader from '../components/PageHeader';
 import { useApp } from '../context/AppContext';
+import { useWorkspace } from '../context/WorkspaceContext';
 
 const fmtDate = (iso) => iso ? new Date(iso).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'nunca';
 
@@ -48,6 +49,7 @@ export default function AutomationsPage() {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const { selectedOrganization, currentUser } = useApp();
+  const { slug: wsSlug } = useWorkspace();
 
   const textMuted = d ? 'rgba(255,255,255,0.45)' : 'rgba(0,0,0,0.45)';
   const textSemi = d ? 'rgba(255,255,255,0.70)' : 'rgba(0,0,0,0.70)';
@@ -67,6 +69,8 @@ export default function AutomationsPage() {
   };
 
   const emptyForm = {
+    // `sesion` vacio = solo por correo, que es como funcionaba antes.
+    sesion: '', crear_tarea: false, agent: '',
     name: '', prompt: '', interval_minutes: 60, notify_email: '',
     trigger_type: 'interval', connection: '', event_type: 'new_table', event_table: '',
     // Disparador a hora fija. Sin dias = todos los dias.
@@ -74,6 +78,8 @@ export default function AutomationsPage() {
   };
   const [autos, setAutos] = useState([]);
   const [connections, setConnections] = useState([]);
+  const [sesiones, setSesiones] = useState([]);
+  const [agentes, setAgentes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -86,6 +92,15 @@ export default function AutomationsPage() {
     api.getConnections().then(r => setConnections(r.data)).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Las Sesiones y los agentes del Workspace: son a donde puede llegar el resultado y
+  // con quien corre el encargo.
+  useEffect(() => {
+    if (!wsSlug) return;
+    api.getSesiones(wsSlug).then(r => setSesiones(r.data.results || [])).catch(() => {});
+    api.getAgentGallery({ workspace: wsSlug, tab: 'todos', page: 1 })
+      .then(r => setAgentes(r.data.results || [])).catch(() => {});
+  }, [wsSlug]);
 
   useEffect(() => {
     if (currentUser?.email && !form.notify_email) {
@@ -101,8 +116,13 @@ export default function AutomationsPage() {
   const usaIntervalo = !isHorario && !isWebhook;
 
   const handleCreate = async () => {
-    if (!form.name.trim() || !form.notify_email.trim()) {
-      toast.error('Completa nombre y correo.');
+    if (!form.name.trim()) {
+      toast.error('Ponle un nombre al encargo.');
+      return;
+    }
+    // Un encargo cuyo resultado no va a ninguna parte no es un encargo.
+    if (!form.notify_email.trim() && !form.sesion) {
+      toast.error('Di a dónde llega el resultado: un correo, una Sesión, o los dos.');
       return;
     }
     if (!isEvent && !form.prompt.trim()) {
@@ -131,6 +151,9 @@ export default function AutomationsPage() {
         name: form.name, prompt: form.prompt, interval_minutes: form.interval_minutes,
         notify_email: form.notify_email, trigger_type: form.trigger_type,
         organization: selectedOrganization.id,
+        sesion: form.sesion || null,
+        crear_tarea: Boolean(form.sesion) && form.crear_tarea,
+        agent: form.agent || null,
       };
       if (isEvent) {
         payload.connection = form.connection;
@@ -217,7 +240,9 @@ export default function AutomationsPage() {
         <Typography sx={{ fontSize: '0.8rem', color: textMuted, mb: 3 }}>
           Automatiza qué quieres obtener de Afable: un prompt programado ("cada mañana envíame el
           resumen de ventas") o un aviso cuando pase algo en tus sistemas ("notifícame si aparece
-          una nueva base de datos"). Afable lo hace solo y te llega por correo.
+          una nueva base de datos"). Afable lo hace solo, sin que nadie lo pida, y el resultado te
+          llega por correo o lo <strong>publica un agente en la Sesión</strong> donde trabaja el
+          equipo.
         </Typography>
 
         {!showForm && (
@@ -242,12 +267,22 @@ export default function AutomationsPage() {
                 </>
               )}
               <ArrowRight size={13} color={textMuted} />
-              <FlowNode icon={<Mail size={13} />} label={form.notify_email ? 'Avisa por correo' : 'Correo'} active={!!form.notify_email.trim()} d={d} />
+              {/* El destino: el diagrama tiene que mostrar que ahora puede ir al equipo
+                  y no solo a una casilla de correo. */}
+              {form.sesion ? (
+                <FlowNode
+                  icon={<Users size={13} />}
+                  label={`Publica en ${sesiones.find(x => x.id === form.sesion)?.name || 'la Sesión'}`}
+                  active d={d}
+                />
+              ) : (
+                <FlowNode icon={<Mail size={13} />} label={form.notify_email ? 'Avisa por correo' : 'Correo'} active={!!form.notify_email.trim()} d={d} />
+              )}
             </Box>
 
-            {/* ── 1. Qué querés que Afable haga ── */}
+            {/* ── 1. Qué quiere que Afable haga ── */}
             <Box>
-              <FieldLabel textMuted={textMuted}>1. ¿Qué querés que Afable haga?</FieldLabel>
+              <FieldLabel textMuted={textMuted}>1. ¿Qué quiere que Afable haga?</FieldLabel>
               <TextField
                 value={form.prompt} fullWidth multiline rows={3} sx={inputSx}
                 placeholder={isEvent
@@ -405,6 +440,63 @@ export default function AutomationsPage() {
                   onChange={e => setForm(prev => ({ ...prev, notify_email: e.target.value }))}
                 />
               </Box>
+
+              {/* Publicar en una Sesión. Es lo que convierte un aviso privado en trabajo
+                  del equipo: el agente abre la conversación sin que nadie la pida, y la
+                  ve todo el que entra a la Sesión. Antes el resultado moría en la casilla
+                  de correo de una persona. */}
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mt: 2 }}>
+                <TextField
+                  select label="Publicar en una Sesión" value={form.sesion}
+                  sx={{ ...inputSx, flex: 1, minWidth: 240 }}
+                  onChange={e => setForm(prev => ({ ...prev, sesion: e.target.value }))}
+                  helperText={
+                    form.sesion
+                      ? 'El agente abre la conversación ahí, y la ve todo el equipo de la Sesión.'
+                      : 'Sin Sesión, el resultado va solo por correo.'
+                  }
+                  FormHelperTextProps={{ sx: { fontSize: '0.75rem', color: textMuted, mx: 0 } }}
+                >
+                  <MenuItem value="" sx={{ fontSize: '0.875rem' }}>No publicar — solo correo</MenuItem>
+                  {sesiones.map(x => (
+                    <MenuItem key={x.slug} value={x.id} sx={{ fontSize: '0.875rem' }}>{x.name}</MenuItem>
+                  ))}
+                </TextField>
+
+                <TextField
+                  select label="Con qué agente" value={form.agent}
+                  sx={{ ...inputSx, flex: 1, minWidth: 220 }}
+                  onChange={e => setForm(prev => ({ ...prev, agent: e.target.value }))}
+                  helperText="Sus Instrucciones y sus datos son los que se usan."
+                  FormHelperTextProps={{ sx: { fontSize: '0.75rem', color: textMuted, mx: 0 } }}
+                >
+                  <MenuItem value="" sx={{ fontSize: '0.875rem' }}>El agente por omisión</MenuItem>
+                  {agentes.map(a => (
+                    <MenuItem key={a.id} value={a.id} sx={{ fontSize: '0.875rem' }}>{a.name}</MenuItem>
+                  ))}
+                </TextField>
+              </Box>
+
+              {/* Solo con Sesión: sin dónde anotarla, la casilla no puede hacer nada. */}
+              <Collapse in={Boolean(form.sesion)}>
+                <Box
+                  component="label"
+                  sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.5, cursor: 'pointer' }}
+                >
+                  <Switch
+                    size="small" checked={form.crear_tarea}
+                    onChange={e => setForm(prev => ({ ...prev, crear_tarea: e.target.checked }))}
+                  />
+                  <Box>
+                    <Typography sx={{ fontSize: '0.875rem', fontWeight: 600 }}>
+                      Y dejar la tarea anotada
+                    </Typography>
+                    <Typography sx={{ fontSize: '0.78rem', color: textMuted }}>
+                      Para los encargos que terminan en algo que alguien tiene que hacer.
+                    </Typography>
+                  </Box>
+                </Box>
+              </Collapse>
             </Box>
 
             <TextField
@@ -463,9 +555,21 @@ export default function AutomationsPage() {
                         <Clock size={11} /> {auto.disparador
                           || `${auto.trigger_type === 'event' ? 'revisa cada' : 'cada'} ${auto.interval_minutes} min`}
                       </Typography>
-                      <Typography sx={{ fontSize: '0.72rem', color: textMuted, display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
-                        <Mail size={11} /> {auto.notify_email}
-                      </Typography>
+                      {/* A dónde llega. Publicar en una Sesión va primero y en índigo:
+                          es lo que hace que el equipo se entere, y el correo es el aviso
+                          de al lado. Un encargo sin ninguno de los dos no se puede crear. */}
+                      {auto.sesion_name && (
+                        <Typography sx={{ fontSize: '0.72rem', color: '#9BA6E3', display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                          <Users size={11} /> publica en {auto.sesion_name}
+                          {auto.crear_tarea ? ' y anota la tarea' : ''}
+                          {auto.agent_name ? ` · ${auto.agent_name}` : ''}
+                        </Typography>
+                      )}
+                      {auto.notify_email && (
+                        <Typography sx={{ fontSize: '0.72rem', color: textMuted, display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                          <Mail size={11} /> {auto.notify_email}
+                        </Typography>
+                      )}
                       <Typography sx={{ fontSize: '0.72rem', color: textMuted }}>
                         última: {fmtDate(auto.last_run_at)} · {auto.run_count} ejecuciones
                       </Typography>

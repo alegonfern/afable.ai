@@ -127,6 +127,11 @@ class Conversation(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='conversations'
     )
     title = models.CharField(max_length=500, blank=True)
+    # La abrió un agente por su cuenta, sin que nadie preguntara (un Disparador que
+    # publica en la Sesión). Sin la marca, en el feed se leería como si la hubiera
+    # escrito alguien — y "lo escribió una persona" contra "lo trajo un agente solo" es
+    # justo la diferencia que hay que poder ver.
+    autonoma = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -223,8 +228,34 @@ class Automation(models.Model):
     name = models.CharField(max_length=255)
     prompt = models.TextField(blank=True)  # obligatorio en 'interval', opcional en 'event'
     interval_minutes = models.PositiveIntegerField(default=60)  # en 'event' = cada cuánto revisar
-    notify_email = models.EmailField()
+    # Vacío se permite desde que el resultado puede ir a una Sesión: con `sesion`
+    # puesta, exigir un correo obligaría a mandar un mail que nadie pidió.
+    notify_email = models.EmailField(blank=True)
     is_active = models.BooleanField(default=True)
+
+    # ── A dónde llega el resultado ────────────────────────────────────────────
+    # Con `sesion`, el agente PUBLICA en el trabajo del equipo: abre una conversación
+    # que ve cualquiera de la Sesión, sin que nadie la haya pedido. Es lo que cierra el
+    # principio de los Pods —"todo lo que un humano puede hacer, un agente también"—
+    # que hasta ahora estaba a medias: el agente ejecutaba, pero solo si alguien
+    # apretaba, y el resultado se iba por correo a una persona.
+    #
+    # Los dos destinos conviven: el correo avisa afuera, la Sesión deja el registro
+    # adentro. Que no haya ninguno se rechaza en el serializer — un encargo cuyo
+    # resultado no va a ninguna parte no es un encargo.
+    sesion = models.ForeignKey(
+        'sesiones.Sesion', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='automatizaciones',
+    )
+    # Además de publicar, dejar el pendiente anotado. Para los encargos que terminan
+    # en algo que alguien tiene que hacer ("avisame si hay facturas sin pagar").
+    crear_tarea = models.BooleanField(default=False)
+    # El agente con el que corre. Sin esto corría con el agente por omisión, así que
+    # las Instrucciones que se le escribieron a un agente no llegaban al encargo.
+    agent = models.ForeignKey(
+        Agent, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='automations',
+    )
 
     trigger_type = models.CharField(max_length=20, choices=TRIGGER_TYPES, default='interval')
     connection = models.ForeignKey(

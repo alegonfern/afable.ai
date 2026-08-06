@@ -4,7 +4,7 @@ import {
   Alert, Box, CircularProgress, IconButton, MenuItem,
   Select, Stack, TextField, Typography, useTheme,
 } from '@mui/material';
-import { Bot, CheckCircle2, MessageSquare, Search, Send } from 'lucide-react';
+import { Bot, CheckCircle2, MessageSquare, Search, Send, Sparkles } from 'lucide-react';
 import { api } from '../../services/api';
 
 /**
@@ -185,10 +185,16 @@ export default function SesionConversacion({ sesion, slug, onSaludo }) {
                 <Box sx={{
                   width: 30, height: 30, borderRadius: '8px', flexShrink: 0, mt: 0.25,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  bgcolor: i.tipo === 'tarea' ? 'rgba(240, 180, 41, 0.14)' : 'rgba(88, 106, 208, 0.14)',
-                  color: i.tipo === 'tarea' ? '#f0b429' : '#9BA6E3',
+                  // Lo que trajo un agente solo va en verde y con otro icono: es la
+                  // diferencia que hay que ver de un vistazo entre "alguien escribió
+                  // esto" y "esto apareció sin que nadie lo pidiera".
+                  bgcolor: i.autonoma ? 'rgba(52, 211, 153, 0.14)'
+                    : i.tipo === 'tarea' ? 'rgba(240, 180, 41, 0.14)' : 'rgba(88, 106, 208, 0.14)',
+                  color: i.autonoma ? '#34D399'
+                    : i.tipo === 'tarea' ? '#f0b429' : '#9BA6E3',
                 }}>
-                  {i.tipo === 'tarea' ? <CheckCircle2 size={15} /> : <MessageSquare size={15} />}
+                  {i.autonoma ? <Sparkles size={15} />
+                    : i.tipo === 'tarea' ? <CheckCircle2 size={15} /> : <MessageSquare size={15} />}
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600 }}>
@@ -196,7 +202,14 @@ export default function SesionConversacion({ sesion, slug, onSaludo }) {
                       {i.tipo === 'tarea' ? 'Tarea · ' : ''}
                     </Box>
                     {i.titulo}
-                    {i.autor && (
+                    {/* Con `autonoma` NO se firma con el nombre de una persona: nadie lo
+                        escribió. Decir "Alexis Gonzalez" ahí sería atribuirle a alguien
+                        algo que trajo el agente por su cuenta. */}
+                    {i.autonoma ? (
+                      <Box component="span" sx={{ color: '#34D399', fontWeight: 600, ml: 1, fontSize: '0.8125rem' }}>
+                        lo trajo {i.agente || 'un agente'}, sin que nadie lo pidiera
+                      </Box>
+                    ) : i.autor && (
                       <Box component="span" sx={{ color: textMuted, fontWeight: 400, ml: 1, fontSize: '0.875rem' }}>
                         {i.es_mio ? 'usted' : i.autor}
                       </Box>
