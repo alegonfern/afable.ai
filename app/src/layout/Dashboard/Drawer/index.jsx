@@ -29,7 +29,7 @@ import { DRAWER_WIDTH, MINI_DRAWER_WIDTH } from '../../../config';
 import { useApp } from '../../../context/AppContext';
 import { api } from '../../../services/api';
 import MenuDeFila, { DialogoCompartir } from './MenuDeFila';
-import SelectorWorkspace from '../../../components/SelectorWorkspace';
+import { Isotipo, Logo } from '../../../components/Logo';
 
 const openedMixin = (theme) => ({
   width: DRAWER_WIDTH,
@@ -314,12 +314,21 @@ export default function Drawer({ open, handleDrawerToggle }) {
   const drawer = (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
-      {/* ── En qué empresa se está trabajando ────────────────────────────────
-          Va antes que todo lo demás porque es el marco: el Workspace decide qué
-          archivos, agentes, conexiones y personas se ven. Faltaba, y con dos
-          empresas no había forma de saber en cuál se estaba escribiendo. */}
-      <Box sx={{ px: 0.75, pt: 0.75, flexShrink: 0 }}>
-        <SelectorWorkspace open={open} />
+      {/* ── La marca ─────────────────────────────────────────────────────────
+          Arriba a la izquierda, donde se busca sin pensar y donde lleva de vuelta
+          al inicio. Estaba solo en login, registro y la landing: adentro de la app
+          no aparecía en ninguna parte, así que el producto no se nombraba a sí
+          mismo. Plegada la barra queda solo el isotipo. */}
+      <Box
+        onClick={() => navigate('/app')}
+        sx={{
+          display: 'flex', alignItems: 'center', flexShrink: 0, cursor: 'pointer',
+          justifyContent: open ? 'flex-start' : 'center',
+          px: open ? 1.5 : 0.5, pt: 1.5, pb: 0.5,
+          '&:hover': { opacity: 0.85 }, transition: 'opacity 0.12s',
+        }}
+      >
+        {open ? <Logo size={22} /> : <Isotipo size={22} />}
       </Box>
 
       {/* ── Conmutador de modos ──────────────────────────────────────────────

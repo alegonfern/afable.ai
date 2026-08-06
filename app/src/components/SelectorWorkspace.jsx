@@ -16,9 +16,15 @@ import { useWorkspace } from '../context/WorkspaceContext';
  * pertenecía a dos empresas no tenía forma de pasar de una a la otra, y peor, no tenía
  * forma de notar en cuál estaba escribiendo.
  *
- * Va arriba de todo en la barra lateral porque es el marco de lo demás: primero en qué
- * empresa, después qué se hace ahí. Con un solo Workspace no es un conmutador y no finge
- * serlo — muestra la empresa y lleva a sus ajustes.
+ * Vive arriba a la derecha, pegado al claro/oscuro: los dos son ajustes del MARCO y no del
+ * contenido de la pantalla. Con un solo Workspace no es un conmutador y no finge serlo —
+ * muestra la empresa y lleva a sus ajustes.
+ *
+ * `compacto` es la variante del encabezado: SOLO la marca y la flecha, unos 44px. Ahí
+ * comparte fila con el selector de modelo y el buscador, y cualquier versión con el nombre
+ * escrito les come el ancho — con el nombre completo el buscador quedaba partido en tres
+ * líneas. La marca alcanza justamente porque para eso existe: se distingue una empresa de
+ * otra sin leer. El nombre va en el tooltip y en el menú, que es donde hay lugar.
  */
 
 // La paleta del monograma. Colores que se leen sobre claro y sobre oscuro, y que no
@@ -77,7 +83,7 @@ export function MarcaWorkspace({ workspace, size = 26, radio = '7px' }) {
   );
 }
 
-export default function SelectorWorkspace({ open = true }) {
+export default function SelectorWorkspace({ open = true, compacto = true }) {
   const theme = useTheme();
   const navigate = useNavigate();
   const d = theme.palette.mode === 'dark';
@@ -108,47 +114,52 @@ export default function SelectorWorkspace({ open = true }) {
   return (
     <>
       <Tooltip
-        title={open ? '' : `${workspace.name}${varios ? ' — cambiar de empresa' : ''}`}
-        placement="right" arrow
+        title={
+          (compacto || !open)
+            ? `${workspace.name}${varios ? ' — cambiar de empresa' : ''}`
+            : ''
+        }
+        placement={compacto ? 'bottom' : 'right'} arrow
       >
         <Box
           component="button"
           onClick={(e) => setAncla(e.currentTarget)}
           sx={{
-            width: '100%', border: 'none', bgcolor: 'transparent', cursor: 'pointer',
-            fontFamily: 'inherit', textAlign: 'left',
-            display: 'flex', alignItems: 'center', gap: 1,
-            px: open ? 1 : 0.5, py: 0.75, borderRadius: '7px',
+            border: 'none', bgcolor: 'transparent', cursor: 'pointer',
+            fontFamily: 'inherit', textAlign: 'left', flexShrink: 0,
+            display: 'flex', alignItems: 'center', gap: compacto ? 0.75 : 1,
+            width: compacto ? 'auto' : '100%',
+            px: open ? (compacto ? 0.75 : 1) : 0.5, py: compacto ? 0.4 : 0.75,
+            borderRadius: '7px',
             justifyContent: open ? 'flex-start' : 'center',
             '&:hover': { bgcolor: bgHover }, transition: 'background-color 0.12s',
           }}
         >
-          <MarcaWorkspace workspace={workspace} />
-          {open && (
-            <>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography
-                  noWrap
-                  sx={{ fontSize: '0.875rem', fontWeight: 600, color: textActive, lineHeight: 1.3 }}
-                >
-                  {workspace.name}
-                </Typography>
-                <Typography
-                  noWrap sx={{ fontSize: '0.72rem', color: textMuted, lineHeight: 1.3 }}
-                >
-                  {subtitulo}
-                </Typography>
-              </Box>
-              <ChevronsUpDown size={13} style={{ flexShrink: 0, color: textMuted }} />
-            </>
+          <MarcaWorkspace workspace={workspace} size={compacto ? 22 : 26} />
+          {/* En el encabezado NO va el nombre escrito: le come el ancho al buscador. */}
+          {open && !compacto && (
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <Typography
+                noWrap
+                sx={{ fontSize: '0.8125rem', fontWeight: 600, color: textActive, lineHeight: 1.3 }}
+              >
+                {workspace.name}
+              </Typography>
+              <Typography noWrap sx={{ fontSize: '0.72rem', color: textMuted, lineHeight: 1.3 }}>
+                {subtitulo}
+              </Typography>
+            </Box>
+          )}
+          {(open || compacto) && (
+            <ChevronsUpDown size={12} style={{ flexShrink: 0, color: textMuted }} />
           )}
         </Box>
       </Tooltip>
 
       <Menu
         anchorEl={ancla} open={Boolean(ancla)} onClose={() => setAncla(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: compacto ? 'right' : 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: compacto ? 'right' : 'left' }}
         PaperProps={{ sx: { minWidth: 268, borderRadius: '10px', mt: 0.5 } }}
       >
         {/* El encabezado solo aparece cuando hay de dónde elegir. */}
