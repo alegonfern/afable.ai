@@ -142,7 +142,7 @@ export default function AutomationsPage() {
       return;
     }
     if (selectedOrganization.nombre === 'Personal') {
-      toast.error('Las automatizaciones no funcionan en "Personal" — cambia a una empresa real arriba.');
+      toast.error('Los Disparadores no funcionan en "Personal" — cambia a una empresa real arriba.');
       return;
     }
     setSaving(true);
@@ -172,15 +172,15 @@ export default function AutomationsPage() {
       setForm({ ...emptyForm, notify_email: currentUser?.email || '' });
       setShowForm(false);
       toast.success(
-        isEvent ? 'Automatización creada. Afable vigilará el evento según el intervalo de revisión.'
-          : isWebhook ? 'Automatización creada. Copie la dirección y péguela en el otro sistema.'
-            : isHorario ? `Automatización creada. Corre ${res.data.disparador.toLowerCase()}.`
-              : 'Automatización creada. Se ejecutará según su intervalo.',
+        isEvent ? 'Disparador creado. Afable vigilará el evento según el intervalo de revisión.'
+          : isWebhook ? 'Disparador creado. Copie la dirección y péguela en el otro sistema.'
+            : isHorario ? `Disparador creado. Corre ${res.data.disparador.toLowerCase()}.`
+              : 'Disparador creado. Se ejecutará según su intervalo.',
       );
     } catch (e) {
       const d = e.response?.data || {};
       toast.error(d.interval_minutes?.[0] || d.connection?.[0] || d.event_type?.[0]
-        || d.event_config?.[0] || d.prompt?.[0] || d.organization?.[0] || 'Error al crear la automatización');
+        || d.event_config?.[0] || d.prompt?.[0] || d.organization?.[0] || 'Error al crear el Disparador');
     } finally {
       setSaving(false);
     }
@@ -199,7 +199,7 @@ export default function AutomationsPage() {
     try {
       await api.deleteAutomation(id);
       setAutos(prev => prev.filter(a => a.id !== id));
-      toast.success('Automatización eliminada');
+      toast.success('Disparador eliminado');
     } catch {
       toast.error('Error al eliminar');
     }
@@ -247,11 +247,11 @@ export default function AutomationsPage() {
 
         {!showForm && (
           <Box component="button" onClick={() => setShowForm(true)} sx={{ ...btnPrimary, mb: 3 }}>
-            <Plus size={15} /> Nueva automatización
+            <Plus size={15} /> Nuevo Disparador
           </Box>
         )}
 
-        {/* ── Constructor de automatizaciones ── */}
+        {/* ── Constructor de Disparadores ── */}
         <Collapse in={showForm}>
           <Box sx={{ p: 2.5, mb: 3, borderRadius: '10px', bgcolor: bgCard, border: `1px solid ${borderColor}`, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
 
@@ -416,7 +416,7 @@ export default function AutomationsPage() {
                 <Typography sx={{ fontSize: '0.78rem', color: textMuted }}>
                   Al guardar aparece la dirección para pegar en el otro sistema. Cuando ese
                   sistema la llame, esto se ejecuta con lo que haya mandado. La dirección es
-                  la credencial: quien la tenga puede disparar esta automatización.
+                  la credencial: quien la tenga puede disparar este Disparador.
                 </Typography>
               </Box>
             )}
@@ -500,7 +500,7 @@ export default function AutomationsPage() {
             </Box>
 
             <TextField
-              label="Nombre de la automatización" value={form.name} fullWidth sx={inputSx}
+              label="Nombre del Disparador" value={form.name} fullWidth sx={inputSx}
               placeholder={isEvent ? 'Ej: Avisarme si aparece una tabla nueva' : 'Ej: Última venta cada 10 minutos'}
               onChange={e => setForm(prev => ({ ...prev, name: e.target.value.slice(0, 120) }))}
             />
@@ -508,7 +508,7 @@ export default function AutomationsPage() {
             <Box sx={{ display: 'flex', gap: 1.5 }}>
               <Box component="button" onClick={handleCreate} disabled={saving} sx={btnPrimary}>
                 {saving ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <Plus size={15} />}
-                {saving ? 'Creando...' : 'Crear automatización'}
+                {saving ? 'Creando...' : 'Crear Disparador'}
               </Box>
               <Box
                 component="button" onClick={() => setShowForm(false)}
@@ -526,7 +526,7 @@ export default function AutomationsPage() {
         ) : autos.length === 0 ? (
           <Box sx={{ textAlign: 'center', py: 6, color: textMuted }}>
             <Timer size={32} style={{ opacity: 0.4, marginBottom: 8 }} />
-            <Typography sx={{ fontSize: '0.875rem' }}>Todavía no tienes automatizaciones.</Typography>
+            <Typography sx={{ fontSize: '0.875rem' }}>Todavía no tiene Disparadores.</Typography>
           </Box>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>

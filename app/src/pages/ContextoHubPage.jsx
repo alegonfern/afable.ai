@@ -25,7 +25,7 @@ export default function ContextoHubPage() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
       {/* El título sigue a la pestaña: decía "Espacios" incluso estando en Conexiones. */}
-      <PageHeader title={TITULOS[tab]} back="/app" backLabel="Chat" />
+      <PageHeader title={TITULOS[tab]} back="/app" backLabel="Inicio" />
 
       <NavConocimiento activa={tab} />
 

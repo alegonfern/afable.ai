@@ -623,7 +623,7 @@ export default function TablondePage() {
     <Box ref={containerRef} sx={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
       <style>{GRID_STYLES}</style>
 
-      <PageHeader title="Mi tablero" back="/app" backLabel="Chat" actions={addCardBtn} />
+      <PageHeader title="Mi tablero" back="/app" backLabel="Inicio" actions={addCardBtn} />
 
       <Box sx={{ px: 3, pt: 2, pb: 4, flex: 1 }}>
 

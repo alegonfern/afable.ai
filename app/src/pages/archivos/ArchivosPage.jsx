@@ -389,7 +389,7 @@ export default function ArchivosPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
-      <PageHeader title="Archivos" back="/app" backLabel="Chat" />
+      <PageHeader title="Archivos" back="/app" backLabel="Inicio" />
 
       {/* La misma barra que el hub: Archivos es del grupo Conocimiento aunque viva en su
           propia pantalla. Sin esto, estar acá dejaba sin forma de saltar a Conexiones. */}

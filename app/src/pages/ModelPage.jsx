@@ -236,7 +236,7 @@ export default function ModelPage() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
       <PageHeader
-        title="Tu negocio" back="/app" backLabel="Chat"
+        title="Tu negocio" back="/app" backLabel="Inicio"
         actions={
           <>
             {hasModel && segmented}

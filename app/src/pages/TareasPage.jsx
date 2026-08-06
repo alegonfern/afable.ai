@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Alert, Badge, Box, CircularProgress, MenuItem, Select, Stack, Tab, Tabs, Typography,
+  Alert, Box, CircularProgress, MenuItem, Select, Stack, Tab, Tabs, Typography,
   useTheme,
 } from '@mui/material';
 import { Link } from 'react-router-dom';
@@ -141,7 +141,7 @@ export default function TareasPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
-      <PageHeader title="Tareas" back="/app" backLabel="Chat" />
+      <PageHeader title="Tareas" back="/app" backLabel="Inicio" />
 
       <Box sx={{ borderBottom: `1px solid ${borde}`, px: { xs: 2, sm: 3 } }}>
         <Tabs
@@ -159,12 +159,24 @@ export default function TareasPage() {
               <Tab
                 key={p.value} value={p.value}
                 label={
-                  <Badge
-                    badgeContent={n || 0} invisible={!n} color="primary"
-                    sx={{ '& .MuiBadge-badge': { right: -14, top: 2, fontSize: '0.65rem', height: 16, minWidth: 16 } }}
-                  >
-                    {p.label}
-                  </Badge>
+                  /* El contador va AL LADO del texto, no flotando encima: un Badge
+                     posicionado se montaba sobre la última letra y la pestaña lo
+                     recortaba por el borde. */
+                  <Stack direction="row" alignItems="center" spacing={0.75} component="span">
+                    <span>{p.label}</span>
+                    {!!n && (
+                      <Box
+                        component="span"
+                        sx={{
+                          bgcolor: 'primary.main', color: 'primary.contrastText',
+                          fontSize: '0.62rem', lineHeight: '16px', height: 16, minWidth: 16,
+                          px: 0.5, borderRadius: '8px', textAlign: 'center', fontWeight: 600,
+                        }}
+                      >
+                        {n}
+                      </Box>
+                    )}
+                  </Stack>
                 }
               />
             );
