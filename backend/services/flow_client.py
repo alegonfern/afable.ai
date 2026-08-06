@@ -80,3 +80,23 @@ class FlowClient:
 
     def get_subscription(self, subscription_id):
         return self._get('/subscription/get', {'subscriptionId': subscription_id})
+
+    # ── Medios de pago ───────────────────────────────────────────────────────────
+    # La tarjeta la escribe la persona en un formulario de Flow, no en Afable: acá
+    # solo se pide la URL a la que mandarla y después se pregunta qué quedó
+    # registrado. Por eso Afable nunca ve un número de tarjeta.
+
+    def register_card(self, customer_id, url_return):
+        """Devuelve `{url, token}`: adónde mandar a la persona a registrar su tarjeta."""
+        return self._post('/customer/register', {
+            'customerId': customer_id,
+            'url_return': url_return,
+        })
+
+    def get_register_status(self, token):
+        """Qué quedó registrado. Trae marca y últimos cuatro dígitos, para la etiqueta."""
+        return self._get('/customer/getRegisterStatus', {'token': token})
+
+    def unregister_card(self, customer_id):
+        """Borra la tarjeta registrada de ese cliente en Flow."""
+        return self._post('/customer/unRegister', {'customerId': customer_id})

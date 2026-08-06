@@ -159,6 +159,19 @@ GOOGLE_CLIENT_ID = config('GOOGLE_CLIENT_ID', default='')
 GOOGLE_CLIENT_SECRET = config('GOOGLE_CLIENT_SECRET', default='')
 FLOW_WEBHOOK_URL = config('FLOW_WEBHOOK_URL', default='http://localhost:8001/api/v1/payments/webhook/confirm/')
 FLOW_RETURN_URL  = config('FLOW_RETURN_URL',  default='http://localhost:8001/api/v1/payments/return/')
+# Flow vuelve acá cuando alguien termina de registrar su tarjeta.
+FLOW_REGISTER_RETURN_URL = config(
+    'FLOW_REGISTER_RETURN_URL',
+    default='http://localhost:8001/api/v1/payments/tarjeta/retorno/',
+)
+
+# PayPal — cobra en USD a quien está fuera de Chile. Flow no puede: liquida en CLP.
+# El WEBHOOK_ID lo da PayPal cuando se registra el webhook en su panel, y sin él no
+# se puede verificar que un aviso venga de verdad de PayPal.
+PAYPAL_CLIENT_ID = config('PAYPAL_CLIENT_ID', default='')
+PAYPAL_SECRET = config('PAYPAL_SECRET', default='')
+PAYPAL_SANDBOX = config('PAYPAL_SANDBOX', default=True, cast=bool)
+PAYPAL_WEBHOOK_ID = config('PAYPAL_WEBHOOK_ID', default='')
 
 # AI provider: 'anthropic' | 'ollama' (local) | 'ollama_cloud' (Ollama Cloud)
 AI_PROVIDER    = config('AI_PROVIDER', default='ollama')

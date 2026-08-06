@@ -75,6 +75,12 @@ class Workspace(models.Model):
     # monograma con la inicial y un color derivado del slug (ver `SelectorWorkspace`).
     logo = models.ImageField(upload_to='workspace_logos/', blank=True, null=True)
 
+    # A dónde van los comprobantes y los avisos de cobro. Vacío es lo normal: cae al
+    # correo del administrador que contrata (ver `email_de_facturacion`). Existe porque
+    # en una empresa la factura casi nunca va al correo de quien apretó el botón, y
+    # atarla a esa persona significa que el día que se va, los cobros se pierden.
+    billing_email = models.EmailField(blank=True, help_text='Correo para comprobantes de pago.')
+
     # ── Puente hacia la app anterior ──────────────────────────────────────────
     # `Organization` sigue siendo el dueño de las conexiones, los documentos, el
     # contexto y los agentes, y `agent_service` lee su `sector` para el prompt.

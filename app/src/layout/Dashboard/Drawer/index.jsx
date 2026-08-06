@@ -20,7 +20,7 @@ import {
   MessageSquare, LayoutDashboard, Settings, Search, ChevronLeft, Plus, ChevronDown,
   ChevronRight, Zap, Bot, History, Boxes,
   User, Building2, HelpCircle, LogOut, Timer, Layers, Users,
-  Plug, FolderOpen, BookOpen, CheckSquare,
+  Plug, FolderOpen, BookOpen, CheckSquare, CreditCard,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { authService } from '../../../services/auth';
@@ -282,7 +282,9 @@ export default function Drawer({ open, handleDrawerToggle }) {
         { path: '/app/admin/agentes',   label: 'Agentes',       icon: <Bot size={14} /> },
         { path: '/app/admin/workspace', label: 'Ajustes',       icon: <Building2 size={14} /> },
         { path: '/app/configuracion',   label: 'Configuración', icon: <Settings size={14} /> },
-        { path: '/app/precios',         label: 'Plan',          icon: <Zap size={14} /> },
+        // Decia "Plan" y llevaba a la vitrina de precios, que no dice con que se esta
+        // pagando ni que se cobro. La pantalla real es Facturacion.
+        { path: '/app/admin/facturacion', label: 'Facturación', icon: <CreditCard size={14} /> },
       ],
     },
   };

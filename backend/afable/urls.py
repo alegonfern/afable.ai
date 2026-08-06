@@ -9,6 +9,10 @@ urlpatterns = [
         path('auth/', include('apps.authentication.urls')),
         path('user/', include('apps.authentication.user_urls')),
         path('workspaces/', include('apps.workspaces.urls')),
+        # La facturación es del Workspace, así que su slug va en la URL como en todo
+        # lo demás de la empresa. Vive en `apps.payments` porque ahí están los
+        # modelos y las pasarelas; sólo el ruteo se cuelga de `workspaces/`.
+        path('workspaces/', include('apps.payments.facturacion_urls')),
         path('invitations/', include('apps.workspaces.invitation_urls')),
         path('organizations/', include('apps.organizations.urls')),
         path('sources/', include('apps.sources.urls')),

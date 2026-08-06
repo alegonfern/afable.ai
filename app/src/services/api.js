@@ -291,6 +291,21 @@ export const api = {
   deleteAutomation: (id) => apiClient.delete(`/agents/automations/${id}/`),
   runAutomation: (id) => apiClient.post(`/agents/automations/${id}/run/`),
 
+  // ── Facturación ──
+  // Cuelga del Workspace porque el que paga es la empresa, no la persona. Todo esto
+  // exige ser administrador: el backend contesta 403 a un editor.
+  getFacturacion: (slug) => apiClient.get(`/workspaces/${slug}/facturacion/`),
+  suscribir: (slug, planId, proveedor) =>
+    apiClient.post(`/workspaces/${slug}/facturacion/suscribir/`, { plan_id: planId, proveedor }),
+  cancelarSuscripcion: (slug) =>
+    apiClient.post(`/workspaces/${slug}/facturacion/cancelar/`),
+  agregarMetodoPago: (slug, proveedor) =>
+    apiClient.post(`/workspaces/${slug}/facturacion/metodos/`, { proveedor }),
+  quitarMetodoPago: (slug, id) =>
+    apiClient.delete(`/workspaces/${slug}/facturacion/metodos/${id}/`),
+  metodoPagoPrincipal: (slug, id) =>
+    apiClient.post(`/workspaces/${slug}/facturacion/metodos/${id}/principal/`),
+
   // ── Rutinas ──
   getRoutines: () => apiClient.get('/agents/routines/'),
   createRoutine: (data) => apiClient.post('/agents/routines/', data),
