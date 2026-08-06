@@ -4,6 +4,7 @@ import { Box, IconButton, Typography, useTheme } from '@mui/material';
 import { Bot, Paperclip, SendHorizontal, Wrench } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import AgentesGaleria from './AgentesGaleria';
+import PrimerosPasos from '../../components/PrimerosPasos';
 
 const SALUDOS = [
   { texto: 'Qué bueno verlo', emoji: '👋' },
@@ -43,6 +44,10 @@ export default function TrabajoHome() {
 
   return (
     <Box sx={{ maxWidth: 820, mx: 'auto', px: { xs: 2.5, md: 4 }, py: { xs: 4, md: 6 }, width: '100%' }}>
+      {/* Lo que le falta a la empresa. Se dibuja solo mientras falte algo, y solo al
+          administrador: los pasos son cosas que unicamente el puede hacer. */}
+      <PrimerosPasos />
+
       <Typography
         sx={{
           textAlign: 'center', fontSize: '1.5rem', fontWeight: 600,

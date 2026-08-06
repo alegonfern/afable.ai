@@ -81,6 +81,12 @@ class Workspace(models.Model):
     # atarla a esa persona significa que el día que se va, los cobros se pierden.
     billing_email = models.EmailField(blank=True, help_text='Correo para comprobantes de pago.')
 
+    # Lo único que se guarda de los primeros pasos: que el administrador los cerró a
+    # mano. El AVANCE no se guarda, se calcula del estado real de la empresa (ver
+    # `primeros_pasos.py`); una lista de tildes guardadas seguiría diciendo "listo"
+    # después de que alguien borre su única conexión.
+    onboarding_oculto = models.BooleanField(default=False)
+
     # ── Puente hacia la app anterior ──────────────────────────────────────────
     # `Organization` sigue siendo el dueño de las conexiones, los documentos, el
     # contexto y los agentes, y `agent_service` lee su `sector` para el prompt.

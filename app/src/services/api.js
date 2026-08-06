@@ -291,6 +291,12 @@ export const api = {
   deleteAutomation: (id) => apiClient.delete(`/agents/automations/${id}/`),
   runAutomation: (id) => apiClient.post(`/agents/automations/${id}/run/`),
 
+  // ── La primera hora ──
+  // Qué le falta a la empresa. El avance lo calcula el backend del estado real, así que
+  // acá no hay nada que recordar entre pantallas.
+  getPrimerosPasos: (slug) => apiClient.get(`/workspaces/${slug}/primeros-pasos/`),
+  ocultarPrimerosPasos: (slug) => apiClient.post(`/workspaces/${slug}/primeros-pasos/`, {}),
+
   // ── Facturación ──
   // Cuelga del Workspace porque el que paga es la empresa, no la persona. Todo esto
   // exige ser administrador: el backend contesta 403 a un editor.

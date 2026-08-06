@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .primeros_pasos import PrimerosPasosView
 from .views import (
     InvitationDetailView, InvitationListCreateView, InvitationResendView,
     MemberDetailView, MemberListView, SectorListView,
@@ -15,6 +16,11 @@ urlpatterns = [
     path('', WorkspaceListCreateView.as_view(), name='workspace-list'),
     path('sectores/', SectorListView.as_view(), name='workspace-sectores'),
     path('<slug:slug>/', WorkspaceDetailView.as_view(), name='workspace-detail'),
+    # La primera hora: que le falta a esta empresa. Solo el administrador.
+    path(
+        '<slug:slug>/primeros-pasos/',
+        PrimerosPasosView.as_view(), name='workspace-primeros-pasos',
+    ),
     path('<slug:slug>/members/', MemberListView.as_view(), name='workspace-members'),
     path('<slug:slug>/members/<int:pk>/', MemberDetailView.as_view(), name='workspace-member-detail'),
     path('<slug:slug>/invitations/', InvitationListCreateView.as_view(), name='workspace-invitations'),
