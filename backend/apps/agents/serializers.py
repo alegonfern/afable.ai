@@ -32,12 +32,24 @@ class MessageSerializer(serializers.ModelSerializer):
     # contestado varios agentes y al recargar hay que poder distinguirlos.
     agent_name = serializers.CharField(source='agent.name', read_only=True, default=None)
     agent_handle = serializers.CharField(source='agent.handle', read_only=True, default=None)
+    # Quien lo escribio. En un hilo de equipo, sin esto todas las preguntas parecen de la
+    # misma persona.
+    autor = serializers.SerializerMethodField()
 
     class Meta:
         model = Message
         fields = ['id', 'role', 'content', 'agent', 'agent_name', 'agent_handle',
-                  'model_used', 'created_at']
+                  'autor', 'model_used', 'created_at']
         read_only_fields = ['id', 'created_at']
+
+    def get_autor(self, obj):
+        if obj.user is None:
+            return None
+        return {
+            'id': obj.user.id,
+            'nombre': obj.user.get_full_name() or obj.user.email.split('@')[0],
+            'email': obj.user.email,
+        }
 
 
 class ConversationSerializer(serializers.ModelSerializer):

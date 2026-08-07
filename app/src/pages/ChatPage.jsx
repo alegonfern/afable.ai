@@ -139,13 +139,16 @@ function AttachmentBadge({ content }) {
 }
 
 // ── Message bubble ────────────────────────────────────────────────────────────
-function MessageBubble({ msg, onReintentar, onRamificar, onEditar }) {
+function MessageBubble({ msg, onReintentar, onRamificar, onEditar, yoId }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const [copied, setCopied] = useState(false);
   const [editando, setEditando] = useState(false);
   const [borrador, setBorrador] = useState('');
   const isUser = msg.role === 'user';
+  // Un mensaje sin autor es de antes de que los hilos fueran de a varios: se trata
+  // como propio, que es lo que era.
+  const esMio = !msg.autor || msg.autor.id === yoId;
 
   // Strip source citation from visible content
   const cleanContent = stripAttachment((msg.content || '').replace(/\n?\[Fuente:[^\]]+\]/g, '')).trim();
@@ -205,10 +208,20 @@ function MessageBubble({ msg, onReintentar, onRamificar, onEditar }) {
           </Tooltip>
         </Box>
       )}
-      <Box sx={{ maxWidth: '72%', bgcolor: '#586AD0', color: '#fff',
-        px: 2, py: 1.25, borderRadius: '14px 14px 4px 14px', fontSize: '0.88rem', lineHeight: 1.65 }}>
-        {stripAttachment(msg.content)}
-        <AttachmentBadge content={msg.content} />
+      <Box sx={{ maxWidth: '72%' }}>
+        {/* Quien pregunto. Solo cuando NO fui yo: en un hilo propio, firmar cada
+            mensaje con el nombre de uno mismo es ruido. */}
+        {msg.autor && !esMio && (
+          <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: '#9BA6E3', mb: 0.4, textAlign: 'right' }}>
+            {msg.autor.nombre}
+          </Typography>
+        )}
+        <Box sx={{ bgcolor: esMio ? '#586AD0' : (d ? '#33365e' : '#c7cdf0'),
+          color: esMio ? '#fff' : (d ? '#e8e8ea' : '#1a1a1a'),
+          px: 2, py: 1.25, borderRadius: '14px 14px 4px 14px', fontSize: '0.88rem', lineHeight: 1.65 }}>
+          {stripAttachment(msg.content)}
+          <AttachmentBadge content={msg.content} />
+        </Box>
       </Box>
       <Avatar sx={{ width: 28, height: 28, bgcolor: d ? '#2a2a2a' : '#e5e5e5', flexShrink: 0, mt: 0.25 }}>
         <User size={14} color={d ? '#aaa' : '#666'} />
@@ -447,7 +460,7 @@ export default function ChatPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { focusMode } = useOutletContext() || {};
-  const { aiModel } = useApp();
+  const { aiModel, currentUser } = useApp();
   const { slug, espacioSlug } = useWorkspace();
   // La Sesion desde la que se abrio el hilo, si vino de una.
   //
@@ -842,6 +855,7 @@ export default function ChatPage() {
               <MessageBubble
                 key={msg.id || idx}
                 msg={msg}
+                yoId={currentUser?.id}
                 onReintentar={
                   msg.role === 'assistant' && idx === messages.length - 1 && !loading
                     ? reintentar

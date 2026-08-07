@@ -8,6 +8,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
+from .hilos import hilo_para_escribir
 from .models import (
     AgentConfig, Agent, AgentTemplate, Conversation, Message, Document, Automation,
     Routine, Skill, habilidades_como_contexto,
@@ -894,7 +895,7 @@ class DirectChatView(APIView):
         _, default_agent = _get_or_create_default(request.user)
 
         if conversation_id:
-            conversation = get_object_or_404(Conversation, pk=conversation_id, user=request.user)
+            conversation = hilo_para_escribir(request.user, conversation_id)
             agent = _agente_de_conversacion(request, conversation)
         else:
             espacio = _espacio_del_pedido(request)
@@ -911,7 +912,9 @@ class DirectChatView(APIView):
         )
         system_prompt = context['system_prompt']
 
-        Message.objects.create(conversation=conversation, role='user', content=message)
+        Message.objects.create(
+            conversation=conversation, role='user', content=message, user=request.user,
+        )
         full_history = list(conversation.messages.values('role', 'content').order_by('created_at'))
 
         model = (request.data.get('model') or '').strip() or context.get('agent_model')
@@ -979,7 +982,7 @@ class DirectChatStreamView(APIView):
         _, default_agent = _get_or_create_default(request.user)
 
         if conversation_id:
-            conversation = get_object_or_404(Conversation, pk=conversation_id, user=request.user)
+            conversation = hilo_para_escribir(request.user, conversation_id)
             agent = _agente_de_conversacion(request, conversation)
         else:
             espacio = _espacio_del_pedido(request)
@@ -997,7 +1000,7 @@ class DirectChatStreamView(APIView):
         system_prompt = context['system_prompt']
 
         mensaje_usuario = Message.objects.create(
-            conversation=conversation, role='user', content=message,
+            conversation=conversation, role='user', content=message, user=request.user,
         )
         full_history = list(conversation.messages.values('role', 'content').order_by('created_at'))
 
@@ -1293,11 +1296,13 @@ class ChatView(APIView):
         conversation_id = serializer.validated_data.get('conversation_id')
 
         if conversation_id:
-            conversation = get_object_or_404(Conversation, pk=conversation_id, agent=agent, user=request.user)
+            conversation = hilo_para_escribir(request.user, conversation_id)
         else:
             conversation = Conversation.objects.create(agent=agent, user=request.user, title=user_message[:120])
 
-        Message.objects.create(conversation=conversation, role='user', content=user_message)
+        Message.objects.create(
+            conversation=conversation, role='user', content=user_message, user=request.user,
+        )
         history = list(conversation.messages.values('role', 'content').order_by('created_at'))
 
         if not org.odoo_connected:

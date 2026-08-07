@@ -149,6 +149,17 @@ class Message(models.Model):
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='messages')
     role = models.CharField(max_length=20, choices=ROLES)
     content = models.TextField()
+    # ⭐ QUIEN escribio este mensaje. Sin esto un hilo de equipo es imposible: no se puede
+    # pintar quien hablo, y peor, no se puede saber CON QUE PERMISOS contestar. En un hilo
+    # compartido la respuesta tiene que armarse con lo que alcanza quien PREGUNTA y no
+    # quien abrio el hilo — si no, el hilo compartido se vuelve la puerta para leer lo que
+    # uno no puede ver, que es justo lo contrario de lo que promete el producto.
+    #
+    # `null` en los mensajes del asistente (los firma `agent`) y en los que ya existian.
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='mensajes',
+    )
     # Quien contesto este mensaje en concreto. La conversacion tiene un agente
     # "actual", pero en un hilo pueden haber contestado varios: sin esto, al
     # recargar la pagina todas las respuestas aparecen firmadas por el ultimo.
