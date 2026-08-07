@@ -30,7 +30,7 @@ export default function SelectorEspacio() {
     <>
       <Box
         onClick={(e) => setAncla(e.currentTarget)}
-        title="Elegir en qué Espacio trabajar"
+        title="Elegir en qué Workspace trabajar"
         sx={{
           display: 'flex', alignItems: 'center', gap: 0.6,
           px: 0.875, py: 0.4, borderRadius: '6px', cursor: 'pointer',
@@ -44,7 +44,7 @@ export default function SelectorEspacio() {
           ? <Box component="span" sx={{ fontSize: '0.9rem', flexShrink: 0 }}>{espacio.icon}</Box>
           : <Layers size={14} style={{ flexShrink: 0 }} />}
         <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {espacio ? espacio.name : 'Todos los Espacios'}
+          {espacio ? espacio.name : 'Todos los Workspaces'}
         </Box>
         <ChevronDown size={12} style={{ flexShrink: 0 }} />
       </Box>

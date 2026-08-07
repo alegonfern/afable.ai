@@ -13,7 +13,7 @@ import { useNavigate } from 'react-router-dom';
  * `activa` es el valor de la pestaña en la que se está.
  */
 const PESTANAS = [
-  { value: 'espacios',      label: 'Espacios',               destino: '/app/contexto?tab=espacios' },
+  { value: 'espacios',      label: 'Workspaces',               destino: '/app/contexto?tab=espacios' },
   { value: 'integraciones', label: 'Conexiones',             destino: '/app/contexto?tab=integraciones' },
   { value: 'archivos',      label: 'Archivos',               destino: '/app/archivos' },
   { value: 'mi-contexto',   label: 'Contexto de la empresa', destino: '/app/contexto?tab=mi-contexto' },

@@ -22,7 +22,7 @@ export default function PrivacidadPage() {
         electrónico y fotografía de perfil. De forma opcional, nombre y rubro de la empresa.
       </p>
 
-      <h3>Contenido del Workspace</h3>
+      <h3>Contenido de la Empresa</h3>
       <p>
         Datos de la empresa, archivos cargados, carpetas sincronizadas, y las personas invitadas
         con sus respectivos roles.
@@ -42,7 +42,7 @@ export default function PrivacidadPage() {
 
       <h3>Conversaciones</h3>
       <p>
-        Las consultas realizadas por los miembros del Workspace y las respuestas generadas se
+        Las consultas realizadas por los miembros de la Empresa y las respuestas generadas se
         almacenan en el Workspace correspondiente.
       </p>
 
@@ -81,7 +81,7 @@ export default function PrivacidadPage() {
 
       <h2>5. Plazos de conservación</h2>
       <ul>
-        <li>El contenido del Workspace se conserva mientras la cuenta permanezca activa.</li>
+        <li>El contenido de la Empresa se conserva mientras la cuenta permanezca activa.</li>
         <li>
           La eliminación de una conexión implica la eliminación de sus credenciales y de la
           estructura almacenada de ese sistema.

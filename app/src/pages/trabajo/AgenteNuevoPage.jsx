@@ -220,7 +220,7 @@ export default function AgenteNuevoPage() {
         />
       </Seccion>
 
-      <Seccion titulo="Qué modelo usa" ayuda="Vacío deja el modelo por defecto del Workspace.">
+      <Seccion titulo="Qué modelo usa" ayuda="Vacío deja el modelo por defecto de la Empresa.">
         <TextField
           select
           value={form.model}
@@ -284,9 +284,9 @@ export default function AgenteNuevoPage() {
       )}
 
       <Elegibles
-        titulo="En qué espacios vive"
-        ayuda="Un agente dentro de un Espacio solo alcanza las fuentes de ese Espacio. Sin ninguno, alcanza todo lo de la empresa."
-        vacio="Todavía no hay espacios. Se crean en Contexto › Espacios."
+        titulo="En qué workspaces vive"
+        ayuda="Un agente dentro de un Workspace solo alcanza las fuentes de ese Workspace. Sin ninguno, alcanza todo lo de la empresa."
+        vacio="Todavía no hay workspaces. Se crean en Contexto › Workspaces."
         items={opciones.espacios}
         etiqueta={(e) => `${e.name}${e.visibility === 'restringido' ? ' · restringido' : ''}`}
         elegidos={form.space_ids}

@@ -321,7 +321,7 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
           <span>
             {ignorarEspacio
               ? `Mostrando todos los agentes de la empresa.`
-              : `Solo los agentes de ${espacio.name}.`}
+              : `Solo los agentes de ${workspace.name}.`}
           </span>
           <Box
             component="button"
@@ -332,7 +332,7 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
               color: '#9BA6E3', '&:hover': { textDecoration: 'underline' },
             }}
           >
-            {ignorarEspacio ? `Volver a ${espacio.name}` : 'Ver todos'}
+            {ignorarEspacio ? `Volver a ${workspace.name}` : 'Ver todos'}
           </Box>
         </Box>
       )}

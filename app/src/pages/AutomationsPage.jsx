@@ -138,7 +138,7 @@ export default function AutomationsPage() {
       return;
     }
     if (!selectedOrganization?.id) {
-      toast.error('Primero configure su Workspace.');
+      toast.error('Primero configure su Empresa.');
       return;
     }
     if (selectedOrganization.nombre === 'Personal') {

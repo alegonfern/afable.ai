@@ -37,7 +37,7 @@ export default function EspaciosTab() {
       setEspacios(data);
       setError('');
     } catch {
-      setError('No se pudieron cargar los Espacios.');
+      setError('No se pudieron cargar los Workspaces.');
     } finally {
       setCargando(false);
     }
@@ -53,7 +53,7 @@ export default function EspaciosTab() {
       setForm(VACIO);
       navigate(`/app/espacios/${data.slug}`);
     } catch (e) {
-      setError(e?.response?.data?.detail || 'No se pudo crear el Espacio.');
+      setError(e?.response?.data?.detail || 'No se pudo crear el Workspace.');
     } finally {
       setGuardando(false);
     }
@@ -71,15 +71,15 @@ export default function EspaciosTab() {
     <Box sx={{ pt: 2.5, pb: 5, px: { xs: 2, sm: 3 }, maxWidth: 980, width: '100%' }}>
       <Stack direction="row" alignItems="flex-start" justifyContent="space-between" sx={{ mb: 2.5 }}>
         <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 560 }}>
-          Un Espacio junta las fuentes, los agentes y las personas de un área. El agente de
-          un Espacio sólo alcanza los datos de ese Espacio: es la forma de que Ventas no
-          lea las carpetas de Personas.
+          Un Workspace junta las fuentes, los agentes y las personas de un área. El agente
+          de un Workspace sólo alcanza los datos de ese Workspace: es la forma de que
+          Ventas no lea las carpetas de Personas.
         </Typography>
         <Button
           variant="contained" size="small" startIcon={<AddIcon />}
           onClick={() => setAbierto(true)} sx={{ flexShrink: 0, textTransform: 'none' }}
         >
-          Nuevo Espacio
+          Nuevo Workspace
         </Button>
       </Stack>
 
@@ -87,7 +87,7 @@ export default function EspaciosTab() {
 
       {espacios.length === 0 ? (
         <Card variant="outlined" sx={{ p: 4, textAlign: 'center', borderStyle: 'dashed' }}>
-          <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Todavía no hay Espacios</Typography>
+          <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Todavía no hay Workspaces</Typography>
           <Typography variant="body2" color="text.secondary">
             Cree uno por área — Ventas, Finanzas, Personas — y enganche ahí sus conexiones y documentos.
           </Typography>
@@ -130,7 +130,7 @@ export default function EspaciosTab() {
       )}
 
       <Dialog open={abierto} onClose={() => setAbierto(false)} fullWidth maxWidth="sm">
-        <DialogTitle sx={{ fontSize: '1rem', fontWeight: 600 }}>Nuevo Espacio</DialogTitle>
+        <DialogTitle sx={{ fontSize: '1rem', fontWeight: 600 }}>Nuevo Workspace</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ pt: 1 }}>
             <Stack direction="row" spacing={1.5}>

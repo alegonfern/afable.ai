@@ -11,7 +11,7 @@ import EspaciosTab from './espacios/EspaciosTab';
 // se comparte — ver `NavConocimiento`. El `?tab=` es la fuente de verdad y no un estado
 // local: con estado, entrar desde otro item del menú no cambiaba de pestaña.
 const TITULOS = {
-  espacios: 'Espacios',
+  espacios: 'Workspaces',
   integraciones: 'Conexiones',
   'mi-contexto': 'Contexto de la empresa',
 };
@@ -24,7 +24,7 @@ export default function ContextoHubPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
-      {/* El título sigue a la pestaña: decía "Espacios" incluso estando en Conexiones. */}
+      {/* El título sigue a la pestaña: decía "Workspaces" incluso estando en Conexiones. */}
       <PageHeader title={TITULOS[tab]} back="/app" backLabel="Inicio" />
 
       <NavConocimiento activa={tab} />

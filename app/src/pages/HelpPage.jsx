@@ -26,7 +26,7 @@ const CHAT_SHORTCUTS = [
 const FAQ = [
   {
     q: '¿Cómo conecto Afable con mi ERP (Odoo)?',
-    a: 'Ve a Workspace para los datos de la empresa, y a Espacios › Conexiones para conectar Odoo: ahí están los campos de URL, base de datos y credenciales.',
+    a: 'Ve a Empresa para los datos de la empresa, y a Workspaces › Conexiones para conectar Odoo: ahí están los campos de URL, base de datos y credenciales.',
   },
   {
     q: '¿Mis conversaciones se guardan?',

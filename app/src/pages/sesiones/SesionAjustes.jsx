@@ -128,7 +128,7 @@ export default function SesionAjustes({ sesion, slug, onCambio, onBorrada }) {
     } catch (e) {
       setError(
         e.response?.status === 403
-          ? 'Solo un administrador del Workspace puede eliminar una Sesión.'
+          ? 'Solo un administrador de la Empresa puede eliminar una Sesión.'
           : 'No se pudo eliminar.',
       );
       setConfirmando(false);
@@ -262,7 +262,7 @@ export default function SesionAjustes({ sesion, slug, onCambio, onBorrada }) {
           size="small" variant="outlined"
           icon={sesion.visibility === 'abierta' ? <Globe size={13} /> : <Lock size={13} />}
           label={sesion.visibility === 'abierta'
-            ? 'Cualquiera del Workspace'
+            ? 'Cualquiera de la Empresa'
             : `Solo ${sesion.miembros.length} persona${sesion.miembros.length === 1 ? '' : 's'}`}
         />
         <Select
@@ -317,7 +317,7 @@ export default function SesionAjustes({ sesion, slug, onCambio, onBorrada }) {
             onChange={(e) => setAAgregar(e.target.value)}
             sx={{ fontSize: '0.8125rem', minWidth: 240 }}
           >
-            <MenuItem value="" sx={{ fontSize: '0.8125rem' }}>Elegir a alguien del Workspace…</MenuItem>
+            <MenuItem value="" sx={{ fontSize: '0.8125rem' }}>Elegir a alguien de la Empresa…</MenuItem>
             {disponibles.map((p) => (
               <MenuItem key={p.id} value={p.id} sx={{ fontSize: '0.8125rem' }}>
                 {p.name} · {p.email}

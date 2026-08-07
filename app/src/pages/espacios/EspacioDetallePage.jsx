@@ -18,10 +18,10 @@ import { useWorkspace } from '../../context/WorkspaceContext';
 // `coleccion` es el segmento de la URL de la API — no siempre coinciden porque
 // la API habla español y el modelo de datos inglés.
 const PESTANAS = [
-  { campo: 'connections', coleccion: 'conexiones', label: 'Fuentes',  vacio: 'Este Espacio todavía no tiene ninguna conexión enganchada.' },
-  { campo: 'documents',   coleccion: 'documentos', label: 'Documentos', vacio: 'Ningún documento vive en este Espacio.' },
-  { campo: 'agents',      coleccion: 'agentes',    label: 'Agentes',  vacio: 'Ningún agente trabaja todavía en este Espacio.' },
-  { campo: 'members',     coleccion: 'personas',   label: 'Personas', vacio: 'Nadie está agregado a este Espacio.' },
+  { campo: 'connections', coleccion: 'conexiones', label: 'Fuentes',  vacio: 'Este Workspace todavía no tiene ninguna conexión enganchada.' },
+  { campo: 'documents',   coleccion: 'documentos', label: 'Documentos', vacio: 'Ningún documento vive en este Workspace.' },
+  { campo: 'agents',      coleccion: 'agentes',    label: 'Agentes',  vacio: 'Ningún agente trabaja todavía en este Workspace.' },
+  { campo: 'members',     coleccion: 'personas',   label: 'Personas', vacio: 'Nadie está agregado a este Workspace.' },
 ];
 
 function etiqueta(item, campo) {
@@ -66,7 +66,7 @@ export default function EspacioDetallePage() {
       setEspacio(data);
       setError('');
     } catch {
-      setError('Este Espacio no existe o no tiene acceso.');
+      setError('Este Workspace no existe o no tiene acceso.');
     } finally {
       setCargando(false);
     }
@@ -112,7 +112,7 @@ export default function EspacioDetallePage() {
       const { data } = await api.removeFromSpace(slug, spaceSlug, pestana.coleccion, [id]);
       setEspacio(data);
     } catch {
-      setError('No se pudo sacar del Espacio.');
+      setError('No se pudo sacar del Workspace.');
     }
   };
 
@@ -121,7 +121,7 @@ export default function EspacioDetallePage() {
       const { data } = await api.updateSpace(slug, spaceSlug, { visibility });
       setEspacio(data);
     } catch {
-      setError('No se pudo cambiar quién entra a este Espacio.');
+      setError('No se pudo cambiar quién entra a este Workspace.');
     }
   };
 
@@ -136,8 +136,8 @@ export default function EspacioDetallePage() {
   if (!espacio) {
     return (
       <Box sx={{ p: 3 }}>
-        <PageHeader title="Espacio" back="/app/contexto?tab=espacios" backLabel="Espacios" />
-        <Alert severity="warning" sx={{ mt: 2 }}>{error || 'Espacio no encontrado.'}</Alert>
+        <PageHeader title="Workspace" back="/app/contexto?tab=espacios" backLabel="Workspaces" />
+        <Alert severity="warning" sx={{ mt: 2 }}>{error || 'Workspace no encontrado.'}</Alert>
       </Box>
     );
   }
@@ -148,8 +148,8 @@ export default function EspacioDetallePage() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
       <PageHeader
-        title={`${espacio.icon || '📁'}  ${espacio.name}`}
-        back="/app/contexto?tab=espacios" backLabel="Espacios"
+        title={`${workspace.icon || '📁'}  ${workspace.name}`}
+        back="/app/contexto?tab=espacios" backLabel="Workspaces"
       />
 
       <Box sx={{ px: { xs: 2, sm: 3 }, pt: 2 }}>
@@ -164,7 +164,7 @@ export default function EspacioDetallePage() {
             icon={espacio.visibility === 'abierto' ? <PublicOutlinedIcon /> : <LockOutlinedIcon />}
             label={espacio.visibility === 'abierto'
               ? 'Lo ve todo el equipo'
-              : `Sólo ${espacio.members.length} persona${espacio.members.length === 1 ? '' : 's'}`}
+              : `Sólo ${workspace.members.length} persona${workspace.members.length === 1 ? '' : 's'}`}
           />
           <Select
             size="small" value={espacio.visibility}
@@ -186,7 +186,7 @@ export default function EspacioDetallePage() {
           {PESTANAS.map((p) => (
             <Tab
               key={p.campo} value={p.campo}
-              label={`${p.label} (${(espacio[p.campo] || []).length})`}
+              label={`${p.label} (${(workspace[p.campo] || []).length})`}
             />
           ))}
           <Tab value={PESTANA_TAREAS} label="Tareas" />
@@ -257,7 +257,7 @@ export default function EspacioDetallePage() {
                 key={item.id}
                 divider
                 secondaryAction={
-                  <IconButton edge="end" size="small" onClick={() => soltar(item.id)} aria-label="Sacar del Espacio">
+                  <IconButton edge="end" size="small" onClick={() => soltar(item.id)} aria-label="Sacar del Workspace">
                     <DeleteOutlineIcon fontSize="small" />
                   </IconButton>
                 }

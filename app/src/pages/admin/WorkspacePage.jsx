@@ -62,14 +62,14 @@ export default function WorkspacePage() {
 
   const guardar = useCallback(async () => {
     if (!form.name.trim()) {
-      toast.error('El Workspace necesita un nombre.');
+      toast.error('La Empresa necesita un nombre.');
       return;
     }
     try {
       setGuardando(true);
       await api.updateWorkspace(slug, form);
       await recargar();
-      toast.success('Workspace actualizado.');
+      toast.success('Empresa actualizado.');
     } catch (e) {
       toast.error(e.response?.data?.detail || 'No se pudo guardar.');
     } finally {
@@ -347,11 +347,11 @@ function ModalNuevoWorkspace({ abierto, cerrar, sectores, alCrear }) {
     try {
       setCreando(true);
       const { data } = await api.createWorkspace({ name: nombre.trim(), sector });
-      toast.success(`Workspace ${data.name} creado.`);
+      toast.success(`Empresa ${data.name} creado.`);
       cerrar();
       alCrear(data);
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'No se pudo crear el Workspace.');
+      toast.error(e.response?.data?.detail || 'No se pudo crear la Empresa.');
     } finally {
       setCreando(false);
     }
@@ -402,7 +402,7 @@ function ModalNuevoWorkspace({ abierto, cerrar, sectores, alCrear }) {
           fullWidth variant="contained"
           sx={{ mt: 3, mb: 1, borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}
         >
-          {creando ? 'Creando…' : 'Crear Workspace'}
+          {creando ? 'Creando…' : 'Crear Empresa'}
         </Button>
       </DialogContent>
     </Dialog>

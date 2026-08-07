@@ -52,7 +52,7 @@ export default function TareasTab({ slug, spaceSlug, agentes = [], personas = []
       const { data } = await api.getSpaceTasks(slug, spaceSlug);
       setTareas(data.results);
     } catch {
-      setError('No se pudieron leer las tareas de este Espacio.');
+      setError('No se pudieron leer las tareas de este Workspace.');
       setTareas([]);
     }
   }, [slug, spaceSlug]);

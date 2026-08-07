@@ -172,7 +172,7 @@ export default function Drawer({ open, handleDrawerToggle }) {
     } catch (e) {
       toast.error(
         e.response?.status === 403
-          ? 'Solo un administrador del Workspace puede eliminar una Sesión.'
+          ? 'Solo un administrador de la Empresa puede eliminar una Sesión.'
           : 'No se pudo completar la acción.',
       );
     }
@@ -244,7 +244,7 @@ export default function Drawer({ open, handleDrawerToggle }) {
   // usuario, abajo, igual en los tres modos.
   const MODOS = [
     { key: 'trabajo',  label: 'Trabajo',  icon: <MessageSquare size={14} /> },
-    { key: 'espacios', label: 'Espacios', icon: <Layers size={14} /> },
+    { key: 'espacios', label: 'Workspaces', icon: <Layers size={14} /> },
     { key: 'admin',    label: 'Admin',    icon: <Settings size={14} /> },
   ];
 
@@ -269,14 +269,14 @@ export default function Drawer({ open, handleDrawerToggle }) {
       // dentro de una pantalla titulada "Espacios": quien buscaba donde conectar
       // su Odoo tenia que adivinar que estaba ahi.
       items: [
-        { path: '/app/contexto?tab=espacios',     label: 'Espacios',    icon: <Layers size={15} /> },
+        { path: '/app/contexto?tab=espacios',     label: 'Workspaces', icon: <Layers size={15} /> },
         { path: '/app/contexto?tab=integraciones', label: 'Conexiones', icon: <Plug size={15} /> },
         { path: '/app/archivos',                  label: 'Archivos',    icon: <FolderOpen size={15} /> },
         { path: '/app/contexto?tab=mi-contexto',  label: 'Contexto de la empresa', icon: <BookOpen size={15} /> },
       ],
     },
     admin: {
-      seccion: 'Workspace',
+      seccion: 'Empresa',
       items: [
         { path: '/app/admin/personas',  label: 'Personas',      icon: <Users size={14} /> },
         { path: '/app/admin/agentes',   label: 'Agentes',       icon: <Bot size={14} /> },
