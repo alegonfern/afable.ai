@@ -44,21 +44,21 @@ export default function SelectorEspacio() {
           ? <Box component="span" sx={{ fontSize: '0.9rem', flexShrink: 0 }}>{espacio.icon}</Box>
           : <Layers size={14} style={{ flexShrink: 0 }} />}
         <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {espacio ? espacio.name : 'Todos los Workspaces'}
+          {espacio ? espacio.name : 'Todos'}
         </Box>
         <ChevronDown size={12} style={{ flexShrink: 0 }} />
       </Box>
 
       <Menu
         anchorEl={ancla} open={Boolean(ancla)} onClose={() => setAncla(null)}
-        anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
-        transformOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'left' }}
       >
         <MenuItem
           selected={!espacio} onClick={() => elegir(null)}
           sx={{ fontSize: '0.875rem' }}
         >
-          Todos los Espacios
+          Todos los Workspaces
         </MenuItem>
 
         {espacios.map((e) => (

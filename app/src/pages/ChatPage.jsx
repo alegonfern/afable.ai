@@ -16,7 +16,6 @@ import { toast } from 'react-toastify';
 import { api } from '../services/api';
 import AgentesGaleria from './trabajo/AgentesGaleria';
 import SelectorAgente from './trabajo/SelectorAgente';
-import SelectorEspacio from '../components/SelectorEspacio';
 import MencionAgentes, { aplicarMencion, detectarMencion, filtrarAgentes }
   from '../components/MencionAgentes';
 import { useApp } from '../context/AppContext';
@@ -941,7 +940,6 @@ export default function ChatPage() {
               />
               {/* En que Espacio se esta trabajando: acota los agentes que se
                   ofrecen y donde queda guardada la conversacion. */}
-              <SelectorEspacio />
               <Box sx={{ width: '1px', height: 16, bgcolor: 'divider', mx: 0.25 }} />
               <input ref={fileInputRef} type="file" hidden onChange={handleFileChange}
                 accept=".pdf,.docx,.txt,.csv,.md,.xlsx,.xls,image/*" />

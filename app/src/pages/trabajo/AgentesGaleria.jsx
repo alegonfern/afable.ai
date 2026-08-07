@@ -35,7 +35,7 @@ const ORDENES = [
  *                      "Chatear con…", sin Crear/Gestionar (que sacan de la
  *                      pantalla) y sin el margen superior de página.
  */
-export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorEspacio = false }) {
+export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorEspacio = true }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const navigate = useNavigate();
@@ -321,7 +321,7 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
           <span>
             {ignorarEspacio
               ? `Mostrando todos los agentes de la empresa.`
-              : `Solo los agentes de ${workspace.name}.`}
+              : `Solo los agentes de ${espacio.name}.`}
           </span>
           <Box
             component="button"
@@ -332,7 +332,7 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
               color: '#9BA6E3', '&:hover': { textDecoration: 'underline' },
             }}
           >
-            {ignorarEspacio ? `Volver a ${workspace.name}` : 'Ver todos'}
+            {ignorarEspacio ? `Volver a ${espacio.name}` : 'Ver todos'}
           </Box>
         </Box>
       )}
