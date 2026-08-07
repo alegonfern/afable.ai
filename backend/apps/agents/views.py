@@ -1454,7 +1454,15 @@ def _user_org(user, org_id=None):
     las automatizaciones necesitan una empresa real). Levanta OrgRequiredError
     en vez de un 404 crudo para que la vista pueda devolver un mensaje claro.
     """
-    qs = Organization.objects.filter(owner=user).exclude(name='Personal')
+    # Por PERTENENCIA y no por propiedad: un Disparador corre solo y manda correos a
+    # nombre de la empresa, así que lo decide el rol y no quién apretó "crear empresa".
+    from apps.workspaces.permissions import empresas_of
+
+    qs = (
+        Organization.objects
+        .filter(id__in=[m.organization_id for m in empresas_of(user)])
+        .exclude(name='Personal')
+    )
     if org_id:
         org = qs.filter(pk=org_id).first()
     else:
@@ -1478,6 +1486,10 @@ class AutomationListCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         try:
             org = _user_org(request.user, request.data.get('organization'))
+            # Un Disparador corre solo, consulta los sistemas y manda correos a nombre
+            # de la empresa: no es algo que deba poder dejar andando cualquiera.
+            from apps.workspaces.permissions import exigir_rol
+            exigir_rol(request.user, org)
         except OrgRequiredError:
             return Response(
                 {'organization': ['Las automatizaciones no están disponibles en "Personal" — selecciona o crea una empresa real arriba.']},

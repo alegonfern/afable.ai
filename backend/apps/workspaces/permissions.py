@@ -100,6 +100,32 @@ def is_admin_anywhere(user):
     return Membership.objects.filter(user=user, role=ROLE_ADMIN).exists()
 
 
+def exigir_rol(user, organization, minimo=ROLE_EDITOR):
+    """El rol de esa persona en esa empresa, o corta la request.
+
+    ⭐ Existe para las vistas que resolvían la empresa por **propiedad**
+    (`Organization.objects.filter(owner=user)`) en vez de por pertenencia. Ese atajo
+    tiene dos filos, y los dos muerden: el administrador que no fundó la empresa no podía
+    conectar un sistema, y quien la fundó podía aunque le hubieran bajado el rol a
+    miembro. La propiedad es un accidente de quién apretó "crear"; el rol es la decisión.
+
+    No pertenecer devuelve 404 y no 403, igual que en todo el resto: para quien está
+    afuera, la empresa no existe.
+    """
+    if organization is None:
+        raise NotFound('Empresa no encontrada.')
+    membership = membership_por_organizacion(user, organization)
+    if membership is None:
+        raise NotFound('Empresa no encontrada.')
+    if not membership.has_at_least(minimo):
+        raise PermissionDenied(
+            'Hace falta ser editor o administrador de la empresa para esto.'
+            if minimo == ROLE_EDITOR else
+            'Sólo un administrador de la empresa puede hacer esto.'
+        )
+    return membership
+
+
 def workspaces_visible_to(membership):
     """Los Workspaces que esa persona puede ver dentro de su empresa.
 

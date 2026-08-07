@@ -300,6 +300,8 @@ export default function WorkspacePage() {
             </Button>
           </Box>
 
+          <QuienPuedeQue textMuted={textMuted} borde={borde} bgSuave={bgSuave} />
+
           {esAdmin && (
             <Button
               onClick={guardar}
@@ -325,6 +327,77 @@ export default function WorkspacePage() {
     </Box>
   );
 }
+
+/**
+ * Qué puede hacer cada rol. Se muestra y no se configura, a propósito.
+ *
+ * La alternativa era un desplegable por cada cosa que se puede crear, y una pantalla con
+ * seis selectores de permisos es algo que nadie termina de configurar ni de entender
+ * después. El rol ya contesta la pregunta: lo único que faltaba era poder LEERLO.
+ *
+ * El único permiso que sí se elige es el de agentes, arriba, porque ahí la respuesta
+ * cambia de una empresa a otra: hay equipos donde conviene que cualquiera arme el suyo.
+ */
+function QuienPuedeQue({ textMuted, borde, bgSuave }) {
+  const FILAS = [
+    ['Preguntarle a un agente y trabajar en Sesiones', true, true, true],
+    ['Subir archivos y crear Workspaces', false, true, true],
+    ['Conectar sistemas (Odoo, bases de datos, Drive)', false, true, true],
+    ['Dejar Disparadores andando solos', false, true, true],
+    ['Invitar personas y cambiar roles', false, false, true],
+    ['El plan y los medios de pago', false, false, true],
+  ];
+  const Celda = ({ si }) => (
+    <Box sx={{ textAlign: 'center', color: si ? '#586AD0' : textMuted, opacity: si ? 1 : 0.35 }}>
+      {si ? '●' : '—'}
+    </Box>
+  );
+
+  return (
+    <Box sx={{ mt: 4 }}>
+      <Typography sx={{
+        fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em',
+        textTransform: 'uppercase', color: '#586AD0', mb: 1.5,
+      }}>
+        Quién puede qué
+      </Typography>
+
+      <Box sx={{ border: `1px solid ${borde}`, borderRadius: '10px', overflow: 'hidden' }}>
+        <Box sx={{
+          display: 'grid', gridTemplateColumns: '1fr 92px 92px 92px', gap: 1,
+          px: 2, py: 1.25, bgcolor: bgSuave,
+          fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.04em',
+          textTransform: 'uppercase', color: textMuted,
+        }}>
+          <span />
+          <Box sx={{ textAlign: 'center' }}>Miembro</Box>
+          <Box sx={{ textAlign: 'center' }}>Editor</Box>
+          <Box sx={{ textAlign: 'center' }}>Admin</Box>
+        </Box>
+
+        {FILAS.map(([que, m, e, a], i) => (
+          <Box
+            key={que}
+            sx={{
+              display: 'grid', gridTemplateColumns: '1fr 92px 92px 92px', gap: 1,
+              px: 2, py: 1.25, alignItems: 'center',
+              borderTop: i ? `1px solid ${borde}` : 'none',
+              fontSize: '0.875rem',
+            }}
+          >
+            <span>{que}</span>
+            <Celda si={m} /><Celda si={e} /><Celda si={a} />
+          </Box>
+        ))}
+      </Box>
+
+      <Typography sx={{ fontSize: '0.8125rem', color: textMuted, mt: 1 }}>
+        El rol de cada persona se cambia en Personas.
+      </Typography>
+    </Box>
+  );
+}
+
 
 function ModalNuevoWorkspace({ abierto, cerrar, sectores, alCrear }) {
   const theme = useTheme();

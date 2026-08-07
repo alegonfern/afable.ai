@@ -24,6 +24,8 @@ class HandleDeAgenteTests(TestCase):
             username='duena@afable.test', email='duena@afable.test', password='afable123',
         )
         self.org = Organization.objects.create(owner=self.user, name='Cocinas SpA')
+        from apps.workspaces.models import ROLE_ADMIN
+        self.org.agregar_miembro(self.user, ROLE_ADMIN)
 
     def test_el_handle_se_arma_desde_el_nombre(self):
         agente = Agent.objects.create(organization=self.org, name='Ventas Chile')
@@ -54,6 +56,8 @@ class MencionTests(TestCase):
             username='ajeno@afable.test', email='ajeno@afable.test', password='afable123',
         )
         self.org = Organization.objects.create(owner=self.user, name='Cocinas SpA')
+        from apps.workspaces.models import ROLE_ADMIN
+        self.org.agregar_miembro(self.user, ROLE_ADMIN)
         self.org_ajena = Organization.objects.create(owner=self.otra, name='Otra SpA')
 
         self.ventas = Agent.objects.create(organization=self.org, name='Ventas')
@@ -103,6 +107,8 @@ class HabilidadesTests(TestCase):
             username='duena@afable.test', email='duena@afable.test', password='afable123',
         )
         self.org = Organization.objects.create(owner=self.user, name='Cocinas SpA')
+        from apps.workspaces.models import ROLE_ADMIN
+        self.org.agregar_miembro(self.user, ROLE_ADMIN)
         self.ventas = Agent.objects.create(organization=self.org, name='Ventas')
         self.soporte = Agent.objects.create(organization=self.org, name='Soporte')
 
@@ -175,7 +181,7 @@ class AlcanceDeEspacioTests(TestCase):
 
     def setUp(self):
         from apps.organizations.models import CompanyDocument, SystemConnection
-        from apps.workspaces.models import ROLE_ADMIN, Workspace, Workspace
+        from apps.workspaces.models import ROLE_ADMIN, Workspace
         from apps.workspaces.permissions import alcance_de_agente
 
         self.alcance = alcance_de_agente
@@ -184,6 +190,8 @@ class AlcanceDeEspacioTests(TestCase):
             username='duena@afable.test', email='duena@afable.test', password='afable123',
         )
         self.org = Organization.objects.create(owner=self.user, name='Cocinas SpA')
+        from apps.workspaces.models import ROLE_ADMIN
+        self.org.agregar_miembro(self.user, ROLE_ADMIN)
         self.workspace = Workspace.objects.create(organization=self.org, name='General')
         self.org.agregar_miembro(self.user, ROLE_ADMIN)
 
@@ -567,7 +575,7 @@ class RamificarYEditarTests(TestCase):
         self.assertEqual(self.conv.messages.count(), 3)
 
     def test_la_rama_conserva_el_espacio_de_la_original(self):
-        from apps.workspaces.models import ROLE_ADMIN, Workspace, Workspace
+        from apps.workspaces.models import ROLE_ADMIN, Workspace
 
         workspace = Workspace.objects.create(organization=self.org, name='General')
         self.org.agregar_miembro(self.duena, ROLE_ADMIN)
@@ -633,6 +641,8 @@ class DisparadoresTests(TestCase):
             username='duena@afable.test', email='duena@afable.test', password='afable123',
         )
         self.org = Organization.objects.create(owner=self.user, name='Cocinas SpA')
+        from apps.workspaces.models import ROLE_ADMIN
+        self.org.agregar_miembro(self.user, ROLE_ADMIN)
 
     def _horario(self, **config):
         return self.Automation.objects.create(

@@ -197,8 +197,13 @@ class SystemConnectionListCreateView(APIView):
         return Response(SystemConnectionSerializer(connections, many=True).data)
 
     def post(self, request):
-        org_id = request.data.get('organization')
-        org = get_object_or_404(Organization, pk=org_id, owner=request.user)
+        # Conectar un sistema es cargar credenciales de la empresa: hace falta ser
+        # editor. Antes se pedía ser el DUEÑO, que dejaba afuera al administrador que no
+        # fundó la empresa y adentro a quien la fundó aunque ya fuera sólo miembro.
+        from apps.workspaces.permissions import exigir_rol
+
+        org = Organization.objects.filter(pk=request.data.get('organization')).first()
+        exigir_rol(request.user, org)
         config = request.data.get('config', {})
         name = request.data.get('name', '')
         connector_type = request.data.get('connector_type', '')
