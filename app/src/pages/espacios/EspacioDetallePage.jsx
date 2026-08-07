@@ -148,7 +148,7 @@ export default function EspacioDetallePage() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
       <PageHeader
-        title={`${workspace.icon || '📁'}  ${workspace.name}`}
+        title={`${espacio.icon || '📁'}  ${espacio.name}`}
         back="/app/contexto?tab=espacios" backLabel="Workspaces"
       />
 
@@ -164,7 +164,7 @@ export default function EspacioDetallePage() {
             icon={espacio.visibility === 'abierto' ? <PublicOutlinedIcon /> : <LockOutlinedIcon />}
             label={espacio.visibility === 'abierto'
               ? 'Lo ve todo el equipo'
-              : `Sólo ${workspace.members.length} persona${workspace.members.length === 1 ? '' : 's'}`}
+              : `Sólo ${espacio.members.length} persona${espacio.members.length === 1 ? '' : 's'}`}
           />
           <Select
             size="small" value={espacio.visibility}
@@ -186,7 +186,7 @@ export default function EspacioDetallePage() {
           {PESTANAS.map((p) => (
             <Tab
               key={p.campo} value={p.campo}
-              label={`${p.label} (${(workspace[p.campo] || []).length})`}
+              label={`${p.label} (${(espacio[p.campo] || []).length})`}
             />
           ))}
           <Tab value={PESTANA_TAREAS} label="Tareas" />
@@ -317,7 +317,7 @@ export default function EspacioDetallePage() {
             navigate('/app/contexto?tab=espacios');
           }}
         >
-          Eliminar este Espacio
+          Eliminar este Workspace
         </Button>
       </Box>
     </Box>
