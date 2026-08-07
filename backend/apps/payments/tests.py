@@ -48,9 +48,9 @@ class BaseFacturacion(TestCase):
             username='ajeno@afable.test', email='ajeno@afable.test', password='afable123',
         )
         self.org = Organization.objects.create(owner=self.admin, name='Cocinas SpA')
-        self.ws = Workspace.objects.create(name='Cocinas SpA', organization=self.org)
-        self.ws.add_member(self.admin, ROLE_ADMIN)
-        self.ws.add_member(self.editor, ROLE_EDITOR)
+        self.ws = Workspace.objects.create(organization=self.org, name='General')
+        self.org.agregar_miembro(self.admin, ROLE_ADMIN)
+        self.org.agregar_miembro(self.editor, ROLE_EDITOR)
 
         self.starter = Plan.objects.create(
             id='starter', name='Starter', price_clp=99_000, price_usd=99,
@@ -67,7 +67,7 @@ class BaseFacturacion(TestCase):
 
     def _tarjeta(self, proveedor=PROVEEDOR_FLOW):
         return MetodoPago.objects.create(
-            workspace=self.ws, proveedor=proveedor,
+            organization=self.org, proveedor=proveedor,
             etiqueta='Visa ···· 4242', token_pasarela='cus_1', principal=True,
         )
 
@@ -76,7 +76,7 @@ class QuienPuedeTocarLaFacturacion(BaseFacturacion):
 
     def test_el_administrador_ve_el_estado(self):
         self.como(self.admin)
-        r = self.client.get(url(self.ws.slug))
+        r = self.client.get(url(self.org.slug))
         self.assertEqual(r.status_code, 200)
         self.assertIsNone(r.data['suscripcion'])
         ids = [p['id'] for p in r.data['planes']]
@@ -86,20 +86,20 @@ class QuienPuedeTocarLaFacturacion(BaseFacturacion):
     def test_un_editor_no_alcanza(self):
         """Editar archivos no es lo mismo que dar de baja el plan de la empresa."""
         self.como(self.editor)
-        self.assertEqual(self.client.get(url(self.ws.slug)).status_code, 403)
+        self.assertEqual(self.client.get(url(self.org.slug)).status_code, 403)
         self.assertEqual(
-            self.client.post(url(self.ws.slug, 'suscribir/'), {'plan_id': 'starter'}).status_code,
+            self.client.post(url(self.org.slug, 'suscribir/'), {'plan_id': 'starter'}).status_code,
             403,
         )
 
     def test_para_alguien_de_afuera_el_workspace_no_existe(self):
         """404 y no 403: un 403 confirmaría que el slug es real."""
         self.como(self.ajeno)
-        self.assertEqual(self.client.get(url(self.ws.slug)).status_code, 404)
+        self.assertEqual(self.client.get(url(self.org.slug)).status_code, 404)
 
     def test_sin_entrar_el_workspace_tampoco_existe(self):
         """404 también para el anónimo: no es miembro, así que no hay nada que ver."""
-        self.assertEqual(self.client.get(url(self.ws.slug)).status_code, 404)
+        self.assertEqual(self.client.get(url(self.org.slug)).status_code, 404)
 
 
 class AltaConFlow(BaseFacturacion):
@@ -113,13 +113,13 @@ class AltaConFlow(BaseFacturacion):
         }
 
         self.como(self.admin)
-        r = self.client.post(url(self.ws.slug, 'suscribir/'), {'plan_id': 'starter'})
+        r = self.client.post(url(self.org.slug, 'suscribir/'), {'plan_id': 'starter'})
 
         self.assertEqual(r.status_code, 202)
         self.assertTrue(r.data['requiere_tarjeta'])
         self.assertIn('tok_1', r.data['url'])
 
-        sub = Subscription.objects.get(workspace=self.ws)
+        sub = Subscription.objects.get(organization=self.org)
         self.assertFalse(sub.aprobada)
         self.assertFalse(sub.vigente, 'una intención de pago no puede dar acceso')
         self.assertEqual(sub.moneda, MONEDA_CLP)
@@ -128,15 +128,15 @@ class AltaConFlow(BaseFacturacion):
     def test_con_tarjeta_suscribe_derecho(self, FakeFlow):
         FakeFlow.return_value.subscribe.return_value = {'subscriptionId': 'sub_flow_1'}
         ClientePasarela.objects.create(
-            workspace=self.ws, proveedor=PROVEEDOR_FLOW, customer_id='cus_1',
+            organization=self.org, proveedor=PROVEEDOR_FLOW, customer_id='cus_1',
         )
         self._tarjeta()
 
         self.como(self.admin)
-        r = self.client.post(url(self.ws.slug, 'suscribir/'), {'plan_id': 'growth'})
+        r = self.client.post(url(self.org.slug, 'suscribir/'), {'plan_id': 'growth'})
 
         self.assertEqual(r.status_code, 201)
-        sub = Subscription.objects.get(workspace=self.ws)
+        sub = Subscription.objects.get(organization=self.org)
         self.assertTrue(sub.aprobada)
         self.assertTrue(sub.vigente)
         self.assertEqual(sub.id_externo, 'sub_flow_1')
@@ -150,16 +150,16 @@ class AltaConFlow(BaseFacturacion):
         """
         FakeFlow.return_value.subscribe.side_effect = Exception('Flow caído')
         ClientePasarela.objects.create(
-            workspace=self.ws, proveedor=PROVEEDOR_FLOW, customer_id='cus_1',
+            organization=self.org, proveedor=PROVEEDOR_FLOW, customer_id='cus_1',
         )
         self._tarjeta()
         viejo = Subscription.objects.create(
-            workspace=self.ws, plan=self.starter, proveedor=PROVEEDOR_FLOW,
+            organization=self.org, plan=self.starter, proveedor=PROVEEDOR_FLOW,
             aprobada=True, status=Subscription.ESTADO_ACTIVA, id_externo='sub_viejo',
         )
 
         self.como(self.admin)
-        r = self.client.post(url(self.ws.slug, 'suscribir/'), {'plan_id': 'growth'})
+        r = self.client.post(url(self.org.slug, 'suscribir/'), {'plan_id': 'growth'})
 
         self.assertEqual(r.status_code, 502)
         viejo.refresh_from_db()
@@ -173,13 +173,13 @@ class AltaConFlow(BaseFacturacion):
             'url': 'https://flow.test/registro', 'token': 'tok_1',
         }
         Subscription.objects.create(
-            workspace=self.ws, plan=self.starter, proveedor=PROVEEDOR_FLOW,
+            organization=self.org, plan=self.starter, proveedor=PROVEEDOR_FLOW,
             aprobada=True, status=Subscription.ESTADO_ACTIVA,
         )
 
         self.como(self.admin)
-        self.client.post(url(self.ws.slug, 'suscribir/'), {'plan_id': 'growth'})
-        r = self.client.get(url(self.ws.slug))
+        self.client.post(url(self.org.slug, 'suscribir/'), {'plan_id': 'growth'})
+        r = self.client.get(url(self.org.slug))
 
         self.assertEqual(r.data['suscripcion']['plan']['id'], 'starter')
         self.assertTrue(r.data['suscripcion']['aprobada'])
@@ -189,16 +189,16 @@ class AltaConFlow(BaseFacturacion):
         """Dos suscripciones vigentes serían dos cobros el mismo mes."""
         FakeFlow.return_value.subscribe.return_value = {'subscriptionId': 'sub_2'}
         ClientePasarela.objects.create(
-            workspace=self.ws, proveedor=PROVEEDOR_FLOW, customer_id='cus_1',
+            organization=self.org, proveedor=PROVEEDOR_FLOW, customer_id='cus_1',
         )
         self._tarjeta()
         self.como(self.admin)
 
-        self.client.post(url(self.ws.slug, 'suscribir/'), {'plan_id': 'starter'})
-        self.client.post(url(self.ws.slug, 'suscribir/'), {'plan_id': 'growth'})
+        self.client.post(url(self.org.slug, 'suscribir/'), {'plan_id': 'starter'})
+        self.client.post(url(self.org.slug, 'suscribir/'), {'plan_id': 'growth'})
 
         vigentes = Subscription.objects.filter(
-            workspace=self.ws, status__in=Subscription.ESTADOS_VIGENTES,
+            organization=self.org, status__in=Subscription.ESTADOS_VIGENTES,
         )
         self.assertEqual(vigentes.count(), 1)
         self.assertEqual(vigentes.first().plan_id, 'growth')
@@ -207,12 +207,12 @@ class AltaConFlow(BaseFacturacion):
     def test_si_flow_falla_no_queda_una_suscripcion_fantasma(self, FakeFlow):
         FakeFlow.return_value.subscribe.side_effect = Exception('Flow caído')
         ClientePasarela.objects.create(
-            workspace=self.ws, proveedor=PROVEEDOR_FLOW, customer_id='cus_1',
+            organization=self.org, proveedor=PROVEEDOR_FLOW, customer_id='cus_1',
         )
         self._tarjeta()
 
         self.como(self.admin)
-        r = self.client.post(url(self.ws.slug, 'suscribir/'), {'plan_id': 'starter'})
+        r = self.client.post(url(self.org.slug, 'suscribir/'), {'plan_id': 'starter'})
 
         self.assertEqual(r.status_code, 502)
         self.assertEqual(Subscription.objects.count(), 0)
@@ -228,14 +228,14 @@ class AltaConPayPal(BaseFacturacion):
 
         self.como(self.admin)
         r = self.client.post(
-            url(self.ws.slug, 'suscribir/'), {'plan_id': 'growth', 'proveedor': 'paypal'},
+            url(self.org.slug, 'suscribir/'), {'plan_id': 'growth', 'proveedor': 'paypal'},
         )
 
         self.assertEqual(r.status_code, 202)
         self.assertTrue(r.data['requiere_aprobacion'])
         self.assertEqual(r.data['url'], 'https://paypal.test/aprobar')
 
-        sub = Subscription.objects.get(workspace=self.ws)
+        sub = Subscription.objects.get(organization=self.org)
         self.assertEqual(sub.moneda, MONEDA_USD)
         self.assertEqual(sub.id_externo, 'I-SUB1')
         self.assertFalse(sub.vigente, 'sin aprobar todavía no hay acceso')
@@ -245,7 +245,7 @@ class AltaConPayPal(BaseFacturacion):
         FakePayPal.return_value.configurado = False
         self.como(self.admin)
         r = self.client.post(
-            url(self.ws.slug, 'suscribir/'), {'plan_id': 'growth', 'proveedor': 'paypal'},
+            url(self.org.slug, 'suscribir/'), {'plan_id': 'growth', 'proveedor': 'paypal'},
         )
         self.assertEqual(r.status_code, 503)
         self.assertEqual(Subscription.objects.count(), 0)
@@ -256,7 +256,7 @@ class PlanesQueNoSeCobranSolos(BaseFacturacion):
     def test_enterprise_no_pasa_por_pasarela(self):
         """Cobrar $0 dejaría a la empresa 'suscrita' y sin servicio."""
         self.como(self.admin)
-        r = self.client.post(url(self.ws.slug, 'suscribir/'), {'plan_id': 'medida'})
+        r = self.client.post(url(self.org.slug, 'suscribir/'), {'plan_id': 'medida'})
         self.assertEqual(r.status_code, 400)
         self.assertEqual(Subscription.objects.count(), 0)
 
@@ -264,14 +264,14 @@ class PlanesQueNoSeCobranSolos(BaseFacturacion):
         sin_usd = Plan.objects.create(id='solo_clp', name='Solo Chile', price_clp=50_000, price_usd=0)
         self.como(self.admin)
         r = self.client.post(
-            url(self.ws.slug, 'suscribir/'), {'plan_id': sin_usd.id, 'proveedor': 'paypal'},
+            url(self.org.slug, 'suscribir/'), {'plan_id': sin_usd.id, 'proveedor': 'paypal'},
         )
         self.assertEqual(r.status_code, 400)
 
     def test_pasarela_inventada(self):
         self.como(self.admin)
         r = self.client.post(
-            url(self.ws.slug, 'suscribir/'), {'plan_id': 'starter', 'proveedor': 'bitcoin'},
+            url(self.org.slug, 'suscribir/'), {'plan_id': 'starter', 'proveedor': 'bitcoin'},
         )
         self.assertEqual(r.status_code, 400)
 
@@ -280,7 +280,7 @@ class Baja(BaseFacturacion):
 
     def _sub(self, proveedor=PROVEEDOR_FLOW, id_externo='sub_1'):
         return Subscription.objects.create(
-            workspace=self.ws, plan=self.starter, proveedor=proveedor,
+            organization=self.org, plan=self.starter, proveedor=proveedor,
             id_externo=id_externo, aprobada=True, status=Subscription.ESTADO_ACTIVA,
         )
 
@@ -288,7 +288,7 @@ class Baja(BaseFacturacion):
     def test_dar_de_baja_avisa_a_flow(self, FakeFlow):
         sub = self._sub()
         self.como(self.admin)
-        r = self.client.post(url(self.ws.slug, 'cancelar/'))
+        r = self.client.post(url(self.org.slug, 'cancelar/'))
 
         self.assertEqual(r.status_code, 200)
         FakeFlow.return_value.cancel_subscription.assert_called_once_with('sub_1')
@@ -302,7 +302,7 @@ class Baja(BaseFacturacion):
         sub = self._sub()
 
         self.como(self.admin)
-        r = self.client.post(url(self.ws.slug, 'cancelar/'))
+        r = self.client.post(url(self.org.slug, 'cancelar/'))
 
         self.assertEqual(r.status_code, 502)
         sub.refresh_from_db()
@@ -310,7 +310,7 @@ class Baja(BaseFacturacion):
 
     def test_sin_plan_no_hay_nada_que_dar_de_baja(self):
         self.como(self.admin)
-        self.assertEqual(self.client.post(url(self.ws.slug, 'cancelar/')).status_code, 404)
+        self.assertEqual(self.client.post(url(self.org.slug, 'cancelar/')).status_code, 404)
 
 
 class MediosDePago(BaseFacturacion):
@@ -318,7 +318,7 @@ class MediosDePago(BaseFacturacion):
     def test_el_token_de_la_pasarela_no_sale_del_servidor(self):
         self._tarjeta()
         self.como(self.admin)
-        r = self.client.get(url(self.ws.slug, 'metodos/'))
+        r = self.client.get(url(self.org.slug, 'metodos/'))
         self.assertEqual(r.status_code, 200)
         self.assertNotIn('token_pasarela', r.data[0])
         self.assertEqual(r.data[0]['etiqueta'], 'Visa ···· 4242')
@@ -327,10 +327,10 @@ class MediosDePago(BaseFacturacion):
         """Con dos principales, contra cuál se cobra queda al azar de la consulta."""
         uno = self._tarjeta()
         otro = MetodoPago.objects.create(
-            workspace=self.ws, proveedor=PROVEEDOR_FLOW, etiqueta='Visa ···· 1111',
+            organization=self.org, proveedor=PROVEEDOR_FLOW, etiqueta='Visa ···· 1111',
         )
         self.como(self.admin)
-        r = self.client.post(url(self.ws.slug, f'metodos/{otro.id}/principal/'))
+        r = self.client.post(url(self.org.slug, f'metodos/{otro.id}/principal/'))
 
         self.assertEqual(r.status_code, 200)
         uno.refresh_from_db(); otro.refresh_from_db()
@@ -340,11 +340,11 @@ class MediosDePago(BaseFacturacion):
     def test_no_se_puede_quitar_el_medio_con_el_que_se_paga(self):
         tarjeta = self._tarjeta()
         Subscription.objects.create(
-            workspace=self.ws, plan=self.starter, proveedor=PROVEEDOR_FLOW,
+            organization=self.org, plan=self.starter, proveedor=PROVEEDOR_FLOW,
             aprobada=True, status=Subscription.ESTADO_ACTIVA,
         )
         self.como(self.admin)
-        r = self.client.delete(url(self.ws.slug, f'metodos/{tarjeta.id}/'))
+        r = self.client.delete(url(self.org.slug, f'metodos/{tarjeta.id}/'))
 
         self.assertEqual(r.status_code, 409)
         self.assertTrue(MetodoPago.objects.filter(pk=tarjeta.pk).exists())
@@ -353,10 +353,10 @@ class MediosDePago(BaseFacturacion):
     def test_al_quitar_el_principal_otro_toma_su_lugar(self, FakeFlow):
         principal = self._tarjeta()
         suplente = MetodoPago.objects.create(
-            workspace=self.ws, proveedor=PROVEEDOR_PAYPAL, etiqueta='PayPal · a@b.cl',
+            organization=self.org, proveedor=PROVEEDOR_PAYPAL, etiqueta='PayPal · a@b.cl',
         )
         self.como(self.admin)
-        r = self.client.delete(url(self.ws.slug, f'metodos/{principal.id}/'))
+        r = self.client.delete(url(self.org.slug, f'metodos/{principal.id}/'))
 
         self.assertEqual(r.status_code, 204)
         suplente.refresh_from_db()
@@ -364,18 +364,18 @@ class MediosDePago(BaseFacturacion):
 
     def test_un_medio_de_otra_empresa_no_se_toca(self):
         otra_org = Organization.objects.create(owner=self.ajeno, name='Otra')
-        otro_ws = Workspace.objects.create(name='Otra', organization=otra_org)
+        otro_ws = Workspace.objects.create(organization=otra_org, name='General')
         ajeno = MetodoPago.objects.create(
-            workspace=otro_ws, proveedor=PROVEEDOR_FLOW, etiqueta='Visa ···· 9999',
+            organization=otra_org, proveedor=PROVEEDOR_FLOW, etiqueta='Visa ···· 9999',
         )
         self.como(self.admin)
-        r = self.client.delete(url(self.ws.slug, f'metodos/{ajeno.id}/'))
+        r = self.client.delete(url(self.org.slug, f'metodos/{ajeno.id}/'))
         self.assertEqual(r.status_code, 404)
         self.assertTrue(MetodoPago.objects.filter(pk=ajeno.pk).exists())
 
     def test_en_paypal_no_se_agrega_un_medio_por_separado(self):
         self.como(self.admin)
-        r = self.client.post(url(self.ws.slug, 'metodos/'), {'proveedor': 'paypal'})
+        r = self.client.post(url(self.org.slug, 'metodos/'), {'proveedor': 'paypal'})
         self.assertEqual(r.status_code, 400)
 
 
@@ -385,7 +385,7 @@ class RetornoDeFlowConLaTarjeta(BaseFacturacion):
     def setUp(self):
         super().setUp()
         self.cliente = ClientePasarela.objects.create(
-            workspace=self.ws, proveedor=PROVEEDOR_FLOW, customer_id='cus_7',
+            organization=self.org, proveedor=PROVEEDOR_FLOW, customer_id='cus_7',
         )
 
     @mock.patch('apps.payments.views.FlowClient')
@@ -395,14 +395,14 @@ class RetornoDeFlowConLaTarjeta(BaseFacturacion):
         }
         FakeFlow.return_value.subscribe.return_value = {'subscriptionId': 'sub_ok'}
         pendiente = Subscription.objects.create(
-            workspace=self.ws, plan=self.growth, proveedor=PROVEEDOR_FLOW, aprobada=False,
+            organization=self.org, plan=self.growth, proveedor=PROVEEDOR_FLOW, aprobada=False,
         )
 
         r = self.client.get('/api/v1/payments/tarjeta/retorno/?token=tok_1')
 
         self.assertEqual(r.status_code, 302)
         self.assertIn('pago=listo', r.url)
-        metodo = MetodoPago.objects.get(workspace=self.ws)
+        metodo = MetodoPago.objects.get(organization=self.org)
         self.assertEqual(metodo.etiqueta, 'Visa ···· 4242')
         self.assertTrue(metodo.principal)
         pendiente.refresh_from_db()
@@ -412,7 +412,7 @@ class RetornoDeFlowConLaTarjeta(BaseFacturacion):
     @mock.patch('apps.payments.views.FlowClient')
     def test_registrar_de_nuevo_reemplaza_los_cuatro_digitos(self, FakeFlow):
         MetodoPago.objects.create(
-            workspace=self.ws, proveedor=PROVEEDOR_FLOW,
+            organization=self.org, proveedor=PROVEEDOR_FLOW,
             etiqueta='Visa ···· 1111', token_pasarela='cus_7',
         )
         FakeFlow.return_value.get_register_status.return_value = {
@@ -421,9 +421,9 @@ class RetornoDeFlowConLaTarjeta(BaseFacturacion):
 
         self.client.get('/api/v1/payments/tarjeta/retorno/?token=tok_2')
 
-        self.assertEqual(MetodoPago.objects.filter(workspace=self.ws).count(), 1)
+        self.assertEqual(MetodoPago.objects.filter(organization=self.org).count(), 1)
         self.assertEqual(
-            MetodoPago.objects.get(workspace=self.ws).etiqueta, 'Mastercard ···· 5555',
+            MetodoPago.objects.get(organization=self.org).etiqueta, 'Mastercard ···· 5555',
         )
 
     @mock.patch('apps.payments.views.FlowClient')
@@ -439,7 +439,7 @@ class WebhookDePayPal(BaseFacturacion):
     def setUp(self):
         super().setUp()
         self.sub = Subscription.objects.create(
-            workspace=self.ws, plan=self.growth, proveedor=PROVEEDOR_PAYPAL,
+            organization=self.org, plan=self.growth, proveedor=PROVEEDOR_PAYPAL,
             moneda=MONEDA_USD, id_externo='I-SUB1', aprobada=False,
         )
 
@@ -473,7 +473,7 @@ class WebhookDePayPal(BaseFacturacion):
         self.assertEqual(r.status_code, 200)
         self.sub.refresh_from_db()
         self.assertTrue(self.sub.vigente)
-        metodo = MetodoPago.objects.get(workspace=self.ws)
+        metodo = MetodoPago.objects.get(organization=self.org)
         self.assertEqual(metodo.etiqueta, 'PayPal · pago@empresa.cl')
 
     @mock.patch('apps.payments.views.PayPalClient')
@@ -486,7 +486,7 @@ class WebhookDePayPal(BaseFacturacion):
                          'amount': {'total': '299.00'}},
         })
 
-        pago = Payment.objects.get(workspace=self.ws)
+        pago = Payment.objects.get(organization=self.org)
         self.assertEqual(pago.amount, 299)
         self.assertEqual(pago.moneda, MONEDA_USD)
         self.assertEqual(pago.status, 'paid')
@@ -518,10 +518,10 @@ class WebhookDeFlow(BaseFacturacion):
     @mock.patch('apps.payments.views.FlowClient')
     def test_un_pago_confirmado_activa_el_plan(self, FakeFlow):
         sub = Subscription.objects.create(
-            workspace=self.ws, plan=self.starter, proveedor=PROVEEDOR_FLOW, aprobada=False,
+            organization=self.org, plan=self.starter, proveedor=PROVEEDOR_FLOW, aprobada=False,
         )
         pago = Payment.objects.create(
-            workspace=self.ws, proveedor=PROVEEDOR_FLOW, moneda=MONEDA_CLP,
+            organization=self.org, proveedor=PROVEEDOR_FLOW, moneda=MONEDA_CLP,
             commerce_order='AFA-1', amount=99_000, subject='Afable Starter',
         )
         FakeFlow.return_value.get_payment_status.return_value = {
@@ -548,16 +548,16 @@ class CartolaYEstado(BaseFacturacion):
 
     def test_los_cobros_de_otra_empresa_no_aparecen(self):
         otra_org = Organization.objects.create(owner=self.ajeno, name='Otra')
-        otro_ws = Workspace.objects.create(name='Otra', organization=otra_org)
+        otro_ws = Workspace.objects.create(organization=otra_org, name='General')
         Payment.objects.create(
-            workspace=otro_ws, commerce_order='AFA-AJENO', amount=1, subject='ajeno',
+            organization=otra_org, commerce_order='AFA-AJENO', amount=1, subject='ajeno',
         )
         Payment.objects.create(
-            workspace=self.ws, commerce_order='AFA-MIO', amount=99_000, subject='mío',
+            organization=self.org, commerce_order='AFA-MIO', amount=99_000, subject='mío',
         )
 
         self.como(self.admin)
-        r = self.client.get(url(self.ws.slug))
+        r = self.client.get(url(self.org.slug))
         pedidos = [c['commerce_order'] for c in r.data['cobros']]
         self.assertEqual(pedidos, ['AFA-MIO'])
 

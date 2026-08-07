@@ -35,8 +35,8 @@ class BaseArchivos(TestCase):
             username='ajeno@afable.test', email='ajeno@afable.test', password='afable123',
         )
         self.org = Organization.objects.create(owner=self.user, name='Cocinas SpA')
-        self.ws = Workspace.objects.create(name='Cocinas SpA', organization=self.org)
-        self.ws.add_member(self.user, ROLE_ADMIN)
+        self.ws = Workspace.objects.create(organization=self.org, name='General')
+        self.org.agregar_miembro(self.user, ROLE_ADMIN)
 
         self.agente = Agent.objects.create(organization=self.org, name='Redactor')
 
@@ -55,7 +55,7 @@ class BaseArchivos(TestCase):
         self.client.force_authenticate(user=quien or self.user)
 
     def q(self):
-        return {'workspace': self.ws.slug}
+        return {'workspace': self.org.slug}
 
 
 class CarpetasTests(BaseArchivos):
@@ -427,8 +427,8 @@ class PermisosBase(BaseArchivos):
         self.beto = User.objects.create_user(
             username='beto@afable.test', email='beto@afable.test', password='afable123',
         )
-        self.ws.add_member(self.ana, ROLE_MEMBER)
-        self.ws.add_member(self.beto, ROLE_MEMBER)
+        self.org.agregar_miembro(self.ana, ROLE_MEMBER)
+        self.org.agregar_miembro(self.beto, ROLE_MEMBER)
 
         self.rrhh = Carpeta.objects.create(
             organization=self.org, name='RRHH', restringida=True, created_by=self.user,
@@ -808,7 +808,7 @@ class CompartirConTodoElWorkspaceTests(PermisosBase):
         self.como()
         return self.client.post(
             '/api/v1/archivos/compartir/',
-            {'workspace': self.ws.slug, 'carpeta': self.rrhh.pk, **extra}, format='json',
+            {'workspace': self.org.slug, 'carpeta': self.rrhh.pk, **extra}, format='json',
         )
 
     def test_se_le_da_acceso_a_todo_el_workspace_de_una_vez(self):
@@ -843,7 +843,7 @@ class CompartirConTodoElWorkspaceTests(PermisosBase):
         self.como()
         r = self.client.delete(
             '/api/v1/archivos/compartir/',
-            {'workspace': self.ws.slug, 'carpeta': self.rrhh.pk, 'todo_el_workspace': True},
+            {'workspace': self.org.slug, 'carpeta': self.rrhh.pk, 'todo_el_workspace': True},
             format='json',
         )
         self.assertEqual(r.status_code, 200)
@@ -860,7 +860,7 @@ class CompartirConTodoElWorkspaceTests(PermisosBase):
         self.como(self.ana)
         r = self.client.post(
             '/api/v1/archivos/compartir/',
-            {'workspace': self.ws.slug, 'carpeta': self.rrhh.pk, 'workspace_nivel': 'edicion'},
+            {'workspace': self.org.slug, 'carpeta': self.rrhh.pk, 'workspace_nivel': 'edicion'},
             format='json',
         )
         self.assertEqual(r.status_code, 403)
@@ -875,7 +875,7 @@ class CompartirConTodoElWorkspaceTests(PermisosBase):
         """Sin el número, "todo el Workspace" no dice nada sobre cuánto se está abriendo."""
         r = self.compartir(workspace_nivel='lectura')
         self.assertEqual(r.data['miembros'], 3)
-        self.assertEqual(r.data['workspace_nombre'], self.ws.name)
+        self.assertEqual(r.data['workspace_nombre'], self.org.name)
 
 
 class QuienRestringeNoSeQuedaAfueraTests(PermisosBase):
@@ -897,7 +897,7 @@ class QuienRestringeNoSeQuedaAfueraTests(PermisosBase):
         self.como(quien)
         r = self.client.post(
             '/api/v1/archivos/compartir/',
-            {'workspace': self.ws.slug, 'restringido': True, **item}, format='json',
+            {'workspace': self.org.slug, 'restringido': True, **item}, format='json',
         )
         # Sin releer, el objeto de la prueba sigue con `restringida=False` y CUALQUIER
         # comprobación de nivel da 'edicion' — la prueba pasaría sin probar nada.
@@ -939,7 +939,7 @@ class QuienRestringeNoSeQuedaAfueraTests(PermisosBase):
         suya = Carpeta.objects.create(
             organization=self.org, name='Lo de Ana', created_by=self.ana,
         )
-        self.assertEqual(self.ws.memberships.get(user=self.ana).role, ROLE_MEMBER)
+        self.assertEqual(self.org.memberships.get(user=self.ana).role, ROLE_MEMBER)
         r = self.restringir(self.ana, carpeta=suya.pk)
         self.assertEqual(r.data['compartido_con'], [])
         suya.refresh_from_db()

@@ -1,10 +1,16 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
+from apps.organizations.models import Organization
+
 from .models import (
-    ROLE_CHOICES, ROLE_MEMBER, SECTOR_CHOICES, VISIBILITY_CHOICES,
-    Invitation, Membership, Space, Workspace,
+    ROLE_CHOICES, ROLE_MEMBER, VISIBILITY_CHOICES,
+    Invitation, Membership, Workspace,
 )
+
+# Los rubros viven en la Empresa, que es de quien son: dos listas paralelas habrían
+# vuelto a la duplicación que este cambio vino a sacar.
+SECTOR_CHOICES = Organization.SECTORS
 
 User = get_user_model()
 
@@ -43,22 +49,25 @@ class MembershipRoleSerializer(serializers.Serializer):
     role = serializers.ChoiceField(choices=ROLE_CHOICES)
 
 
-class WorkspaceSerializer(serializers.ModelSerializer):
+class EmpresaSerializer(serializers.ModelSerializer):
     my_role = serializers.SerializerMethodField()
+    # La Empresa ya es el nivel de arriba, así que su propio id es el que las pantallas
+    # viejas pedían como `organization_id`.
+    organization_id = serializers.IntegerField(source='id', read_only=True)
     member_count = serializers.SerializerMethodField()
     logo_url = serializers.SerializerMethodField()
     sector_label = serializers.SerializerMethodField()
 
     class Meta:
-        model = Workspace
+        model = Organization
         fields = [
             'id', 'name', 'slug', 'sector', 'sector_label', 'description', 'employees',
-            'tax_id', 'agent_creation_policy', 'created_at', 'my_role', 'member_count',
-            'organization_id', 'logo', 'logo_url',
+            'rut', 'agent_creation_policy', 'created_at', 'my_role', 'member_count',
+            'organization_id', 'logo', 'logo_url', 'billing_email',
         ]
-        # `organization_id` es el puente: el frontend lo usa para que, al cambiar de
-        # Workspace, las pantallas que todavia consultan por Organization apunten a
-        # la correcta. Se expone solo de lectura — el enlace lo maneja el backend.
+        # `organization_id` se conserva —duplicado de `id`— porque el frontend lo manda
+        # en las pantallas que consultan por empresa. Ahora que la Empresa ES el nivel de
+        # arriba, los dos valores son el mismo.
         read_only_fields = ['id', 'slug', 'created_at', 'organization_id']
         extra_kwargs = {'logo': {'write_only': True, 'required': False, 'allow_null': True}}
 
@@ -88,10 +97,10 @@ class WorkspaceSerializer(serializers.ModelSerializer):
         return dict(SECTOR_CHOICES).get(obj.sector, '')
 
 
-class WorkspaceCreateSerializer(serializers.ModelSerializer):
+class EmpresaCreateSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Workspace
-        fields = ['name', 'sector', 'description', 'employees', 'tax_id', 'agent_creation_policy']
+        model = Organization
+        fields = ['name', 'sector', 'description', 'employees', 'rut', 'agent_creation_policy']
 
 
 # Para que el selector de sector del frontend no repita la lista a mano.
@@ -118,13 +127,13 @@ class InvitationCreateSerializer(serializers.Serializer):
 
     def validate_email(self, value):
         email = value.strip().lower()
-        workspace = self.context['workspace']
+        empresa = self.context['empresa']
 
-        if Membership.objects.filter(workspace=workspace, user__email__iexact=email).exists():
-            raise serializers.ValidationError('Esa persona ya es miembro del Workspace.')
+        if Membership.objects.filter(organization=empresa, user__email__iexact=email).exists():
+            raise serializers.ValidationError('Esa persona ya es miembro de la empresa.')
 
         pendientes = Invitation.objects.filter(
-            workspace=workspace, email=email,
+            organization=empresa, email=email,
             accepted_at__isnull=True, revoked_at__isnull=True,
         )
         if any(inv.is_pending for inv in pendientes):
@@ -151,8 +160,8 @@ class InvitationPreviewSerializer(serializers.Serializer):
     def from_invitation(cls, invitation):
         invited_by = invitation.invited_by
         return cls({
-            'workspace_name': invitation.workspace.name,
-            'workspace_slug': invitation.workspace.slug,
+            'workspace_name': invitation.organization.name,
+            'workspace_slug': invitation.organization.slug,
             'email': invitation.email,
             'role': invitation.role,
             'invited_by_name': (invited_by.get_full_name() or invited_by.email) if invited_by else None,
@@ -160,13 +169,13 @@ class InvitationPreviewSerializer(serializers.Serializer):
         })
 
 
-class SpaceListSerializer(serializers.ModelSerializer):
+class WorkspaceListSerializer(serializers.ModelSerializer):
     """El Espacio como tarjeta: nombre, acceso y cuánto tiene adentro."""
 
     counts = serializers.SerializerMethodField()
 
     class Meta:
-        model = Space
+        model = Workspace
         fields = [
             'id', 'name', 'slug', 'description', 'icon', 'visibility',
             'counts', 'created_at',
@@ -181,7 +190,7 @@ class SpaceListSerializer(serializers.ModelSerializer):
         }
 
 
-class SpaceDetailSerializer(SpaceListSerializer):
+class WorkspaceDetailSerializer(WorkspaceListSerializer):
     """El Espacio abierto: las tres pestañas en una sola respuesta."""
 
     connections = serializers.SerializerMethodField()
@@ -189,8 +198,8 @@ class SpaceDetailSerializer(SpaceListSerializer):
     agents = serializers.SerializerMethodField()
     members = MemberUserSerializer(many=True, read_only=True)
 
-    class Meta(SpaceListSerializer.Meta):
-        fields = SpaceListSerializer.Meta.fields + [
+    class Meta(WorkspaceListSerializer.Meta):
+        fields = WorkspaceListSerializer.Meta.fields + [
             'connections', 'documents', 'agents', 'members',
         ]
 
@@ -215,13 +224,13 @@ class SpaceDetailSerializer(SpaceListSerializer):
         ]
 
 
-class SpaceWriteSerializer(serializers.ModelSerializer):
+class WorkspaceWriteSerializer(serializers.ModelSerializer):
     """Crear y editar un Espacio. El contenido se engancha por endpoints aparte."""
 
     visibility = serializers.ChoiceField(choices=VISIBILITY_CHOICES, required=False)
 
     class Meta:
-        model = Space
+        model = Workspace
         fields = ['name', 'description', 'icon', 'visibility']
 
     def validate_name(self, value):

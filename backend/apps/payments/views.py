@@ -6,7 +6,7 @@ esto confía en lo que le llega**: el estado se le vuelve a preguntar a la pasar
 (Flow) o se verifica la firma (PayPal). Un webhook que se cree lo que dice el cuerpo es
 un botón de "actíveme el plan" abierto a internet.
 
-La facturación que sí usa la app está en `facturacion.py`, colgada del Workspace.
+La facturación que sí usa la app está en `facturacion.py`, colgada del Empresa.
 """
 
 import json
@@ -85,7 +85,7 @@ class FlowWebhookView(APIView):
         if estado == FLOW_PAGADO:
             pago.status = 'paid'
             pago.save(update_fields=['status', 'updated_at'])
-            sub = suscripcion_vigente(pago.workspace)
+            sub = suscripcion_vigente(pago.organization)
             if sub:
                 activar(sub)
         elif estado in FLOW_RECHAZADO:
@@ -118,7 +118,7 @@ class RetornoTarjetaFlowView(APIView):
 
     Acá se completa el alta: se guarda el medio de pago con lo que Flow diga que quedó
     registrado, y si había un plan elegido esperando, se suscribe. La empresa se
-    encuentra por el `customerId` que devuelve Flow — no hace falta pasar el Workspace
+    encuentra por el `customerId` que devuelve Flow — no hace falta pasar el Empresa
     por la URL, que además sería un dato que cualquiera podría cambiar a mano.
     """
 
@@ -138,7 +138,7 @@ class RetornoTarjetaFlowView(APIView):
         customer_id = datos.get('customerId', '')
         cliente = ClientePasarela.objects.filter(
             proveedor=PROVEEDOR_FLOW, customer_id=customer_id,
-        ).select_related('workspace').first()
+        ).select_related('organization').first()
         if cliente is None:
             logger.warning('Flow registró la tarjeta de un cliente que no es nuestro: %s', customer_id)
             return _pantalla_facturacion('sin-tarjeta')
@@ -146,7 +146,7 @@ class RetornoTarjetaFlowView(APIView):
         marca = datos.get('creditCardType') or 'Tarjeta'
         ultimos = datos.get('last4CardDigits') or '????'
         metodo, creado = MetodoPago.objects.get_or_create(
-            workspace=cliente.workspace,
+            organization=cliente.organization,
             proveedor=PROVEEDOR_FLOW,
             defaults={
                 'etiqueta': f'{marca} ···· {ultimos}',
@@ -167,7 +167,7 @@ class RetornoTarjetaFlowView(APIView):
             Subscription.objects
             .select_related('plan')
             .filter(
-                workspace=cliente.workspace, proveedor=PROVEEDOR_FLOW,
+                organization=cliente.organization, proveedor=PROVEEDOR_FLOW,
                 aprobada=False, status__in=Subscription.ESTADOS_VIGENTES,
             )
             .first()
@@ -200,7 +200,7 @@ class RetornoPayPalView(APIView):
 
         sub = Subscription.objects.filter(
             proveedor=PROVEEDOR_PAYPAL, id_externo=subscription_id,
-        ).select_related('workspace', 'plan').first()
+        ).select_related('organization', 'plan').first()
         if sub is None:
             return _pantalla_facturacion('rechazado')
 
@@ -251,7 +251,7 @@ class PayPalWebhookView(APIView):
             if sub:
                 monto = recurso.get('amount', {}).get('total') or '0'
                 Payment.objects.create(
-                    workspace=sub.workspace,
+                    organization=sub.organization,
                     subscription=sub,
                     proveedor=PROVEEDOR_PAYPAL,
                     moneda=MONEDA_USD,
@@ -282,7 +282,7 @@ def _sub_de_paypal(id_externo):
         return None
     return (
         Subscription.objects
-        .select_related('workspace', 'plan')
+        .select_related('organization', 'plan')
         .filter(proveedor=PROVEEDOR_PAYPAL, id_externo=id_externo)
         .first()
     )
@@ -299,7 +299,7 @@ def _activar_paypal(sub, datos):
 
     correo = (datos.get('subscriber') or {}).get('email_address') or 'cuenta de PayPal'
     metodo, creado = MetodoPago.objects.get_or_create(
-        workspace=sub.workspace,
+        organization=sub.organization,
         proveedor=PROVEEDOR_PAYPAL,
         defaults={'etiqueta': f'PayPal · {correo}', 'token_pasarela': sub.id_externo},
     )

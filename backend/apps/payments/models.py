@@ -1,10 +1,10 @@
 """Facturación: quién paga, con qué, y qué se le cobró.
 
-⭐ **El que paga es el WORKSPACE, no la persona.** Afable se vende por empresa: los
-Espacios, los archivos y los agentes son de la empresa, y los miembros entran y salen.
-Colgar la suscripción del usuario —como estaba— significaba que si el que pagó se iba,
-la empresa quedaba sin plan, y que dos personas del mismo equipo pagaban dos veces por
-lo mismo. Sólo el administrador del Workspace toca esta sección.
+⭐ **El que paga es la EMPRESA**, y un plan cubre todos sus Workspaces. Afable se vende por
+empresa: los archivos, las conexiones y los agentes son de ella, y los miembros entran y
+salen. Colgarlo de la persona —como estaba al principio— significaba que si el que pagó se
+iba, la empresa quedaba sin plan; colgarlo de un Workspace habría significado pagar una vez
+por cada área. Sólo el administrador de la empresa toca esta sección.
 
 Dos pasarelas, porque son dos públicos distintos:
 
@@ -91,8 +91,8 @@ class ClientePasarela(models.Model):
     crearía un cliente duplicado por cada intento de pago.
     """
 
-    workspace = models.ForeignKey(
-        'workspaces.Workspace', on_delete=models.CASCADE, related_name='clientes_pasarela'
+    organization = models.ForeignKey(
+        'organizations.Organization', on_delete=models.CASCADE, related_name='clientes_pasarela'
     )
     proveedor = models.CharField(max_length=20, choices=PROVEEDOR_CHOICES)
     customer_id = models.CharField(max_length=200)
@@ -102,10 +102,10 @@ class ClientePasarela(models.Model):
         db_table = 'clientes_pasarela'
         verbose_name = 'Cliente de pasarela'
         verbose_name_plural = 'Clientes de pasarela'
-        unique_together = [('workspace', 'proveedor')]
+        unique_together = [('organization', 'proveedor')]
 
     def __str__(self):
-        return f'{self.workspace.name} → {self.proveedor}:{self.customer_id}'
+        return f'{self.organization.name} → {self.proveedor}:{self.customer_id}'
 
 
 class MetodoPago(models.Model):
@@ -121,8 +121,8 @@ class MetodoPago(models.Model):
     consulta.
     """
 
-    workspace = models.ForeignKey(
-        'workspaces.Workspace', on_delete=models.CASCADE, related_name='metodos_pago'
+    organization = models.ForeignKey(
+        'organizations.Organization', on_delete=models.CASCADE, related_name='metodos_pago'
     )
     proveedor = models.CharField(max_length=20, choices=PROVEEDOR_CHOICES)
     etiqueta = models.CharField(max_length=120)
@@ -139,11 +139,11 @@ class MetodoPago(models.Model):
         ordering = ['-principal', '-creado_at']
 
     def __str__(self):
-        return f'{self.workspace.name} — {self.etiqueta}'
+        return f'{self.organization.name} — {self.etiqueta}'
 
     def marcar_principal(self):
         """Este pasa a ser el principal y los demás dejan de serlo, en un solo lugar."""
-        MetodoPago.objects.filter(workspace=self.workspace).exclude(pk=self.pk).update(
+        MetodoPago.objects.filter(organization=self.organization).exclude(pk=self.pk).update(
             principal=False
         )
         if not self.principal:
@@ -167,8 +167,8 @@ class Subscription(models.Model):
     # olvide de 'trial' y le corte el acceso a quien está probando.
     ESTADOS_VIGENTES = [ESTADO_PRUEBA, ESTADO_ACTIVA]
 
-    workspace = models.ForeignKey(
-        'workspaces.Workspace', on_delete=models.CASCADE, related_name='subscriptions'
+    organization = models.ForeignKey(
+        'organizations.Organization', on_delete=models.CASCADE, related_name='subscriptions'
     )
     plan = models.ForeignKey(Plan, on_delete=models.PROTECT, related_name='subscriptions')
     proveedor = models.CharField(max_length=20, choices=PROVEEDOR_CHOICES, default=PROVEEDOR_FLOW)
@@ -190,7 +190,7 @@ class Subscription(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f'{self.workspace.name} — {self.plan.name} ({self.status})'
+        return f'{self.organization.name} — {self.plan.name} ({self.status})'
 
     @property
     def vigente(self):
@@ -205,8 +205,8 @@ class Payment(models.Model):
         ('cancelled', 'Cancelado'),
     ]
 
-    workspace = models.ForeignKey(
-        'workspaces.Workspace', on_delete=models.CASCADE, related_name='payments'
+    organization = models.ForeignKey(
+        'organizations.Organization', on_delete=models.CASCADE, related_name='payments'
     )
     subscription = models.ForeignKey(
         Subscription, on_delete=models.SET_NULL, null=True, blank=True, related_name='payments'

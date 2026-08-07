@@ -17,7 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.workspaces.models import ROLE_ADMIN, ROLE_EDITOR
-from apps.workspaces.permissions import require_membership, require_space
+from apps.workspaces.permissions import require_membership, require_workspace
 
 from .models import Agent, AgentFavorite
 
@@ -36,7 +36,7 @@ def puede_editar_agentes(membership):
     Lo decide `Workspace.agent_creation_policy` cruzado con su rol. Un
     administrador siempre puede.
     """
-    politica = membership.workspace.agent_creation_policy
+    politica = membership.organization.agent_creation_policy
     if membership.role == ROLE_ADMIN:
         return True
     if politica == 'todos':
@@ -78,7 +78,7 @@ class AgentGalleryView(APIView):
             return Response({'detail': 'Falta el Workspace.'}, status=status.HTTP_400_BAD_REQUEST)
 
         membership = require_membership(request.user, slug)
-        organization_id = membership.workspace.organization_id
+        organization_id = membership.organization_id
         editable = puede_editar_agentes(membership)
 
         favoritos = AgentFavorite.objects.filter(user=request.user, agent=OuterRef('pk'))
@@ -94,10 +94,10 @@ class AgentGalleryView(APIView):
 
         espacio_slug = (request.query_params.get('espacio') or '').strip()
         if espacio_slug:
-            # `require_space` corta con 404 si no lo ve: pedir los agentes de un
+            # `require_workspace` corta con 404 si no lo ve: pedir los agentes de un
             # Espacio restringido ajeno no puede devolver la lista.
-            espacio = require_space(membership, espacio_slug)
-            agentes = agentes.filter(spaces=espacio)
+            espacio = require_workspace(membership, espacio_slug)
+            agentes = agentes.filter(workspaces=espacio)
 
         # Un administrador edita cualquier agente de su empresa, no solo los que creó
         # él: es lo que ya permitía el constructor (`apps/agents/builder.py`), y sin
@@ -150,7 +150,7 @@ class AgentFavoriteView(APIView):
         if not slug:
             return None, Response({'detail': 'Falta el Workspace.'}, status=status.HTTP_400_BAD_REQUEST)
         membership = require_membership(request.user, slug)
-        agent = Agent.objects.filter(pk=pk, organization_id=membership.workspace.organization_id).first()
+        agent = Agent.objects.filter(pk=pk, organization_id=membership.organization_id).first()
         if agent is None:
             return None, Response({'detail': 'Agente no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
         return agent, None

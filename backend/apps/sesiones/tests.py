@@ -44,9 +44,9 @@ class BaseSesiones(TestCase):
         )
 
         self.org = Organization.objects.create(owner=self.admin, name='Cocinas SpA')
-        self.ws = Workspace.objects.create(name='Cocinas SpA', organization=self.org)
-        self.ws.add_member(self.admin, ROLE_ADMIN)
-        self.ws.add_member(self.colega, ROLE_MEMBER)
+        self.ws = Workspace.objects.create(organization=self.org, name='General')
+        self.org.agregar_miembro(self.admin, ROLE_ADMIN)
+        self.org.agregar_miembro(self.colega, ROLE_MEMBER)
 
         self.agente = Agent.objects.create(organization=self.org, name='Cobranzas')
 
@@ -61,7 +61,7 @@ class BaseSesiones(TestCase):
         return f'{URL}{(sesion or self.sesion).slug}/{sufijo}'
 
     def q(self):
-        return {'workspace': self.ws.slug}
+        return {'workspace': self.org.slug}
 
 
 class PermisoTests(BaseSesiones):
@@ -119,8 +119,8 @@ class PermisoTests(BaseSesiones):
 
     def test_la_sesion_de_otro_workspace_no_se_alcanza_por_slug(self):
         otra_org = Organization.objects.create(owner=self.ajeno, name='Muebles Ltda')
-        otro_ws = Workspace.objects.create(name='Muebles Ltda', organization=otra_org)
-        otro_ws.add_member(self.ajeno, ROLE_ADMIN)
+        otro_ws = Workspace.objects.create(organization=otra_org, name='General')
+        otro_ws.organization.agregar_miembro(self.ajeno, ROLE_ADMIN)
         ajena = Sesion.objects.create(workspace=otro_ws, name='Cliente Rever')
 
         self.como(self.admin)
@@ -135,20 +135,20 @@ class CreacionYAjustesTests(BaseSesiones):
         """Si no, nadie podría configurar la Sesión que acaba de abrir."""
         self.como(self.colega)
         r = self.client.post(
-            URL, {'workspace': self.ws.slug, 'name': 'Cierre de mes'}, format='json',
+            URL, {'workspace': self.org.slug, 'name': 'Cierre de mes'}, format='json',
         )
         self.assertEqual(r.status_code, 201)
         self.assertEqual(r.data['mi_rol'], ROL_EDITOR)
 
     def test_sin_nombre_no_se_crea(self):
         self.como(self.admin)
-        r = self.client.post(URL, {'workspace': self.ws.slug, 'name': '  '}, format='json')
+        r = self.client.post(URL, {'workspace': self.org.slug, 'name': '  '}, format='json')
         self.assertEqual(r.status_code, 400)
 
     def test_el_slug_se_arma_solo_y_no_choca(self):
         self.como(self.admin)
         r = self.client.post(
-            URL, {'workspace': self.ws.slug, 'name': 'Cliente Rever'}, format='json',
+            URL, {'workspace': self.org.slug, 'name': 'Cliente Rever'}, format='json',
         )
         self.assertEqual(r.data['slug'], 'cliente-rever-2')
 
@@ -342,7 +342,7 @@ class ArchivosTests(BaseSesiones):
         with mock.patch('services.document_processing._summarize_text', return_value='Resumen.'):
             with mock.patch('services.indexing.indexar_documento_sin_ruido', return_value=1):
                 return self.client.post(
-                    f'{self.url("archivos/")}?workspace={self.ws.slug}',
+                    f'{self.url("archivos/")}?workspace={self.org.slug}',
                     {'file': archivo, 'title': 'Contrato'}, format='multipart',
                 )
 
@@ -365,7 +365,7 @@ class ArchivosTests(BaseSesiones):
         with mock.patch('services.document_processing._summarize_text', return_value='R.'):
             with mock.patch('services.indexing.indexar_documento_sin_ruido') as indexar:
                 self.client.post(
-                    f'{self.url("archivos/")}?workspace={self.ws.slug}',
+                    f'{self.url("archivos/")}?workspace={self.org.slug}',
                     {'file': archivo}, format='multipart',
                 )
         self.assertTrue(indexar.called)
@@ -393,7 +393,7 @@ class ArchivosTests(BaseSesiones):
     def test_sin_archivo_no_se_crea_nada(self):
         self.como(self.admin)
         r = self.client.post(
-            f'{self.url("archivos/")}?workspace={self.ws.slug}', {}, format='multipart',
+            f'{self.url("archivos/")}?workspace={self.org.slug}', {}, format='multipart',
         )
         self.assertEqual(r.status_code, 400)
 
@@ -510,7 +510,7 @@ class ConversacionEnLaSesionTests(BaseSesiones):
         from apps.agents.views import _sesion_del_pedido
 
         pedido = mock.Mock(user=self.admin, data={
-            'sesion': self.sesion.slug, 'workspace': self.ws.slug,
+            'sesion': self.sesion.slug, 'workspace': self.org.slug,
         })
         self.assertEqual(_sesion_del_pedido(pedido), self.sesion)
 
@@ -521,14 +521,14 @@ class ConversacionEnLaSesionTests(BaseSesiones):
         self.sesion.visibility = VISIBILIDAD_RESTRINGIDA
         self.sesion.save(update_fields=['visibility'])
         pedido = mock.Mock(user=self.colega, data={
-            'sesion': self.sesion.slug, 'workspace': self.ws.slug,
+            'sesion': self.sesion.slug, 'workspace': self.org.slug,
         })
         self.assertIsNone(_sesion_del_pedido(pedido))
 
     def test_sin_sesion_en_el_pedido_no_pasa_nada(self):
         from apps.agents.views import _sesion_del_pedido
 
-        pedido = mock.Mock(user=self.admin, data={'workspace': self.ws.slug})
+        pedido = mock.Mock(user=self.admin, data={'workspace': self.org.slug})
         self.assertIsNone(_sesion_del_pedido(pedido))
 
     def test_borrar_la_sesion_no_borra_la_conversacion(self):
@@ -552,13 +552,13 @@ class LaSesionPrestaContextoTests(BaseSesiones):
 
     def setUp(self):
         super().setUp()
-        from apps.workspaces.models import Space
+        from apps.workspaces.models import Workspace
 
         self.sesion.instrucciones_para_agentes = 'Acá hablamos del cliente Rever.'
         self.sesion.save(update_fields=['instrucciones_para_agentes'])
 
         # Un agente ENCERRADO en un Espacio: es el caso donde ampliar importa.
-        self.espacio = Space.objects.create(workspace=self.ws, name='Ventas')
+        self.espacio = Workspace.objects.create(organization=self.org, name='Ventas')
         self.espacio.agents.add(self.agente)
         self.doc_del_espacio = CompanyDocument.objects.create(
             organization=self.org, title='Catálogo', file='c.pdf', extracted_text='precios',
@@ -695,7 +695,7 @@ class CompartirUnaConversacionTests(BaseSesiones):
     def test_mover_el_hilo_a_una_sesion_lo_comparte(self):
         self.como(self.admin)
         r = self.client.patch(
-            self.url_conv, {'workspace': self.ws.slug, 'sesion': self.sesion.slug}, format='json',
+            self.url_conv, {'workspace': self.org.slug, 'sesion': self.sesion.slug}, format='json',
         )
         self.assertEqual(r.status_code, 200)
         self.conv.refresh_from_db()
@@ -706,7 +706,7 @@ class CompartirUnaConversacionTests(BaseSesiones):
         self.conv.save(update_fields=['sesion'])
 
         self.como(self.admin)
-        self.client.patch(self.url_conv, {'workspace': self.ws.slug, 'sesion': None}, format='json')
+        self.client.patch(self.url_conv, {'workspace': self.org.slug, 'sesion': None}, format='json')
         self.conv.refresh_from_db()
         self.assertIsNone(self.conv.sesion_id)
 
@@ -723,7 +723,7 @@ class CompartirUnaConversacionTests(BaseSesiones):
         self.como(self.colega)
         r = self.client.patch(
             f'/api/v1/agents/conversations/{del_colega.pk}/',
-            {'workspace': self.ws.slug, 'sesion': self.sesion.slug}, format='json',
+            {'workspace': self.org.slug, 'sesion': self.sesion.slug}, format='json',
         )
         self.assertEqual(r.status_code, 400)
         del_colega.refresh_from_db()
@@ -733,7 +733,7 @@ class CompartirUnaConversacionTests(BaseSesiones):
         """Compartir el trabajo de otro no es una decisión de quien lo lee."""
         self.como(self.colega)
         r = self.client.patch(
-            self.url_conv, {'workspace': self.ws.slug, 'sesion': self.sesion.slug}, format='json',
+            self.url_conv, {'workspace': self.org.slug, 'sesion': self.sesion.slug}, format='json',
         )
         self.assertEqual(r.status_code, 404)
 
@@ -806,7 +806,7 @@ class TareasCruzandoSesionesTests(BaseSesiones):
 
     def pedir(self, quien, **params):
         self.como(quien)
-        return self.client.get(self.URL, {'workspace': self.ws.slug, **params})
+        return self.client.get(self.URL, {'workspace': self.org.slug, **params})
 
     def titulos(self, r):
         return {t['title'] for t in r.data['results']}

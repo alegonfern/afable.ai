@@ -28,17 +28,17 @@ from .models import Membership
 from .permissions import IsAdmin
 
 
-def _nombre_es_el_automatico(workspace):
+def _nombre_es_el_automatico(empresa):
     """Si el nombre sigue siendo el que se le puso solo al registrarse.
 
     `create_for_owner` bautiza el Workspace "Workspace de Alexis". Mientras ese nombre
     siga ahí, la empresa no se ha presentado: el agente lo usa en el prompt y los
     comprobantes lo van a llevar impreso.
     """
-    return workspace.name.startswith('Workspace de ')
+    return empresa.name.startswith(('Workspace de ', 'Empresa de '))
 
 
-def calcular_pasos(workspace):
+def calcular_pasos(empresa):
     """Los seis pasos con su estado, en el orden en que conviene hacerlos.
 
     El orden no es arbitrario: primero lo que hace que las respuestas sirvan (quién es la
@@ -50,7 +50,7 @@ def calcular_pasos(workspace):
     from apps.organizations.models import CompanyDocument, SystemConnection
     from apps.payments.facturacion import suscripcion_vigente
 
-    org = workspace.organization
+    org = empresa
 
     documentos = CompanyDocument.objects.filter(organization=org).count() if org else 0
     conexiones = SystemConnection.objects.filter(organization=org).count() if org else 0
@@ -59,8 +59,8 @@ def calcular_pasos(workspace):
     agentes_propios = (
         Agent.objects.filter(organization=org, created_by__isnull=False).count() if org else 0
     )
-    personas = Membership.objects.filter(workspace=workspace).count()
-    invitaciones = workspace.invitations.filter(accepted_at__isnull=True).count()
+    personas = Membership.objects.filter(organization=empresa).count()
+    invitaciones = empresa.invitations.filter(accepted_at__isnull=True).count()
     # Una conversación CON RESPUESTA: haber escrito y que nadie contestara no es haber
     # probado nada. `autonoma` queda afuera porque esas las abre un Disparador por su
     # cuenta — que un agente publique solo no significa que la persona haya preguntado.
@@ -70,7 +70,7 @@ def calcular_pasos(workspace):
         .distinct().count()
         if org else 0
     )
-    suscripcion = suscripcion_vigente(workspace)
+    suscripcion = suscripcion_vigente(empresa)
 
     return [
         {
@@ -78,8 +78,8 @@ def calcular_pasos(workspace):
             'titulo': 'Diga de qué se trata su empresa',
             'ayuda': 'El nombre, el rubro y en qué anda. Es lo que el agente lee antes de '
                      'contestar cualquier cosa.',
-            'hecho': not _nombre_es_el_automatico(workspace) and bool(
-                workspace.sector or workspace.description or workspace.logo
+            'hecho': not _nombre_es_el_automatico(empresa) and bool(
+                empresa.sector or empresa.description or empresa.logo
             ),
             'ruta': '/app/admin/workspace',
             'accion': 'Completar',
@@ -140,8 +140,8 @@ class PrimerosPasosView(APIView):
     permission_classes = [IsAdmin]
 
     def get(self, request, slug):
-        workspace = request.workspace
-        pasos = calcular_pasos(workspace)
+        empresa = request.empresa
+        pasos = calcular_pasos(empresa)
         hechos = sum(1 for p in pasos if p['hecho'])
         return Response({
             'pasos': pasos,
@@ -151,12 +151,12 @@ class PrimerosPasosView(APIView):
             # cerró. La pantalla los trata igual (no dibuja nada), pero el dato sirve
             # para saber por qué.
             'terminado': hechos == len(pasos),
-            'oculto': workspace.onboarding_oculto,
+            'oculto': empresa.onboarding_oculto,
         })
 
     def post(self, request, slug):
         """Cerrarlo (o volver a abrirlo con `mostrar: true`)."""
-        workspace = request.workspace
-        workspace.onboarding_oculto = not request.data.get('mostrar', False)
-        workspace.save(update_fields=['onboarding_oculto', 'updated_at'])
-        return Response({'oculto': workspace.onboarding_oculto})
+        empresa = request.empresa
+        empresa.onboarding_oculto = not request.data.get('mostrar', False)
+        empresa.save(update_fields=['onboarding_oculto', 'updated_at'])
+        return Response({'oculto': empresa.onboarding_oculto})

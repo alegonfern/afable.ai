@@ -13,7 +13,7 @@ from rest_framework.test import APIClient
 from apps.agents.models import Agent, AgentConfig, Skill
 from apps.organizations.models import Organization, SystemConnection
 from apps.workspaces.models import (
-    ROLE_ADMIN, ROLE_EDITOR, ROLE_MEMBER, Space, Workspace,
+    ROLE_ADMIN, ROLE_EDITOR, ROLE_MEMBER, Workspace, Workspace,
 )
 
 User = get_user_model()
@@ -39,10 +39,10 @@ class BaseConstructor(TestCase):
         )
 
         self.org = Organization.objects.create(owner=self.admin, name='Cocinas SpA')
-        self.ws = Workspace.objects.create(name='Cocinas SpA', organization=self.org)
-        self.ws.add_member(self.admin, ROLE_ADMIN)
-        self.ws.add_member(self.editor, ROLE_EDITOR)
-        self.ws.add_member(self.miembro, ROLE_MEMBER)
+        self.ws = Workspace.objects.create(organization=self.org, name='General')
+        self.org.agregar_miembro(self.admin, ROLE_ADMIN)
+        self.org.agregar_miembro(self.editor, ROLE_EDITOR)
+        self.org.agregar_miembro(self.miembro, ROLE_MEMBER)
 
         self.odoo = SystemConnection.objects.create(
             organization=self.org, name='Odoo Ventas', connector_type='odoo',
@@ -50,32 +50,32 @@ class BaseConstructor(TestCase):
         self.habilidad = Skill.objects.create(
             organization=self.org, name='Tono corporativo', instructions='Trate de usted.',
         )
-        self.espacio = Space.objects.create(workspace=self.ws, name='Finanzas')
+        self.espacio = Workspace.objects.create(organization=self.org, name='Finanzas')
 
         # Empresa ajena, con sus propias cosas: nada de esto puede engancharse.
         self.ajeno = User.objects.create_user(
             username='ajeno@afable.test', email='ajeno@afable.test', password='afable123',
         )
         self.org_ajena = Organization.objects.create(owner=self.ajeno, name='Muebles Ltda')
-        self.ws_ajeno = Workspace.objects.create(name='Muebles Ltda', organization=self.org_ajena)
-        self.ws_ajeno.add_member(self.ajeno, ROLE_ADMIN)
+        self.ws_ajeno = Workspace.objects.create(organization=self.org_ajena, name='General')
+        self.org_ajena.agregar_miembro(self.ajeno, ROLE_ADMIN)
         self.sistema_ajeno = SystemConnection.objects.create(
             organization=self.org_ajena, name='SAP Ajeno', connector_type='mssql',
         )
         self.habilidad_ajena = Skill.objects.create(
             organization=self.org_ajena, name='Tono ajeno', instructions='...',
         )
-        self.espacio_ajeno = Space.objects.create(workspace=self.ws_ajeno, name='Ajeno')
+        self.espacio_ajeno = Workspace.objects.create(organization=self.org_ajena, name='Ajeno')
 
     def crear(self, quien, **extra):
         self.client.force_authenticate(user=quien)
-        cuerpo = {'workspace': self.ws.slug, 'name': 'Analista de Cobranzas'}
+        cuerpo = {'workspace': self.org.slug, 'name': 'Analista de Cobranzas'}
         cuerpo.update(extra)
         return self.client.post(URL, cuerpo, format='json')
 
 
 class PermisoParaCrearTests(BaseConstructor):
-    """`Workspace.agent_creation_policy` cruzado con el rol. El default es 'editores'."""
+    """`Organization.agent_creation_policy` cruzado con el rol. El default es 'editores'."""
 
     def test_un_administrador_crea(self):
         r = self.crear(self.admin)
@@ -91,14 +91,14 @@ class PermisoParaCrearTests(BaseConstructor):
         self.assertFalse(Agent.objects.filter(name='Analista de Cobranzas').exists())
 
     def test_con_la_politica_abierta_un_miembro_crea(self):
-        self.ws.agent_creation_policy = 'todos'
-        self.ws.save(update_fields=['agent_creation_policy'])
+        self.org.agent_creation_policy = 'todos'
+        self.org.save(update_fields=['agent_creation_policy'])
         r = self.crear(self.miembro)
         self.assertEqual(r.status_code, 201)
 
     def test_con_la_politica_cerrada_solo_el_administrador_crea(self):
-        self.ws.agent_creation_policy = 'admins'
-        self.ws.save(update_fields=['agent_creation_policy'])
+        self.org.agent_creation_policy = 'admins'
+        self.org.save(update_fields=['agent_creation_policy'])
         self.assertEqual(self.crear(self.editor).status_code, 403)
         self.assertEqual(self.crear(self.admin).status_code, 201)
 
@@ -150,7 +150,7 @@ class CreacionTests(BaseConstructor):
         self.crear(self.admin)
         self.client.force_authenticate(user=self.ajeno)
         r = self.client.post(
-            URL, {'workspace': self.ws_ajeno.slug, 'name': 'Analista de Cobranzas'}, format='json',
+            URL, {'workspace': self.org_ajena.slug, 'name': 'Analista de Cobranzas'}, format='json',
         )
         self.assertEqual(r.status_code, 201)
 
@@ -172,7 +172,7 @@ class EngancheTests(BaseConstructor):
         agente = Agent.objects.get(pk=r.data['id'])
         self.assertEqual(list(agente.systems.values_list('id', flat=True)), [self.odoo.id])
         self.assertEqual(list(agente.skills.values_list('id', flat=True)), [self.habilidad.id])
-        self.assertEqual(list(agente.spaces.values_list('id', flat=True)), [self.espacio.id])
+        self.assertEqual(list(agente.workspaces.values_list('id', flat=True)), [self.espacio.id])
 
     def test_no_engancha_nada_de_otra_empresa(self):
         r = self.crear(
@@ -184,17 +184,16 @@ class EngancheTests(BaseConstructor):
         agente = Agent.objects.get(pk=r.data['id'])
         self.assertEqual(agente.systems.count(), 0)
         self.assertEqual(agente.skills.count(), 0)
-        self.assertEqual(agente.spaces.count(), 0)
+        self.assertEqual(agente.workspaces.count(), 0)
 
     def test_un_espacio_restringido_ajeno_no_se_alcanza(self):
         """Meter un agente propio en un Espacio restringido seria alcanzar sus datos."""
         from apps.workspaces.models import VISIBILITY_RESTRICTED
 
-        reservado = Space.objects.create(
-            workspace=self.ws, name='Directorio', visibility=VISIBILITY_RESTRICTED,
+        reservado = Workspace.objects.create(organization=self.org, name='Directorio', visibility=VISIBILITY_RESTRICTED,
         )
         r = self.crear(self.editor, space_ids=[reservado.id])
-        self.assertEqual(Agent.objects.get(pk=r.data['id']).spaces.count(), 0)
+        self.assertEqual(Agent.objects.get(pk=r.data['id']).workspaces.count(), 0)
 
     def test_una_lista_con_basura_no_rompe(self):
         r = self.crear(self.admin, system_ids=['abc', None, self.odoo.id])
@@ -215,11 +214,11 @@ class EdicionTests(BaseConstructor):
 
     def patch(self, quien, **datos):
         self.client.force_authenticate(user=quien)
-        return self.client.patch(self.url, {'workspace': self.ws.slug, **datos}, format='json')
+        return self.client.patch(self.url, {'workspace': self.org.slug, **datos}, format='json')
 
     def test_se_lee_el_agente_para_llenar_el_formulario(self):
         self.client.force_authenticate(user=self.admin)
-        r = self.client.get(self.url, {'workspace': self.ws.slug})
+        r = self.client.get(self.url, {'workspace': self.org.slug})
         self.assertEqual(r.status_code, 200)
         self.assertEqual(r.data['system_ids'], [self.odoo.id])
         self.assertEqual(r.data['skill_ids'], [self.habilidad.id])
@@ -257,7 +256,7 @@ class EdicionTests(BaseConstructor):
         ajeno = Agent.objects.create(organization=self.org_ajena, name='Ajeno')
         self.client.force_authenticate(user=self.admin)
         r = self.client.patch(
-            f'{URL}{ajeno.pk}/', {'workspace': self.ws.slug, 'name': 'Robado'}, format='json',
+            f'{URL}{ajeno.pk}/', {'workspace': self.org.slug, 'name': 'Robado'}, format='json',
         )
         self.assertEqual(r.status_code, 404)
 
@@ -276,17 +275,17 @@ class OpcionesTests(BaseConstructor):
 
     def test_trae_todo_lo_que_el_formulario_necesita(self):
         self.client.force_authenticate(user=self.admin)
-        r = self.client.get(URL_OPCIONES, {'workspace': self.ws.slug})
+        r = self.client.get(URL_OPCIONES, {'workspace': self.org.slug})
         self.assertEqual(r.status_code, 200)
         self.assertTrue(r.data['puede_crear'])
         self.assertEqual([s['id'] for s in r.data['sistemas']], [self.odoo.id])
         self.assertEqual([h['id'] for h in r.data['habilidades']], [self.habilidad.id])
-        self.assertEqual([e['id'] for e in r.data['espacios']], [self.espacio.id])
+        self.assertIn(self.espacio.id, [e['id'] for e in r.data['espacios']])
         self.assertIn('models', r.data['modelos'])
 
     def test_no_ofrece_nada_de_otra_empresa(self):
         self.client.force_authenticate(user=self.admin)
-        r = self.client.get(URL_OPCIONES, {'workspace': self.ws.slug})
+        r = self.client.get(URL_OPCIONES, {'workspace': self.org.slug})
         self.assertNotIn(self.sistema_ajeno.id, [s['id'] for s in r.data['sistemas']])
         self.assertNotIn(self.habilidad_ajena.id, [h['id'] for h in r.data['habilidades']])
         self.assertNotIn(self.espacio_ajeno.id, [e['id'] for e in r.data['espacios']])
@@ -294,7 +293,7 @@ class OpcionesTests(BaseConstructor):
     def test_un_miembro_ve_las_opciones_pero_no_puede_crear(self):
         """La pantalla necesita poder decir por que no, no un 403 pelado."""
         self.client.force_authenticate(user=self.miembro)
-        r = self.client.get(URL_OPCIONES, {'workspace': self.ws.slug})
+        r = self.client.get(URL_OPCIONES, {'workspace': self.org.slug})
         self.assertEqual(r.status_code, 200)
         self.assertFalse(r.data['puede_crear'])
 
@@ -367,7 +366,7 @@ class QuienVeElLapizTests(BaseConstructor):
 
     def galeria(self, quien):
         self.client.force_authenticate(user=quien)
-        r = self.client.get('/api/v1/agents/gallery/', {'workspace': self.ws.slug})
+        r = self.client.get('/api/v1/agents/gallery/', {'workspace': self.org.slug})
         return {a['name']: a['editable'] for a in r.data['results']}
 
     def test_un_administrador_edita_cualquiera(self):
@@ -386,7 +385,7 @@ class QuienVeElLapizTests(BaseConstructor):
     def test_la_pestana_de_editables_le_muestra_todos_al_administrador(self):
         self.client.force_authenticate(user=self.admin)
         r = self.client.get(
-            '/api/v1/agents/gallery/', {'workspace': self.ws.slug, 'tab': 'editables'},
+            '/api/v1/agents/gallery/', {'workspace': self.org.slug, 'tab': 'editables'},
         )
         nombres = [a['name'] for a in r.data['results']]
         self.assertIn('Afable', nombres)
@@ -395,7 +394,7 @@ class QuienVeElLapizTests(BaseConstructor):
     def test_la_pestana_de_editables_le_muestra_los_suyos_al_editor(self):
         self.client.force_authenticate(user=self.editor)
         r = self.client.get(
-            '/api/v1/agents/gallery/', {'workspace': self.ws.slug, 'tab': 'editables'},
+            '/api/v1/agents/gallery/', {'workspace': self.org.slug, 'tab': 'editables'},
         )
         nombres = [a['name'] for a in r.data['results']]
         self.assertEqual(nombres, ['Del Editor'])
@@ -429,7 +428,7 @@ class ConfigDeEmpresaEnElConstructorTests(BaseConstructor):
         self.client.force_authenticate(user=self.admin)
         self.client.patch(
             f'{URL}{r.data["id"]}/',
-            {'workspace': self.ws.slug, 'info_util': 'El año comercial cierra en marzo.'},
+            {'workspace': self.org.slug, 'info_util': 'El año comercial cierra en marzo.'},
             format='json',
         )
         config = AgentConfig.objects.get(agent_id=r.data['id'])
@@ -442,14 +441,14 @@ class ConfigDeEmpresaEnElConstructorTests(BaseConstructor):
 
         self.client.force_authenticate(user=self.admin)
         self.client.patch(
-            f'{URL}{r.data["id"]}/', {'workspace': self.ws.slug, 'datos': ''}, format='json',
+            f'{URL}{r.data["id"]}/', {'workspace': self.org.slug, 'datos': ''}, format='json',
         )
         self.assertFalse(AgentConfig.objects.get(agent_id=r.data['id']).esta_configurado)
 
     def test_la_ficha_los_devuelve_para_llenar_el_formulario(self):
         r = self.crear(self.admin, reglas='Sin IVA.')
         self.client.force_authenticate(user=self.admin)
-        ficha = self.client.get(f'{URL}{r.data["id"]}/', {'workspace': self.ws.slug})
+        ficha = self.client.get(f'{URL}{r.data["id"]}/', {'workspace': self.org.slug})
         self.assertEqual(ficha.data['reglas'], 'Sin IVA.')
         self.assertTrue(ficha.data['configurado'])
 
@@ -457,7 +456,7 @@ class ConfigDeEmpresaEnElConstructorTests(BaseConstructor):
         r = self.crear(self.admin, datos='Facturas de Odoo.')
         self.client.force_authenticate(user=self.admin)
         self.client.patch(
-            f'{URL}{r.data["id"]}/', {'workspace': self.ws.slug, 'name': 'Otro nombre'},
+            f'{URL}{r.data["id"]}/', {'workspace': self.org.slug, 'name': 'Otro nombre'},
             format='json',
         )
         self.assertEqual(AgentConfig.objects.get(agent_id=r.data['id']).datos, 'Facturas de Odoo.')
@@ -465,7 +464,7 @@ class ConfigDeEmpresaEnElConstructorTests(BaseConstructor):
     def test_las_opciones_dicen_quien_puede_configurarlos(self):
         for quien, esperado in ((self.admin, True), (self.editor, False)):
             self.client.force_authenticate(user=quien)
-            r = self.client.get(URL_OPCIONES, {'workspace': self.ws.slug})
+            r = self.client.get(URL_OPCIONES, {'workspace': self.org.slug})
             self.assertEqual(r.data['puede_configurar_empresa'], esperado)
 
 

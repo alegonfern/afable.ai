@@ -26,7 +26,7 @@ from django.utils import timezone as _tz
 
 from apps.organizations.models import SystemConnection
 from apps.workspaces.models import ROLE_ADMIN
-from apps.workspaces.permissions import require_membership, spaces_visible_to
+from apps.workspaces.permissions import require_membership, workspaces_visible_to
 
 from .gallery import puede_editar_agentes
 from .models import Agent, AgentConfig, Skill
@@ -144,7 +144,7 @@ def _serializar(agent, detalle=True):
             'recommended_frequency': agent.recommended_frequency,
             'system_ids': sorted(agent.systems.values_list('id', flat=True)),
             'skill_ids': sorted(agent.skills.values_list('id', flat=True)),
-            'space_ids': sorted(agent.spaces.values_list('id', flat=True)),
+            'space_ids': sorted(agent.workspaces.values_list('id', flat=True)),
         })
         config = getattr(agent, 'config', None)
         datos.update({
@@ -166,7 +166,7 @@ def _enganchar(agent, datos, membership):
     Una clave ausente no se toca (asi un PATCH parcial no borra lo que no nombro);
     una lista vacia si vacia la coleccion.
     """
-    org_id = membership.workspace.organization_id
+    org_id = membership.organization_id
 
     if 'system_ids' in datos:
         agent.systems.set(SystemConnection.objects.filter(
@@ -179,8 +179,8 @@ def _enganchar(agent, datos, membership):
     if 'space_ids' in datos:
         # Solo Espacios que esta persona ve: si no, se podria meter un agente en un
         # Espacio restringido ajeno y con eso alcanzar sus datos.
-        visibles = spaces_visible_to(membership).filter(pk__in=_ids(datos['space_ids']))
-        agent.spaces.set(visibles)
+        visibles = workspaces_visible_to(membership).filter(pk__in=_ids(datos['space_ids']))
+        agent.workspaces.set(visibles)
 
 
 def _ids(valor):
@@ -212,7 +212,7 @@ class OpcionesConstructorView(APIView):
             return Response({'detail': 'Falta el Workspace.'}, status=status.HTTP_400_BAD_REQUEST)
 
         membership = require_membership(request.user, slug)
-        org_id = membership.workspace.organization_id
+        org_id = membership.organization_id
 
         from .views import modelos_disponibles
 
@@ -236,7 +236,7 @@ class OpcionesConstructorView(APIView):
             ],
             'espacios': [
                 {'id': e.id, 'name': e.name, 'slug': e.slug, 'visibility': e.visibility}
-                for e in spaces_visible_to(membership).order_by('name')
+                for e in workspaces_visible_to(membership).order_by('name')
             ],
         })
 
@@ -261,7 +261,7 @@ class AgenteConstructorListCreateView(APIView):
                 {'detail': 'El agente necesita un nombre.'}, status=status.HTTP_400_BAD_REQUEST,
             )
 
-        org_id = membership.workspace.organization_id
+        org_id = membership.organization_id
         if Agent.objects.filter(organization_id=org_id, name__iexact=campos['name']).exists():
             return Response(
                 {'detail': f'Ya existe un agente llamado «{campos["name"]}» en esta empresa.'},
@@ -300,7 +300,7 @@ class AgenteConstructorDetailView(APIView):
             return None, None, Response({'detail': str(e)}, status=status.HTTP_403_FORBIDDEN)
 
         agent = Agent.objects.filter(
-            pk=pk, organization_id=membership.workspace.organization_id,
+            pk=pk, organization_id=membership.organization_id,
         ).first()
         if agent is None:
             return None, None, Response(
@@ -327,7 +327,7 @@ class AgenteConstructorDetailView(APIView):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
             choca = Agent.objects.filter(
-                organization_id=membership.workspace.organization_id,
+                organization_id=membership.organization_id,
                 name__iexact=campos['name'],
             ).exclude(pk=agent.pk).exists()
             if choca:

@@ -110,8 +110,11 @@ class SesionListCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        from apps.workspaces.models import Workspace
+
         sesion = Sesion.objects.create(
-            workspace=membership.workspace, created_by=request.user,
+            workspace=Workspace.general_de(membership.organization, request.user),
+            created_by=request.user,
             visibility=visibilidad or 'abierta', **campos,
         )
         # Quien la crea queda editor: si no, nadie podria configurar la Sesion que
@@ -176,7 +179,7 @@ class SesionDetailView(APIView):
                 from apps.agents.models import Agent
 
                 agente = Agent.objects.filter(
-                    organization_id=membership.workspace.organization_id,
+                    organization_id=membership.organization_id,
                     pk=agente_id, is_active=True,
                 ).first()
                 if agente is None:
@@ -200,7 +203,7 @@ class SesionDetailView(APIView):
             from apps.agents.models import Skill
 
             sesion.habilidades_por_defecto.set(Skill.objects.filter(
-                organization_id=membership.workspace.organization_id,
+                organization_id=membership.organization_id,
                 pk__in=_ids(request.data.get('habilidad_ids')),
             ))
         return Response(
@@ -253,7 +256,7 @@ class SesionMiembrosView(APIView):
         from apps.workspaces.models import Membership
 
         del_workspace = Membership.objects.filter(
-            workspace=membership.workspace, user_id__in=_ids(request.data.get('ids')),
+            organization=membership.organization, user_id__in=_ids(request.data.get('ids')),
         ).select_related('user')
         if not del_workspace.exists():
             return Response(
@@ -292,10 +295,10 @@ class SesionDisponiblesView(APIView):
 
         from apps.agents.models import Agent, Skill
 
-        org_id = membership.workspace.organization_id
+        org_id = membership.organization_id
         ya_estan = set(sesion.miembros.values_list('user_id', flat=True))
         personas = Membership.objects.filter(
-            workspace=membership.workspace,
+            organization=membership.organization,
         ).exclude(user_id__in=ya_estan).select_related('user')
         return Response({
             'agentes': [

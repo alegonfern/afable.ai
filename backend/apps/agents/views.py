@@ -297,13 +297,11 @@ def _build_onboarding_context(user, agent=None, mention_system_id=None, consulta
     from apps.workspaces.permissions import membership_por_organizacion  # noqa: F401
     from apps.workspaces.models import Membership
 
-    del_workspace = (
-        Membership.objects.filter(user=user)
-        .exclude(workspace__organization__isnull=True)
-        .select_related('workspace__organization')
-        .first()
-    )
-    org_de_pertenencia = del_workspace.workspace.organization if del_workspace else None
+    # La empresa sale de la PERTENENCIA y no de la propiedad: resolverla por `owner`
+    # dejaba a cualquier miembro que no fuera el dueño con el prompt de "todavía no
+    # configuraste tu empresa" — en un equipo de cinco, cuatro sin ver un solo documento.
+    membresia = Membership.objects.filter(user=user).select_related('organization').first()
+    org_de_pertenencia = membresia.organization if membresia else None
 
     orgs = Organization.objects.filter(owner=user).exclude(name="Personal")
     has_org = bool(org_de_pertenencia) or orgs.exists()
@@ -687,13 +685,13 @@ def _espacio_del_pedido(request):
     workspace_slug = (request.data.get('workspace') or '').strip()
     if not espacio_slug or not workspace_slug:
         return None
-    from apps.workspaces.permissions import require_space, resolve_membership
+    from apps.workspaces.permissions import require_workspace, resolve_membership
 
     membership = resolve_membership(request.user, workspace_slug)
     if membership is None:
         return None
     try:
-        return require_space(membership, espacio_slug)
+        return require_workspace(membership, espacio_slug)
     except NotFound:
         return None
 
@@ -1188,14 +1186,10 @@ class AgentListCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         org = serializer.validated_data['organization']
 
-        workspace = Workspace.objects.filter(organization=org).first()
-        if workspace is None:
-            return Response(
-                {'detail': 'Esa empresa todavia no tiene un Workspace.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        # La empresa ES el nivel de arriba: se le pregunta a ella por su slug, sin
+        # rebotar en un Workspace intermedio como cuando eran lo mismo.
         try:
-            _membership_que_edita(request.user, workspace.slug)
+            _membership_que_edita(request.user, org.slug)
         except NoPuedeCrear as e:
             return Response({'detail': str(e)}, status=status.HTTP_403_FORBIDDEN)
 
@@ -1394,7 +1388,7 @@ class UserConversationDetailView(APIView):
                 slug = (request.data.get('workspace') or '').strip()
                 membership = resolve_membership(request.user, slug) if slug else None
                 sesion = (
-                    Sesion.objects.filter(workspace=membership.workspace, slug=pedida).first()
+                    Sesion.objects.filter(workspace__organization=membership.organization, slug=pedida).first()
                     if membership else None
                 )
                 if sesion is None or sesion.rol_de(request.user, membership) is None:
@@ -1701,7 +1695,7 @@ class ConversationBranchView(APIView):
             )
 
         rama = Conversation.objects.create(
-            agent=original.agent, user=request.user, space=original.space,
+            agent=original.agent, user=request.user, workspace=original.workspace,
             title=f'{original.title or "Conversación"} (rama)'[:500],
         )
         Message.objects.bulk_create([

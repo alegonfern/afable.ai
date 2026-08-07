@@ -1,6 +1,6 @@
-"""La facturación de un Workspace: plan, medios de pago y cartola.
+"""La facturación de un Empresa: plan, medios de pago y cartola.
 
-Todo lo de acá exige ser **administrador** del Workspace (`IsAdmin`), que es el mismo
+Todo lo de acá exige ser **administrador** del Empresa (`IsAdmin`), que es el mismo
 embudo que usa el resto de la app. Un editor puede subir archivos y correr agentes; darle
 de baja el plan a la empresa es otra cosa.
 
@@ -45,19 +45,19 @@ PROVEEDORES = [p[0] for p in PROVEEDOR_CHOICES]
 PAYPAL_PRODUCT_ID = 'AFABLE-SUSCRIPCION'
 
 
-def email_de_facturacion(workspace, usuario=None):
+def email_de_facturacion(empresa, usuario=None):
     """A qué correo van los comprobantes.
 
     El de la empresa si lo cargó; si no, el del administrador que está contratando.
     Un solo lugar para que la pasarela, el comprobante y el aviso de cobro rechazado
     no terminen mandándose a tres direcciones distintas.
     """
-    if workspace.billing_email:
-        return workspace.billing_email
+    if empresa.billing_email:
+        return empresa.billing_email
     return usuario.email if usuario else ''
 
 
-def suscripcion_vigente(workspace):
+def suscripcion_vigente(empresa):
     """La suscripción que manda hoy en esa empresa, o None.
 
     Es la consulta que hacen todas las vistas, y está acá para que ninguna se olvide de
@@ -70,7 +70,7 @@ def suscripcion_vigente(workspace):
     return (
         Subscription.objects
         .select_related('plan')
-        .filter(workspace=workspace, status__in=Subscription.ESTADOS_VIGENTES)
+        .filter(organization=empresa, status__in=Subscription.ESTADOS_VIGENTES)
         .order_by('-aprobada', '-created_at')
         .first()
     )
@@ -89,36 +89,36 @@ def activar(sub):
     sub.save(update_fields=['status', 'aprobada', 'updated_at'])
 
     Subscription.objects.filter(
-        workspace=sub.workspace, status__in=Subscription.ESTADOS_VIGENTES,
+        organization=sub.organization, status__in=Subscription.ESTADOS_VIGENTES,
     ).exclude(pk=sub.pk).update(status=Subscription.ESTADO_CANCELADA)
     return sub
 
 
-def _cliente_pasarela(workspace, proveedor, crear_en_flow=None, email=''):
+def _cliente_pasarela(empresa, proveedor, crear_en_flow=None, email=''):
     """El id de cliente de esa empresa en esa pasarela, creándolo si es la primera vez.
 
     `crear_en_flow` recibe el `FlowClient` ya armado. Se pasa desde afuera para que la
     prueba pueda simular la pasarela sin que esta función sepa de mocks.
     """
-    fila = ClientePasarela.objects.filter(workspace=workspace, proveedor=proveedor).first()
+    fila = ClientePasarela.objects.filter(organization=empresa, proveedor=proveedor).first()
     if fila:
         return fila
 
     if proveedor == PROVEEDOR_FLOW:
         datos = crear_en_flow.create_customer(
-            name=workspace.name,
+            name=empresa.name,
             email=email,
-            external_id=f'ws-{workspace.id}',
+            external_id=f'ws-{empresa.id}',
         )
         customer_id = datos.get('customerId', '')
     else:
         # PayPal no tiene "customer": el pagador se identifica con su cuenta al
         # aprobar. Se guarda igual la fila para que la pantalla pueda decir "ya está
         # conectado con PayPal" sin preguntarle a PayPal.
-        customer_id = f'ws-{workspace.id}'
+        customer_id = f'ws-{empresa.id}'
 
     return ClientePasarela.objects.create(
-        workspace=workspace, proveedor=proveedor, customer_id=customer_id,
+        organization=empresa, proveedor=proveedor, customer_id=customer_id,
     )
 
 
@@ -153,17 +153,17 @@ class EstadoFacturacionView(APIView):
     permission_classes = [IsAdmin]
 
     def get(self, request, slug):
-        workspace = request.workspace
-        sub = suscripcion_vigente(workspace)
+        empresa = request.empresa
+        sub = suscripcion_vigente(empresa)
         paypal_disponible = PayPalClient().configurado
 
         return Response({
             'suscripcion': SubscriptionSerializer(sub).data if sub else None,
             'metodos_pago': MetodoPagoSerializer(
-                MetodoPago.objects.filter(workspace=workspace), many=True,
+                MetodoPago.objects.filter(organization=empresa), many=True,
             ).data,
             'cobros': PaymentSerializer(
-                Payment.objects.filter(workspace=workspace)[:24], many=True,
+                Payment.objects.filter(organization=empresa)[:24], many=True,
             ).data,
             'planes': PlanSerializer(Plan.objects.filter(is_active=True), many=True).data,
             # Cuáles se pueden ofrecer HOY. Sin esto la pantalla mostraría un botón de
@@ -180,7 +180,7 @@ class SuscribirView(APIView):
     permission_classes = [IsAdmin]
 
     def post(self, request, slug):
-        workspace = request.workspace
+        empresa = request.empresa
         plan_id = request.data.get('plan_id')
         proveedor = request.data.get('proveedor', PROVEEDOR_FLOW)
 
@@ -207,26 +207,26 @@ class SuscribirView(APIView):
             )
 
         if proveedor == PROVEEDOR_PAYPAL:
-            return self._con_paypal(request, workspace, plan)
-        return self._con_flow(request, workspace, plan)
+            return self._con_paypal(request, empresa, plan)
+        return self._con_flow(request, empresa, plan)
 
     # ── Flow ────────────────────────────────────────────────────────────────────
 
-    def _con_flow(self, request, workspace, plan):
+    def _con_flow(self, request, empresa, plan):
         client = FlowClient()
         try:
             cliente = _cliente_pasarela(
-                workspace, PROVEEDOR_FLOW, crear_en_flow=client,
-                email=email_de_facturacion(workspace, request.user),
+                empresa, PROVEEDOR_FLOW, crear_en_flow=client,
+                email=email_de_facturacion(empresa, request.user),
             )
         except Exception as e:
             return Response({'detail': f'Flow no respondió: {e}'}, status=status.HTTP_502_BAD_GATEWAY)
 
         tarjeta = MetodoPago.objects.filter(
-            workspace=workspace, proveedor=PROVEEDOR_FLOW,
+            organization=empresa, proveedor=PROVEEDOR_FLOW,
         ).exclude(token_pasarela='').first()
 
-        sub = self._anotar_intencion(workspace, plan, PROVEEDOR_FLOW)
+        sub = self._anotar_intencion(empresa, plan, PROVEEDOR_FLOW)
 
         if tarjeta is None:
             # Sin tarjeta registrada no se puede suscribir en Flow. Se manda a
@@ -274,7 +274,7 @@ class SuscribirView(APIView):
 
     # ── PayPal ──────────────────────────────────────────────────────────────────
 
-    def _con_paypal(self, request, workspace, plan):
+    def _con_paypal(self, request, empresa, plan):
         client = PayPalClient()
         if not client.configurado:
             return Response(
@@ -282,8 +282,8 @@ class SuscribirView(APIView):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        _cliente_pasarela(workspace, PROVEEDOR_PAYPAL)
-        sub = self._anotar_intencion(workspace, plan, PROVEEDOR_PAYPAL)
+        _cliente_pasarela(empresa, PROVEEDOR_PAYPAL)
+        sub = self._anotar_intencion(empresa, plan, PROVEEDOR_PAYPAL)
 
         frente = settings.FRONTEND_URL
         try:
@@ -297,10 +297,10 @@ class SuscribirView(APIView):
             )
             id_externo, aprobacion = client.crear_suscripcion(
                 plan_id=plan.id,
-                email=email_de_facturacion(workspace, request.user),
+                email=email_de_facturacion(empresa, request.user),
                 url_retorno=f'{settings.BACKEND_URL}/api/v1/payments/paypal/retorno/',
                 url_cancelacion=f'{frente}/app/admin/facturacion?paypal=cancelado',
-                nombre_empresa=workspace.name,
+                nombre_organization=empresa.name,
             )
         except PayPalError as e:
             sub.delete()
@@ -318,14 +318,14 @@ class SuscribirView(APIView):
     # ── Común ───────────────────────────────────────────────────────────────────
 
     @staticmethod
-    def _anotar_intencion(workspace, plan, proveedor):
+    def _anotar_intencion(empresa, plan, proveedor):
         """Deja anotado el plan que se eligió, todavía sin aprobar.
 
         No toca el plan anterior: eso lo hace `activar` cuando la pasarela confirma.
         Una intención de pago no puede dar de baja un plan que se está pagando.
         """
         return Subscription.objects.create(
-            workspace=workspace,
+            organization=empresa,
             plan=plan,
             proveedor=proveedor,
             moneda=MONEDA_DE_PROVEEDOR[proveedor],
@@ -338,7 +338,7 @@ class CancelarSuscripcionView(APIView):
     permission_classes = [IsAdmin]
 
     def post(self, request, slug):
-        sub = suscripcion_vigente(request.workspace)
+        sub = suscripcion_vigente(request.empresa)
         if sub is None:
             return Response({'detail': 'No hay ningún plan activo.'},
                             status=status.HTTP_404_NOT_FOUND)
@@ -367,7 +367,7 @@ class MetodosPagoView(APIView):
 
     def get(self, request, slug):
         return Response(MetodoPagoSerializer(
-            MetodoPago.objects.filter(workspace=request.workspace), many=True,
+            MetodoPago.objects.filter(organization=request.empresa), many=True,
         ).data)
 
     def post(self, request, slug):
@@ -390,8 +390,8 @@ class MetodosPagoView(APIView):
         client = FlowClient()
         try:
             cliente = _cliente_pasarela(
-                request.workspace, PROVEEDOR_FLOW, crear_en_flow=client,
-                email=email_de_facturacion(request.workspace, request.user),
+                request.empresa, PROVEEDOR_FLOW, crear_en_flow=client,
+                email=email_de_facturacion(request.empresa, request.user),
             )
             datos = client.register_card(
                 customer_id=cliente.customer_id,
@@ -409,14 +409,14 @@ class MetodoPagoDetalleView(APIView):
     permission_classes = [IsAdmin]
 
     def _fila(self, request, pk):
-        return MetodoPago.objects.filter(workspace=request.workspace, pk=pk).first()
+        return MetodoPago.objects.filter(organization=request.empresa, pk=pk).first()
 
     def delete(self, request, slug, pk):
         metodo = self._fila(request, pk)
         if metodo is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
 
-        sub = suscripcion_vigente(request.workspace)
+        sub = suscripcion_vigente(request.empresa)
         if sub and sub.proveedor == metodo.proveedor:
             # Quitar el medio con el que se está pagando dejaría una suscripción que
             # no se puede cobrar: la próxima factura se rechaza y la empresa se
@@ -429,7 +429,7 @@ class MetodoPagoDetalleView(APIView):
 
         if metodo.proveedor == PROVEEDOR_FLOW:
             cliente = ClientePasarela.objects.filter(
-                workspace=request.workspace, proveedor=PROVEEDOR_FLOW,
+                organization=request.empresa, proveedor=PROVEEDOR_FLOW,
             ).first()
             if cliente:
                 try:
@@ -444,7 +444,7 @@ class MetodoPagoDetalleView(APIView):
         # La empresa no puede quedar sin principal habiendo medios: el próximo cobro
         # tiene que saber contra qué va.
         if era_principal:
-            otro = MetodoPago.objects.filter(workspace=request.workspace).first()
+            otro = MetodoPago.objects.filter(organization=request.empresa).first()
             if otro:
                 otro.marcar_principal()
 
@@ -455,7 +455,7 @@ class MetodoPagoPrincipalView(APIView):
     permission_classes = [IsAdmin]
 
     def post(self, request, slug, pk):
-        metodo = MetodoPago.objects.filter(workspace=request.workspace, pk=pk).first()
+        metodo = MetodoPago.objects.filter(organization=request.empresa, pk=pk).first()
         if metodo is None:
             return Response(status=status.HTTP_404_NOT_FOUND)
         metodo.marcar_principal()

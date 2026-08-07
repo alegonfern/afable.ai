@@ -2,6 +2,8 @@ import logging
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+
+from apps.organizations.models import Organization
 from django.core.mail import send_mail
 from django.utils import timezone
 from rest_framework import status
@@ -10,16 +12,16 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import ROLE_ADMIN, Invitation, Membership, Space, Workspace
+from .models import ROLE_ADMIN, Invitation, Membership, Workspace
 from .permissions import (
-    IsAdmin, IsEditor, IsMember, require_space, spaces_visible_to, workspaces_of,
+    IsAdmin, IsEditor, IsMember, empresas_of, require_workspace, workspaces_visible_to,
 )
 from .serializers import (
     SECTORES,
+    EmpresaCreateSerializer, EmpresaSerializer,
     InvitationCreateSerializer, InvitationPreviewSerializer, InvitationSerializer,
     MembershipRoleSerializer, MembershipSerializer,
-    SpaceDetailSerializer, SpaceListSerializer, SpaceWriteSerializer,
-    WorkspaceCreateSerializer, WorkspaceSerializer,
+    WorkspaceDetailSerializer, WorkspaceListSerializer, WorkspaceWriteSerializer,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,14 +40,14 @@ def _send_invitation_email(invitation):
         quien = invitation.invited_by.get_full_name() or invitation.invited_by.email
 
     cuerpo = (
-        f'{quien or "Alguien"} lo invitó a unirse al Workspace '
-        f'"{invitation.workspace.name}" en Afable.\n\n'
+        f'{quien or "Alguien"} lo invitó a unirse a la empresa '
+        f'"{invitation.organization.name}" en Afable.\n\n'
         f'Para aceptar la invitación, abra este enlace:\n{link}\n\n'
         f'El enlace vence el {invitation.expires_at.strftime("%d-%m-%Y")}.\n'
     )
     try:
         send_mail(
-            subject=f'Afable — Invitación al Workspace {invitation.workspace.name}',
+            subject=f'Afable — Invitación a {invitation.organization.name}',
             message=cuerpo,
             from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'afable@localhost'),
             recipient_list=[invitation.email],
@@ -57,39 +59,42 @@ def _send_invitation_email(invitation):
         return False
 
 
-class WorkspaceListCreateView(APIView):
-    """Los Workspace del usuario (para el conmutador) y la creación de uno nuevo."""
+class EmpresaListCreateView(APIView):
+    """Las Empresas de la persona (para el conmutador) y la creación de una nueva."""
 
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        memberships = workspaces_of(request.user)
-        roles = {m.workspace_id: m.role for m in memberships}
-        serializer = WorkspaceSerializer(
-            [m.workspace for m in memberships], many=True,
+        memberships = empresas_of(request.user)
+        roles = {m.organization_id: m.role for m in memberships}
+        serializer = EmpresaSerializer(
+            [m.organization for m in memberships], many=True,
             context={'request': request, 'roles': roles},
         )
         return Response(serializer.data)
 
     def post(self, request):
-        serializer = WorkspaceCreateSerializer(data=request.data)
+        serializer = EmpresaCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        workspace = serializer.save()
-        workspace.add_member(request.user, ROLE_ADMIN)
-        # Puente con la app anterior: el chat, las conexiones y los documentos
-        # todavia cuelgan de Organization (ver Workspace.ensure_organization).
-        workspace.ensure_organization(request.user)
-        workspace.mirror_to_organization()
+        # `crear_para_dueno` deja las tres cosas que hacen falta para trabajar: la
+        # empresa, su primer administrador y un Workspace General.
+        empresa = Organization.crear_para_dueno(
+            request.user, name=serializer.validated_data['name'],
+        )
+        for campo in ('sector', 'description', 'employees'):
+            if serializer.validated_data.get(campo):
+                setattr(empresa, campo, serializer.validated_data[campo])
+        empresa.save()
         return Response(
-            WorkspaceSerializer(
-                workspace, context={'request': request, 'roles': {workspace.id: ROLE_ADMIN}}
+            EmpresaSerializer(
+                empresa, context={'request': request, 'roles': {empresa.id: ROLE_ADMIN}}
             ).data,
             status=status.HTTP_201_CREATED,
         )
 
 
-class WorkspaceDetailView(APIView):
-    """Ver el Workspace (cualquier miembro) y editarlo (solo administrador)."""
+class EmpresaDetailView(APIView):
+    """Ver la Empresa (cualquier miembro) y editarla (solo administrador)."""
 
     def get_permissions(self):
         if self.request.method in ('PATCH', 'PUT'):
@@ -97,15 +102,15 @@ class WorkspaceDetailView(APIView):
         return [IsAuthenticated(), IsMember()]
 
     def get(self, request, slug):
-        return Response(WorkspaceSerializer(request.workspace, context={'request': request}).data)
+        return Response(EmpresaSerializer(request.empresa, context={'request': request}).data)
 
     def patch(self, request, slug):
-        serializer = WorkspaceSerializer(
-            request.workspace, data=request.data, partial=True, context={'request': request},
+        # Ya no hay espejo que mantener: la identidad vive en un solo lugar.
+        serializer = EmpresaSerializer(
+            request.empresa, data=request.data, partial=True, context={'request': request},
         )
         serializer.is_valid(raise_exception=True)
-        workspace = serializer.save()
-        workspace.mirror_to_organization()
+        serializer.save()
         return Response(serializer.data)
 
 
@@ -127,7 +132,7 @@ class MemberListView(APIView):
         memberships = (
             Membership.objects
             .select_related('user')
-            .filter(workspace=request.workspace)
+            .filter(organization=request.empresa)
             .order_by('joined_at')
         )
         return Response(MembershipSerializer(memberships, many=True, context={'request': request}).data)
@@ -142,7 +147,7 @@ class MemberDetailView(APIView):
         membership = (
             Membership.objects
             .select_related('user')
-            .filter(workspace=request.workspace, pk=pk)
+            .filter(organization=request.empresa, pk=pk)
             .first()
         )
         if membership is None:
@@ -152,7 +157,7 @@ class MemberDetailView(APIView):
     def _es_ultimo_admin(self, request, membership):
         if membership.role != ROLE_ADMIN:
             return False
-        return Membership.objects.filter(workspace=request.workspace, role=ROLE_ADMIN).count() <= 1
+        return Membership.objects.filter(organization=request.empresa, role=ROLE_ADMIN).count() <= 1
 
     def patch(self, request, slug, pk):
         membership = self._get_membership(request, pk)
@@ -168,7 +173,7 @@ class MemberDetailView(APIView):
             )
         if nuevo_rol != ROLE_ADMIN and self._es_ultimo_admin(request, membership):
             return Response(
-                {'detail': 'El Workspace necesita al menos un administrador.'},
+                {'detail': 'La empresa necesita al menos un administrador.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -181,12 +186,12 @@ class MemberDetailView(APIView):
 
         if membership.user_id == request.user.id:
             return Response(
-                {'detail': 'No puede sacarse a sí mismo del Workspace.'},
+                {'detail': 'No puede sacarse a sí mismo de la empresa.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         if self._es_ultimo_admin(request, membership):
             return Response(
-                {'detail': 'El Workspace necesita al menos un administrador.'},
+                {'detail': 'La empresa necesita al menos un administrador.'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -203,18 +208,18 @@ class InvitationListCreateView(APIView):
         invitations = (
             Invitation.objects
             .select_related('invited_by')
-            .filter(workspace=request.workspace, accepted_at__isnull=True, revoked_at__isnull=True)
+            .filter(organization=request.empresa, accepted_at__isnull=True, revoked_at__isnull=True)
         )
         return Response(InvitationSerializer(invitations, many=True).data)
 
     def post(self, request, slug):
         serializer = InvitationCreateSerializer(
-            data=request.data, context={'workspace': request.workspace},
+            data=request.data, context={'empresa': request.empresa},
         )
         serializer.is_valid(raise_exception=True)
 
         invitation = Invitation.create_for(
-            workspace=request.workspace,
+            organization=request.empresa,
             email=serializer.validated_data['email'],
             role=serializer.validated_data['role'],
             invited_by=request.user,
@@ -232,7 +237,7 @@ class InvitationDetailView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def delete(self, request, slug, pk):
-        invitation = Invitation.objects.filter(workspace=request.workspace, pk=pk).first()
+        invitation = Invitation.objects.filter(organization=request.empresa, pk=pk).first()
         if invitation is None:
             return Response({'detail': 'Invitación no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
         if invitation.accepted_at:
@@ -251,8 +256,8 @@ class InvitationResendView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
 
     def post(self, request, slug, pk):
-        invitation = Invitation.objects.select_related('workspace', 'invited_by').filter(
-            workspace=request.workspace, pk=pk, accepted_at__isnull=True, revoked_at__isnull=True,
+        invitation = Invitation.objects.select_related('organization', 'invited_by').filter(
+            organization=request.empresa, pk=pk, accepted_at__isnull=True, revoked_at__isnull=True,
         ).first()
         if invitation is None:
             return Response(
@@ -273,7 +278,7 @@ class InvitationPreviewView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, token):
-        invitation = Invitation.objects.select_related('workspace', 'invited_by').filter(
+        invitation = Invitation.objects.select_related('organization', 'invited_by').filter(
             token=token,
         ).first()
         if invitation is None:
@@ -287,7 +292,7 @@ class InvitationAcceptView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, token):
-        invitation = Invitation.objects.select_related('workspace').filter(token=token).first()
+        invitation = Invitation.objects.select_related('organization').filter(token=token).first()
         if invitation is None:
             return Response({'detail': 'Invitación no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -297,9 +302,9 @@ class InvitationAcceptView(APIView):
             return Response({'detail': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
         return Response({
-            'workspace': WorkspaceSerializer(
-                membership.workspace,
-                context={'request': request, 'roles': {membership.workspace_id: membership.role}},
+            'empresa': EmpresaSerializer(
+                membership.organization,
+                context={'request': request, 'roles': {membership.organization_id: membership.role}},
             ).data,
             'role': membership.role,
         })
@@ -320,12 +325,11 @@ COLECCIONES_DE_ESPACIO = {
 }
 
 
-def _queryset_enganchable(nombre_modelo, workspace):
-    """Los objetos que ese Workspace tiene derecho a enganchar a un Espacio."""
+def _queryset_enganchable(nombre_modelo, organization):
+    """Lo que esa Empresa tiene derecho a enganchar a uno de sus Workspaces."""
     from apps.agents.models import Agent
     from apps.organizations.models import CompanyDocument, SystemConnection
 
-    organization = workspace.organization
     if nombre_modelo == 'SystemConnection':
         return SystemConnection.objects.filter(organization=organization)
     if nombre_modelo == 'CompanyDocument':
@@ -333,10 +337,10 @@ def _queryset_enganchable(nombre_modelo, workspace):
     if nombre_modelo == 'Agent':
         return Agent.objects.filter(organization=organization)
     # Personas: sólo miembros del Workspace.
-    return get_user_model().objects.filter(memberships__workspace=workspace)
+    return get_user_model().objects.filter(memberships__organization=organization)
 
 
-class SpaceListCreateView(APIView):
+class WorkspaceListCreateView(APIView):
     """Contexto › Espacios: la lista, y crear uno nuevo."""
 
     def get_permissions(self):
@@ -347,42 +351,42 @@ class SpaceListCreateView(APIView):
         return [IsAuthenticated(), IsMember()]
 
     def get(self, request, slug):
-        espacios = spaces_visible_to(request.membership).prefetch_related(
+        espacios = workspaces_visible_to(request.membership).prefetch_related(
             'connections', 'documents', 'agents', 'members'
         )
-        return Response(SpaceListSerializer(espacios, many=True, context={'request': request}).data)
+        return Response(WorkspaceListSerializer(espacios, many=True, context={'request': request}).data)
 
     def post(self, request, slug):
-        serializer = SpaceWriteSerializer(data=request.data)
+        serializer = WorkspaceWriteSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        espacio = serializer.save(workspace=request.workspace, created_by=request.user)
+        espacio = serializer.save(organization=request.empresa, created_by=request.user)
         # Quien lo crea queda adentro, si no un Espacio restringido nace sin nadie.
         espacio.members.add(request.user)
         return Response(
-            SpaceDetailSerializer(espacio, context={'request': request}).data,
+            WorkspaceDetailSerializer(espacio, context={'request': request}).data,
             status=status.HTTP_201_CREATED,
         )
 
 
-class SpaceDetailView(APIView):
+class WorkspaceDetailView(APIView):
     """El Espacio abierto, con sus tres pestañas. Editarlo y borrarlo."""
 
     permission_classes = [IsAuthenticated, IsMember]
 
     def get(self, request, slug, space_slug):
-        espacio = require_space(request.membership, space_slug)
-        return Response(SpaceDetailSerializer(espacio, context={'request': request}).data)
+        espacio = require_workspace(request.membership, space_slug)
+        return Response(WorkspaceDetailSerializer(espacio, context={'request': request}).data)
 
     def patch(self, request, slug, space_slug):
-        espacio = require_space(request.membership, space_slug)
+        espacio = require_workspace(request.membership, space_slug)
         self._exigir_edicion(request)
-        serializer = SpaceWriteSerializer(espacio, data=request.data, partial=True)
+        serializer = WorkspaceWriteSerializer(espacio, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        return Response(SpaceDetailSerializer(espacio, context={'request': request}).data)
+        return Response(WorkspaceDetailSerializer(espacio, context={'request': request}).data)
 
     def delete(self, request, slug, space_slug):
-        espacio = require_space(request.membership, space_slug)
+        espacio = require_workspace(request.membership, space_slug)
         self._exigir_edicion(request)
         espacio.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
@@ -396,7 +400,7 @@ class SpaceDetailView(APIView):
             raise PermissionDenied('Sólo un editor puede cambiar un Espacio.')
 
 
-class SpaceContentView(APIView):
+class WorkspaceContentView(APIView):
     """Enganchar y soltar contenido de un Espacio.
 
     POST agrega, DELETE saca. Un solo endpoint para las cuatro colecciones
@@ -410,38 +414,38 @@ class SpaceContentView(APIView):
         espacio, campo, objetos, ids = self._resolver(request, space_slug, coleccion)
         encontrados = list(objetos.filter(pk__in=ids))
         campo.add(*encontrados)
-        return Response(SpaceDetailSerializer(espacio, context={'request': request}).data)
+        return Response(WorkspaceDetailSerializer(espacio, context={'request': request}).data)
 
     def delete(self, request, slug, space_slug, coleccion):
         espacio, campo, objetos, ids = self._resolver(request, space_slug, coleccion)
         campo.remove(*objetos.filter(pk__in=ids))
-        return Response(SpaceDetailSerializer(espacio, context={'request': request}).data)
+        return Response(WorkspaceDetailSerializer(espacio, context={'request': request}).data)
 
     def _resolver(self, request, space_slug, coleccion):
         if coleccion not in COLECCIONES_DE_ESPACIO:
             raise NotFound('Esa colección no existe en un Espacio.')
-        espacio = require_space(request.membership, space_slug)
+        espacio = require_workspace(request.membership, space_slug)
         nombre_campo, nombre_modelo = COLECCIONES_DE_ESPACIO[coleccion]
         ids = request.data.get('ids')
         if ids is None:
             ids = [request.data.get('id')] if request.data.get('id') else []
         if not isinstance(ids, list) or not ids:
             raise ValidationError({'ids': 'Mande al menos un id.'})
-        objetos = _queryset_enganchable(nombre_modelo, request.workspace)
+        objetos = _queryset_enganchable(nombre_modelo, request.empresa)
         return espacio, getattr(espacio, nombre_campo), objetos, ids
 
 
-class SpaceAvailableView(APIView):
+class WorkspaceAvailableView(APIView):
     """Lo que todavía se puede enganchar a este Espacio, para los selectores."""
 
     permission_classes = [IsAuthenticated, IsEditor]
 
     def get(self, request, slug, space_slug):
-        espacio = require_space(request.membership, space_slug)
+        espacio = require_workspace(request.membership, space_slug)
         salida = {}
         for coleccion, (nombre_campo, nombre_modelo) in COLECCIONES_DE_ESPACIO.items():
             ya_estan = getattr(espacio, nombre_campo).values_list('pk', flat=True)
-            disponibles = _queryset_enganchable(nombre_modelo, request.workspace).exclude(
+            disponibles = _queryset_enganchable(nombre_modelo, request.empresa).exclude(
                 pk__in=list(ya_estan)
             )
             salida[coleccion] = [
@@ -458,7 +462,7 @@ def _etiqueta(obj, nombre_modelo):
     return obj.name
 
 
-class SpaceConversationsView(APIView):
+class WorkspaceConversationsView(APIView):
     """Las conversaciones que se trabajaron en este Espacio.
 
     A diferencia del historial personal, acá el hilo es del equipo: lo ve cualquiera
@@ -472,10 +476,10 @@ class SpaceConversationsView(APIView):
     def get(self, request, slug, space_slug):
         from apps.agents.models import Conversation
 
-        espacio = require_space(request.membership, space_slug)
+        espacio = require_workspace(request.membership, space_slug)
         conversaciones = (
             Conversation.objects
-            .filter(space=espacio)
+            .filter(workspace=espacio)
             .select_related('user', 'agent')
             .order_by('-updated_at')[:100]
         )

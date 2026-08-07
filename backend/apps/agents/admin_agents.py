@@ -63,7 +63,7 @@ class AgentesAdminListView(APIView):
         membership = require_membership(request.user, slug, minimum_role=ROLE_ADMIN)
         agentes = (
             Agent.objects
-            .filter(organization_id=membership.workspace.organization_id, is_active=True)
+            .filter(organization_id=membership.organization_id, is_active=True)
             .order_by('name')
         )
 
@@ -88,7 +88,7 @@ class AgenteAdminDetailView(APIView):
             )
         membership = require_membership(request.user, slug, minimum_role=ROLE_ADMIN)
         agent = Agent.objects.filter(
-            pk=pk, organization_id=membership.workspace.organization_id,
+            pk=pk, organization_id=membership.organization_id,
         ).first()
         if agent is None:
             return None, None, Response(

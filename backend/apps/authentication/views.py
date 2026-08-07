@@ -12,7 +12,7 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import User, PasswordResetToken, UserContext
-from apps.workspaces.models import Workspace
+from apps.organizations.models import Organization
 from .serializers import (
     LoginSerializer, RegisterSerializer, UserSerializer,
     ChangePasswordSerializer, PasswordResetRequestSerializer,
@@ -106,7 +106,7 @@ class GoogleLoginCallbackView(APIView):
             user.save()
 
         if created:
-            Workspace.create_for_owner(user)
+            Organization.crear_para_dueno(user)
 
         jwt_tokens = _tokens_for_user(user)
         callback_url = f"{settings.FRONTEND_URL}/auth/google/callback#access={jwt_tokens['access']}&refresh={jwt_tokens['refresh']}"
@@ -120,7 +120,7 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        Workspace.create_for_owner(user)
+        Organization.crear_para_dueno(user)
         return Response(_tokens_for_user(user), status=status.HTTP_201_CREATED)
 
 

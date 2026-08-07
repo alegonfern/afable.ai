@@ -17,6 +17,8 @@ from rest_framework.test import APIClient
 from apps.agents.models import Agent, Conversation, Message
 from apps.organizations.models import CompanyDocument, SystemConnection
 
+from apps.organizations.models import Organization
+
 from .models import ROLE_EDITOR, Workspace
 
 User = get_user_model()
@@ -34,12 +36,13 @@ class PrimerosPasosTests(TestCase):
         )
         # Como al registrarse: el Workspace se crea solo, con nombre automático y una
         # sola persona adentro.
-        self.ws = Workspace.create_for_owner(self.admin)
-        self.org = self.ws.organization
+        self.org = Organization.crear_para_dueno(self.admin)
+        # El General que `crear_para_dueno` deja listo.
+        self.ws = Workspace.general_de(self.org)
 
     def pasos(self, usuario=None):
         self.client.force_authenticate(usuario or self.admin)
-        r = self.client.get(URL.format(self.ws.slug))
+        r = self.client.get(URL.format(self.org.slug))
         self.assertEqual(r.status_code, 200)
         return {p['id']: p['hecho'] for p in r.data['pasos']}, r.data
 
@@ -54,21 +57,21 @@ class PrimerosPasosTests(TestCase):
 
     def test_el_nombre_automatico_no_cuenta_como_presentarse(self):
         """`Workspace de Alexis` es el nombre que puso el sistema, no la empresa."""
-        self.assertTrue(self.ws.name.startswith('Workspace de '))
+        self.assertTrue(self.org.name.startswith('Empresa de '))
         hechos, _ = self.pasos()
         self.assertFalse(hechos['empresa'])
 
     def test_cambiar_solo_el_nombre_no_alcanza(self):
         """Sin rubro, descripción ni logo, el agente no sabe de qué se trata la empresa."""
-        self.ws.name = 'Cocinas SpA'
-        self.ws.save()
+        self.org.name = 'Cocinas SpA'
+        self.org.save()
         hechos, _ = self.pasos()
         self.assertFalse(hechos['empresa'])
 
     def test_nombre_mas_rubro_completa_el_paso(self):
-        self.ws.name = 'Cocinas SpA'
-        self.ws.sector = 'retail'
-        self.ws.save()
+        self.org.name = 'Cocinas SpA'
+        self.org.sector = 'retail'
+        self.org.save()
         hechos, _ = self.pasos()
         self.assertTrue(hechos['empresa'])
 
@@ -136,7 +139,7 @@ class PrimerosPasosTests(TestCase):
         hechos, _ = self.pasos()
         self.assertFalse(hechos['equipo'])
 
-        self.ws.invitations.create(
+        self.org.invitations.create(
             email='nuevo@afable.test', token='tok-inv', expires_at='2030-01-01T00:00:00Z',
             invited_by=self.admin,
         )
@@ -148,7 +151,7 @@ class PrimerosPasosTests(TestCase):
         otro = User.objects.create_user(
             username='otro@afable.test', email='otro@afable.test', password='afable123',
         )
-        self.ws.add_member(otro, ROLE_EDITOR)
+        self.org.agregar_miembro(otro, ROLE_EDITOR)
         hechos, _ = self.pasos()
         self.assertTrue(hechos['equipo'])
 
@@ -159,9 +162,9 @@ class PrimerosPasosTests(TestCase):
         editor = User.objects.create_user(
             username='editor@afable.test', email='editor@afable.test', password='afable123',
         )
-        self.ws.add_member(editor, ROLE_EDITOR)
+        self.org.agregar_miembro(editor, ROLE_EDITOR)
         self.client.force_authenticate(editor)
-        r = self.client.get(URL.format(self.ws.slug))
+        r = self.client.get(URL.format(self.org.slug))
         self.assertEqual(r.status_code, 403)
 
     def test_alguien_de_afuera_no_ve_que_el_workspace_existe(self):
@@ -169,26 +172,26 @@ class PrimerosPasosTests(TestCase):
             username='ajeno@afable.test', email='ajeno@afable.test', password='afable123',
         )
         self.client.force_authenticate(ajeno)
-        self.assertEqual(self.client.get(URL.format(self.ws.slug)).status_code, 404)
+        self.assertEqual(self.client.get(URL.format(self.org.slug)).status_code, 404)
 
     # ── Cerrarlo ─────────────────────────────────────────────────────────────────
 
     def test_cerrarlo_dura_y_se_puede_volver_a_abrir(self):
         self.client.force_authenticate(self.admin)
-        r = self.client.post(URL.format(self.ws.slug), {})
+        r = self.client.post(URL.format(self.org.slug), {})
         self.assertTrue(r.data['oculto'])
 
         _, datos = self.pasos()
         self.assertTrue(datos['oculto'], 'el cierre tiene que sobrevivir a recargar')
 
         self.client.force_authenticate(self.admin)
-        r = self.client.post(URL.format(self.ws.slug), {'mostrar': True})
+        r = self.client.post(URL.format(self.org.slug), {'mostrar': True})
         self.assertFalse(r.data['oculto'])
 
     def test_completar_todo_lo_marca_terminado(self):
-        self.ws.name = 'Cocinas SpA'
-        self.ws.sector = 'retail'
-        self.ws.save()
+        self.org.name = 'Cocinas SpA'
+        self.org.sector = 'retail'
+        self.org.save()
         SystemConnection.objects.create(
             organization=self.org, name='Odoo', connector_type='odoo',
         )
@@ -197,14 +200,14 @@ class PrimerosPasosTests(TestCase):
         )
         conv = Conversation.objects.create(agent=agente, user=self.admin)
         Message.objects.create(conversation=conv, role='assistant', content='listo')
-        self.ws.invitations.create(
+        self.org.invitations.create(
             email='nuevo@afable.test', token='t1', expires_at='2030-01-01T00:00:00Z',
             invited_by=self.admin,
         )
         from apps.payments.models import Plan, Subscription
         plan = Plan.objects.create(id='p1', name='Growth', price_clp=299_000, price_usd=299)
         Subscription.objects.create(
-            workspace=self.ws, plan=plan, aprobada=True,
+            organization=self.org, plan=plan, aprobada=True,
             status=Subscription.ESTADO_ACTIVA,
         )
 

@@ -4,6 +4,28 @@ from services.encryption import encrypt, decrypt
 
 
 class Organization(models.Model):
+    """La **Empresa**: el titular de todo lo que hay adentro de Afable.
+
+    ⭐ Es el nivel de arriba, y dentro de ella viven **varios Workspaces** (Ventas,
+    Finanzas, un cliente si quien usa Afable es una consultora). Hasta el 2026-08-06 esto
+    era 1 a 1 con el Workspace y los mismos datos vivían en las dos tablas, sincronizados a
+    mano por un método espejo; el reparto de ahora es:
+
+    - **Acá arriba, lo que es de la empresa entera**: quién es, su gente y los roles, el
+      plan que paga, y **todo el conocimiento** — archivos, carpetas, conexiones y
+      contexto. Se carga una vez y sirve a todos los Workspaces.
+    - **Abajo, en cada Workspace, el trabajo**: qué parte de ese conocimiento alcanza,
+      qué agentes, quiénes entran, y las Sesiones donde se trabaja.
+
+    Cargar los archivos arriba es lo que evita que algo que le sirve a dos áreas haya que
+    subirlo dos veces; restringir abajo es lo que evita que el agente de Ventas alcance la
+    carpeta de Remuneraciones.
+
+    El nombre del modelo sigue siendo `Organization` **por ahora**: renombrarlo a `Empresa`
+    es un paso mecánico aparte, para que este cambio de estructura se pueda leer sin que lo
+    tape un renombre de 169 líneas.
+    """
+
     SECTORS = [
         ('manufactura', 'Manufactura'),
         ('tecnologia', 'Tecnología / Software'),
@@ -17,15 +39,36 @@ class Organization(models.Model):
         ('otro', 'Otro'),
     ]
 
+    AGENT_CREATION_CHOICES = [
+        ('todos', 'Todos los miembros'),
+        ('editores', 'Editores y administradores'),
+        ('admins', 'Solo administradores'),
+    ]
+
     owner = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='owned_organizations'
     )
     name = models.CharField(max_length=255)
+    # Con qué se la nombra en la URL. Venía del Workspace, que era el que viajaba en las
+    # direcciones de la API; ahora que la empresa es el nivel de arriba, es suyo.
+    slug = models.SlugField(max_length=140, unique=True, null=True, blank=True)
     owner_role = models.CharField(max_length=255, blank=True)
     employees = models.CharField(max_length=50, blank=True)
     rut = models.CharField(max_length=30, blank=True)
     sector = models.CharField(max_length=50, choices=SECTORS, blank=True)
     description = models.TextField(blank=True)
+
+    # ── Lo que subió del Workspace ────────────────────────────────────────────
+    # Estos campos vivían duplicados en las dos tablas y un método espejo los copiaba en
+    # cada guardado. Eran la causa de "lo edité y no se vio": la pantalla escribía en una
+    # tabla y el prompt del agente leía la otra.
+    logo = models.ImageField(upload_to='workspace_logos/', blank=True, null=True)
+    billing_email = models.EmailField(blank=True, help_text='Correo para comprobantes de pago.')
+    agent_creation_policy = models.CharField(
+        max_length=16, choices=AGENT_CREATION_CHOICES, default='editores',
+        help_text='Quién puede crear agentes en esta empresa.',
+    )
+    onboarding_oculto = models.BooleanField(default=False)
 
     # Odoo integration
     odoo_url = models.URLField(blank=True)
@@ -43,6 +86,65 @@ class Organization(models.Model):
 
     def __str__(self):
         return self.name
+
+    # ── Identidad ─────────────────────────────────────────────────────────────
+
+    @classmethod
+    def build_slug(cls, name):
+        """Slug único a partir del nombre, esquivando los reservados y los tomados."""
+        from django.utils.text import slugify
+
+        from apps.workspaces.models import RESERVED_SLUGS
+
+        base = slugify(name)[:120] or 'empresa'
+        if base in RESERVED_SLUGS:
+            base = f'{base}-empresa'
+        candidate = base
+        suffix = 2
+        while cls.objects.filter(slug=candidate).exists():
+            candidate = f'{base}-{suffix}'
+            suffix += 1
+        return candidate
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = self.build_slug(self.name)
+        super().save(*args, **kwargs)
+
+    # ── Su gente ──────────────────────────────────────────────────────────────
+
+    def agregar_miembro(self, user, role=None, invited_by=None):
+        """Suma a una persona, o le sube el rol si ya estaba y el nuevo es mayor."""
+        from apps.workspaces.models import ROLE_MEMBER, ROLE_ORDER, Membership
+
+        role = role or ROLE_MEMBER
+        membership, creado = Membership.objects.get_or_create(
+            organization=self, user=user,
+            defaults={'role': role, 'invited_by': invited_by},
+        )
+        if not creado and ROLE_ORDER.index(role) > ROLE_ORDER.index(membership.role):
+            membership.role = role
+            membership.save(update_fields=['role'])
+        return membership
+
+    @classmethod
+    def crear_para_dueno(cls, user, name=None):
+        """La Empresa de quien recién se registró, con su Workspace General listo.
+
+        Reemplaza a `Workspace.create_for_owner`. Crea las tres cosas que hacen falta para
+        poder trabajar: la empresa, su primer administrador, y un Workspace abierto — sin
+        ese último no habría dónde abrir una Sesión.
+        """
+        from apps.workspaces.models import ROLE_ADMIN, Workspace
+
+        if not name:
+            quien = (user.first_name or '').strip() or user.email.split('@')[0]
+            name = f'Empresa de {quien}'
+
+        empresa = cls.objects.create(owner=user, name=name)
+        empresa.agregar_miembro(user, ROLE_ADMIN)
+        Workspace.general_de(empresa, creado_por=user)
+        return empresa
 
 
 class IntegrationScan(models.Model):

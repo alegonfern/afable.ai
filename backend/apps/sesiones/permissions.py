@@ -23,7 +23,7 @@ from .models import ROL_EDITOR, VISIBILIDAD_ABIERTA, Sesion
 
 def sesiones_visibles(membership, incluir_archivadas=False):
     """Las Sesiones que este miembro puede ver dentro de su Workspace."""
-    qs = Sesion.objects.filter(workspace=membership.workspace)
+    qs = Sesion.objects.filter(workspace__organization=membership.organization)
     if not incluir_archivadas:
         qs = qs.filter(archivada=False)
     if membership.role == ROLE_ADMIN:
@@ -41,7 +41,7 @@ def require_sesion(membership, slug, minimo=None):
     que existe.
     """
     sesion = (
-        Sesion.objects.filter(workspace=membership.workspace, slug=slug)
+        Sesion.objects.filter(workspace__organization=membership.organization, slug=slug)
         .select_related('workspace').first()
     )
     if sesion is None or sesion.rol_de(membership.user, membership) is None:

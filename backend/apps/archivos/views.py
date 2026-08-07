@@ -30,7 +30,7 @@ def _org(request):
         )
     membership = require_membership(request.user, slug)
     request.membership = membership
-    org = membership.workspace.organization
+    org = membership.organization
     if org is None:
         return None, Response(
             {'detail': 'Este Workspace todavía no está enlazado a una empresa.'},
@@ -630,16 +630,16 @@ class CompartirView(APIView):
         # A quién se le puede dar permiso: la gente del Workspace que todavía no lo tiene.
         ya = {p['user'] for p in serializar_permisos(carpeta=carpeta, document=doc)}
         del_workspace = Membership.objects.filter(
-            workspace=request.membership.workspace,
+            organization=request.membership.organization,
         ).exclude(user_id__in=ya).select_related('user')
 
         return Response({
             'restringido': carpeta.restringida if carpeta else doc.restringido,
             'nombre': carpeta.name if carpeta else doc.title,
             'workspace_nivel': nivel_del_workspace(carpeta=carpeta, document=doc),
-            'workspace_nombre': request.membership.workspace.name,
+            'workspace_nombre': request.membership.organization.name,
             'miembros': Membership.objects.filter(
-                workspace=request.membership.workspace,
+                organization=request.membership.organization,
             ).count(),
             'compartido_con': serializar_permisos(carpeta=carpeta, document=doc),
             'disponibles': [
@@ -719,7 +719,7 @@ class CompartirView(APIView):
             # Solo gente del Workspace: compartir un archivo con alguien de afuera es
             # invitarlo a la empresa, y eso se hace desde Admin > Personas.
             del_workspace = Membership.objects.filter(
-                workspace=request.membership.workspace, user_id__in=_ids(ids),
+                organization=request.membership.organization, user_id__in=_ids(ids),
             ).select_related('user')
             if not del_workspace.exists():
                 return Response(

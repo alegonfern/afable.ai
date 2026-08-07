@@ -10,19 +10,19 @@ class PlanAdmin(admin.ModelAdmin):
 
 @admin.register(Subscription)
 class SubscriptionAdmin(admin.ModelAdmin):
-    list_display = ['workspace', 'plan', 'proveedor', 'status', 'aprobada', 'current_period_end']
+    list_display = ['organization', 'plan', 'proveedor', 'status', 'aprobada', 'current_period_end']
     list_filter = ['proveedor', 'status', 'aprobada']
 
 
 @admin.register(MetodoPago)
 class MetodoPagoAdmin(admin.ModelAdmin):
-    list_display = ['workspace', 'proveedor', 'etiqueta', 'principal']
+    list_display = ['organization', 'proveedor', 'etiqueta', 'principal']
     list_filter = ['proveedor', 'principal']
 
 
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
-    list_display = ['commerce_order', 'workspace', 'proveedor', 'amount', 'moneda', 'status']
+    list_display = ['commerce_order', 'organization', 'proveedor', 'amount', 'moneda', 'status']
     list_filter = ['proveedor', 'status']
 
 
