@@ -80,7 +80,12 @@ class SesionListCreateView(APIView):
         membership = require_membership(request.user, slug)
 
         archivadas = request.query_params.get('archivadas') in ('1', 'true')
-        sesiones = sesiones_visibles(membership, incluir_archivadas=archivadas).prefetch_related(
+        # El Workspace elegido arriba acota la lista. Sin `espacio`, se ven todas: es lo
+        # que corresponde cuando la persona eligió "Todos".
+        sesiones = sesiones_visibles(
+            membership, incluir_archivadas=archivadas,
+            workspace_slug=(request.query_params.get('espacio') or '').strip() or None,
+        ).prefetch_related(
             'miembros__user', 'tasks',
         )
         return Response({

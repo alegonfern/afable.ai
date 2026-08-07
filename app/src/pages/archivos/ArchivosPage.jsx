@@ -28,7 +28,7 @@ export default function ArchivosPage() {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const navigate = useNavigate();
-  const { slug } = useWorkspace();
+  const { slug, espacioSlug } = useWorkspace();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const textMuted = d ? 'rgba(255,255,255,0.66)' : 'rgba(0,0,0,0.62)';
@@ -61,13 +61,16 @@ export default function ArchivosPage() {
       const { data } = await api.getExplorador(slug, {
         ...(carpetaAbierta ? { carpeta: carpetaAbierta } : {}),
         ...(busqueda.trim() ? { q: busqueda.trim() } : {}),
+        // El Workspace elegido arriba acota lo que se ve. Con "Todos" no viaja y se
+        // ven todos los archivos que la persona alcanza.
+        ...(espacioSlug ? { espacio: espacioSlug } : {}),
       });
       setDatos(data);
     } catch {
       setError('No se pudieron leer los archivos.');
       setDatos({ arbol: [], subcarpetas: [], documentos: [], migas: [] });
     }
-  }, [slug, carpetaAbierta, busqueda]);
+  }, [slug, espacioSlug, carpetaAbierta, busqueda]);
 
   useEffect(() => {
     const t = setTimeout(cargar, busqueda ? 300 : 0);

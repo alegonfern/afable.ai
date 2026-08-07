@@ -111,6 +111,16 @@ class ExploradorView(APIView):
 
         # Los documentos también salen del filtro de permisos, no de la tabla entera.
         alcanzables = documentos_visibles(request.user, org, membership)
+        # Y el Workspace elegido arriba los acota: es lo que hace que el conmutador
+        # signifique algo también acá. Un documento que no está en ningún Workspace
+        # pertenece a la empresa entera, así que se ve siempre — si desapareciera al
+        # elegir un área, cargar un archivo sin asignarlo lo volvería invisible.
+        espacio = (request.query_params.get('espacio') or '').strip()
+        if espacio:
+            from django.db.models import Q
+            alcanzables = alcanzables.filter(
+                Q(workspaces__slug=espacio) | Q(workspaces__isnull=True)
+            ).distinct()
         docs = alcanzables.filter(carpeta=actual).prefetch_related(
             'versiones', 'permisos',
         ).order_by('title')

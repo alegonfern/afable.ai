@@ -21,9 +21,16 @@ from apps.workspaces.permissions import require_membership
 from .models import ROL_EDITOR, VISIBILIDAD_ABIERTA, Sesion
 
 
-def sesiones_visibles(membership, incluir_archivadas=False):
-    """Las Sesiones que este miembro puede ver dentro de su Workspace."""
+def sesiones_visibles(membership, incluir_archivadas=False, workspace_slug=None):
+    """Las Sesiones que este miembro puede ver dentro de su empresa.
+
+    `workspace_slug` acota a un Workspace: es lo que hace que el conmutador de arriba
+    signifique algo fuera del chat. Sin él se ven todas las que la persona alcanza, que
+    es lo que corresponde cuando eligió "Todos".
+    """
     qs = Sesion.objects.filter(workspace__organization=membership.organization)
+    if workspace_slug:
+        qs = qs.filter(workspace__slug=workspace_slug)
     if not incluir_archivadas:
         qs = qs.filter(archivada=False)
     if membership.role == ROLE_ADMIN:

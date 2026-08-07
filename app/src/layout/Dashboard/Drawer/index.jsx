@@ -97,12 +97,14 @@ export default function Drawer({ open, handleDrawerToggle }) {
   }, []);
 
   const wsSlug = localStorage.getItem('afable_workspace_slug');
+  // El Workspace elegido acota las Sesiones de la barra, igual que en Archivos.
+  const espacioSlug = localStorage.getItem(`afable_espacio_slug:${wsSlug}`);
   const cargarSesiones = useCallback(() => {
     if (!wsSlug) return;
-    api.getSesiones(wsSlug)
+    api.getSesiones(wsSlug, espacioSlug ? { espacio: espacioSlug } : {})
       .then(r => setSesiones(r.data.results || []))
       .catch(() => setSesiones([]));
-  }, [wsSlug]);
+  }, [wsSlug, espacioSlug]);
 
   useEffect(() => { cargarSesiones(); }, [cargarSesiones]);
   // Al crear, archivar o borrar una Sesion la barra tiene que reflejarlo sin recargar.
