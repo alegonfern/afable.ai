@@ -599,6 +599,9 @@
 .lp-plan-name { font-family: var(--font-display); font-size: 19px; font-weight: 600; margin-bottom: 10px; }
 .lp-plan-price { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 6px; }
 .lp-plan-price span { font-size: 14px; font-weight: 500; color: var(--muted); }
+/* El precio en pesos, debajo del de lista: en Chile se cobra en CLP con tarjeta y desde
+   afuera en USD con PayPal, y "$99" a secas se lee como noventa y nueve pesos. */
+.lp-plan-clp { font-size: 13px; color: var(--muted); margin: -2px 0 6px; }
 .lp-plan-desc { font-size: 13.5px; color: var(--muted); line-height: 1.5; margin-bottom: 18px; }
 
 .lp-plan-feat {

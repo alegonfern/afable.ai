@@ -18,13 +18,13 @@ const FALLBACK_TEMPLATES = [
     author_name: 'Equipo Afable', uses_count: 587,
     flow: [{ app: 'Drive', icon: '📁', color: '#1A73E8' }, { app: 'Afable', icon: '✦', color: '#586AD0' }, { app: 'Slack', icon: '#️⃣', color: '#611f69' }] },
   { id: 'f2', name: '@stock — avisa antes del quiebre', category: 'Inventario', icon: '📦', accent: '#34D399',
-    description: 'Vigila el inventario en tu ERP y le avisa al equipo antes de que un producto se agote.',
+    description: 'Vigila el stock donde lo llevas y le avisa al equipo antes de que un producto se agote.',
     author_name: 'Tienda Norte', uses_count: 412,
     flow: [{ app: 'Odoo', icon: '🟣', color: '#714B67' }, { app: 'Afable', icon: '✦', color: '#586AD0' }, { app: 'WhatsApp', icon: '💬', color: '#25D366' }] },
   { id: 'f3', name: '@ventas — publica el resumen del día', category: 'Ventas', icon: '📈', accent: '#586AD0',
-    description: 'Cada mañana arma el resumen del día anterior y lo publica solo en la Sala del equipo comercial.',
+    description: 'Cada mañana arma el resumen del día anterior y lo publica en la Sesion del equipo comercial.',
     author_name: 'Comercial Andes', uses_count: 318,
-    flow: [{ app: 'Odoo', icon: '🟣', color: '#714B67' }, { app: 'Afable', icon: '✦', color: '#586AD0' }, { app: 'Sala', icon: '🗂️', color: '#586AD0' }] },
+    flow: [{ app: 'Odoo', icon: '🟣', color: '#714B67' }, { app: 'Afable', icon: '✦', color: '#586AD0' }, { app: 'Sesion', icon: '🗂️', color: '#586AD0' }] },
 ];
 
 /* ─── Visuales de las narrativas (estilo tarjeta de producto flotante) ─── */
@@ -49,14 +49,14 @@ function SystemsVisual() {
 
 function AgentsVisual() {
   const agents = [
-    { icon: '🧠', name: '@afable', meta: 'todas las Fuentes abiertas' },
+    { icon: '🧠', name: '@afable', meta: 'todo lo que la empresa comparte' },
     { icon: '📑', name: '@contratos', meta: 'Fuente Legal · restringida' },
     { icon: '📈', name: '@ventas', meta: 'Odoo + CRM · equipo comercial' },
     { icon: '🎧', name: '@soporte', meta: 'tickets · en construcción' },
   ];
   return (
     <div className="lp-n-card">
-      <div className="lp-n-card-head">Agentes del workspace</div>
+      <div className="lp-n-card-head">Agentes de la empresa</div>
       <div className="lp-file-rows">
         {agents.map(a => (
           <div key={a.name} className="lp-file-row">
@@ -74,7 +74,7 @@ function TeamVisual() {
   const members = [
     { initials: 'CM', name: 'Carla', area: 'Editor', sees: 'Finanzas + Ventas' },
     { initials: 'JR', name: 'Jorge', area: 'Miembro', sees: 'Ventas' },
-    { initials: 'PA', name: 'Paula', area: 'Admin', sees: 'Todas las Fuentes' },
+    { initials: 'PA', name: 'Paula', area: 'Admin', sees: 'Todos los Workspaces' },
     { initials: 'DL', name: 'Diego', area: 'Miembro', sees: 'Inventario' },
   ];
   return (
@@ -95,7 +95,7 @@ function TeamVisual() {
 
 function TriggersVisual() {
   const routines = [
-    { icon: '🗓️', name: 'Resumen de ventas', meta: 'programado · 08:00', state: '✓ en la Sala' },
+    { icon: '🗓️', name: 'Resumen de ventas', meta: 'programado · 08:00', state: '✓ en la Sesion' },
     { icon: '🔔', name: 'Quiebre de stock', meta: 'evento · inventario', state: 'vigilando' },
     { icon: '🪝', name: 'Ticket nuevo', meta: 'webhook · soporte', state: '12 hoy' },
     { icon: '✋', name: 'Acción que escribe', meta: 'pide aprobación', state: '1 pendiente' },
@@ -185,11 +185,15 @@ export default function LandingPage() {
     },
     {
       q: '¿Qué puedo conectar?',
-      a: 'Google Drive, Notion, Slack, GitHub, tu ERP (SAP, Odoo), tu CRM, bases de datos, planillas y páginas web. También puedes subir archivos directamente. Si usas algo que no está en la lista, escríbenos y lo conectamos.',
+      a: 'El sistema donde facturas o llevas el stock (Odoo, SAP), tus bases de datos, planillas y tu Google Drive. También puedes subir archivos directamente y organizarlos en carpetas. Si usas algo que no está en la lista, escríbenos y lo conectamos.',
     },
     {
       q: '¿Cómo controlo quién ve qué?',
-      a: 'Organizas el conocimiento en Fuentes abiertas o restringidas y decides quién entra a cada una. Los tres roles — Miembro, Editor y Administrador — definen quién usa, quién crea agentes y quién administra el workspace. Los agentes heredan esos permisos: el dato de una Fuente restringida no llega a quien no tiene acceso.',
+      a: 'Son dos preguntas y se responden por separado. Qué PUEDE HACER cada persona lo dice su rol en la empresa: Miembro usa, Editor carga y conecta, Administrador manda. SOBRE QUÉ lo dice el Workspace: los abiertos los ve toda la empresa y a los restringidos entra solo quien agregues. Los agentes heredan lo mismo, así que nadie puede usar un agente para leer lo que él no puede leer.',
+    },
+    {
+      q: '¿Dónde queda el trabajo del equipo?',
+      a: 'En Sesiones. Una Sesion es el trabajo en curso —un cliente, un cierre de mes, una busqueda— con sus conversaciones, sus tareas y sus archivos en el mismo lugar. Lo que uno pregunta ahí lo ve el resto, y una tarea puede quedar asignada a una persona o a un agente, que la ejecuta y deja el resultado a la vista.',
     },
     {
       q: '¿Un agente puede ejecutar acciones, o solo responder?',
@@ -205,25 +209,25 @@ export default function LandingPage() {
     {
       key: 'conexiones',
       title: <>Conecta tus<br />datos.</>,
-      text: 'Google Drive, Notion, Slack, GitHub, tu ERP, tus bases de datos y los archivos que hoy viven sueltos en carpetas. Se conectan en minutos y se mantienen sincronizados. No cambias nada de lo que ya usas: Afable trabaja encima.',
+      text: 'Donde facturas, donde llevas el stock, tus bases de datos, tu Drive y los archivos que hoy viven sueltos en carpetas. Se conectan en minutos y se mantienen al día. No cambias nada de lo que ya usas: Afable trabaja encima.',
       visual: <SystemsVisual />,
     },
     {
       key: 'fuentes',
-      title: <>Cada equipo<br />ve lo suyo.</>,
-      text: 'El conocimiento se organiza en Fuentes, abiertas para todo el workspace o restringidas a quienes tú designes. Ventas no ve los contratos de personas, y los agentes tampoco: cuando alguien no tiene acceso, el dato simplemente no llega a la respuesta.',
+      title: <>Cada area<br />ve lo suyo.</>,
+      text: 'Lo que la empresa sabe se carga una vez, y cada Workspace —Ventas, Finanzas, un cliente— decide qué parte alcanza y quién entra. Ventas no ve los contratos de personas, y sus agentes tampoco: cuando alguien no tiene acceso, el dato simplemente no llega a la respuesta.',
       visual: <TeamVisual />,
     },
     {
       key: 'agentes',
       title: <>Crea tus<br />agentes.</>,
-      text: 'Sin escribir código: le dictas las instrucciones en español, eliges qué Fuentes puede consultar, qué herramientas puede usar y con qué modelo piensa. Lo publicas para ti, para tu equipo o para toda la empresa, y desde ahí cualquiera lo llama con @su-nombre.',
+      text: 'Sin escribir código: le dictas las instrucciones en español, eliges qué puede consultar, qué herramientas puede usar y con qué modelo piensa. Lo publicas para ti, para tu area o para toda la empresa, y desde ahí cualquiera lo llama con @su-nombre.',
       visual: <AgentsVisual />,
     },
     {
       key: 'disparadores',
       title: <>Que trabajen<br />solos.</>,
-      text: 'Un horario, un webhook o un evento en tus sistemas ponen al agente a trabajar sin que nadie abra la app: entrega el resultado por correo o lo publica en la Sala del equipo. Y si la tarea escribe en un sistema, primero te muestra qué va a hacer y espera tu aprobación.',
+      text: 'Un horario, un aviso de otro sistema o algo que pasa en tus datos ponen al agente a trabajar sin que nadie abra la app: publica el resultado en la Sesion donde trabaja el equipo y deja anotado el pendiente. Y si la tarea escribe en un sistema, primero te muestra qué va a hacer y espera tu aprobación.',
       visual: <TriggersVisual />,
     },
   ];
@@ -356,7 +360,7 @@ export default function LandingPage() {
       {/* Explorar — vitrina de la comunidad */}
       <section className="lp-explore" id="explorar">
         <h2 className="lp-display lp-center">Empieza con agentes<br />que ya funcionan.</h2>
-        <p className="lp-section-sub lp-center">Una comunidad que comparte sus agentes. Tómalos como punto de partida, apúntalos a tus propias Fuentes y adáptalos a tu empresa — sin empezar de cero.</p>
+        <p className="lp-section-sub lp-center">Una comunidad que comparte sus agentes. Tómalos como punto de partida, apúntalos a tus propios datos y adáptalos a tu empresa — sin empezar de cero.</p>
         <div className="lp-explore-grid">
           {templates.map((tpl) => {
             const accent = tpl.accent || '#586AD0';
@@ -390,7 +394,7 @@ export default function LandingPage() {
       {/* Seguridad — statement */}
       <section className="lp-security">
         <h2 className="lp-display">Tus datos siguen<br />siendo tuyos.</h2>
-        <p className="lp-section-sub lp-center">Cada persona entra solo a las Fuentes que le corresponden, y cada agente consulta solo las que le asignaste. Las credenciales se guardan cifradas, los datos se leen en vivo en el momento de cada pregunta, y ninguna acción que escriba en tus sistemas se ejecuta sin tu aprobación.</p>
+        <p className="lp-section-sub lp-center">Cada persona entra solo a los Workspaces que le corresponden, y cada agente consulta solo lo que le asignaste. Las credenciales se guardan cifradas, los datos se leen en vivo en el momento de cada pregunta, y ninguna acción que escriba en tus sistemas se ejecuta sin tu aprobación.</p>
         <div className="lp-security-chips">
           <span>Credenciales cifradas</span>
           <span>Datos consultados en vivo, no almacenados</span>
@@ -402,17 +406,18 @@ export default function LandingPage() {
       {/* Precios */}
       <section className="lp-pricing" id="precios">
         <h2 className="lp-display lp-center">Tu equipo con IA,<br />desde hoy.</h2>
-        <p className="lp-section-sub lp-center">Creas tu cuenta, conectas tus datos y armas tus agentes tú mismo. Todos los planes incluyen 14 días gratis y no piden tarjeta de crédito para empezar.</p>
+        <p className="lp-section-sub lp-center">Creas tu cuenta, conectas tus datos y armas tus agentes tú mismo. Todos los planes incluyen 14 días gratis y no piden tarjeta de crédito para empezar. En Chile pagas en pesos con tu tarjeta; desde afuera, en dólares con PayPal.</p>
         <div className="lp-plans">
           <div className="lp-plan">
             <div className="lp-plan-name">Starter</div>
-            <div className="lp-plan-price">$99 <span>/ mes</span></div>
+            <div className="lp-plan-price">US$99 <span>/ mes</span></div>
+            <div className="lp-plan-clp">o $99.000 al mes en pesos</div>
             <div className="lp-plan-desc">Para equipos que están creando sus primeros agentes.</div>
             <ul className="lp-plan-feat">
-              <li>5 agentes activos</li>
+              <li>3 agentes activos</li>
               <li>10 conexiones de datos</li>
               <li>5.000 mensajes/mes</li>
-              <li>Fuentes abiertas y restringidas</li>
+              <li>Workspaces abiertos y restringidos</li>
               <li>Disparadores programados</li>
               <li>Soporte por correo</li>
             </ul>
@@ -421,23 +426,24 @@ export default function LandingPage() {
           <div className="lp-plan featured">
             <div className="lp-plan-badge">Más popular</div>
             <div className="lp-plan-name">Growth</div>
-            <div className="lp-plan-price">$299 <span>/ mes</span></div>
+            <div className="lp-plan-price">US$299 <span>/ mes</span></div>
+            <div className="lp-plan-clp">o $299.000 al mes en pesos</div>
             <div className="lp-plan-desc">Para equipos que ya trabajan con sus agentes todos los días.</div>
             <ul className="lp-plan-feat">
               <li>Todo en Starter</li>
-              <li>Agentes ilimitados</li>
+              <li>15 agentes activos</li>
               <li>50 conexiones de datos</li>
               <li>50.000 mensajes/mes</li>
-              <li>Salas de trabajo del equipo</li>
+              <li>Sesiones de trabajo del equipo</li>
               <li>Disparadores por webhook y evento</li>
-              <li>Roles y permisos por Fuente</li>
+              <li>Roles y permisos por Workspace</li>
               <li>Soporte prioritario</li>
             </ul>
             <button className="lp-btn-pill lp-btn-pill--full" onClick={() => navigate('/register')}>Empezar gratis</button>
           </div>
           <div className="lp-plan">
             <div className="lp-plan-name">Enterprise</div>
-            <div className="lp-plan-price">Custom</div>
+            <div className="lp-plan-price">A conversar</div>
             <div className="lp-plan-desc">Para empresas con requerimientos específicos de escala o seguridad.</div>
             <ul className="lp-plan-feat">
               <li>Todo en Growth</li>
@@ -462,7 +468,7 @@ export default function LandingPage() {
             <p>Hay procesos que ninguna plataforma trae listos: los que cruzan tres sistemas, los que tienen las reglas de tu empresa metidas en el medio, los que hoy alguien hace a mano cada semana. Esos los diseñamos y los montamos nosotros — y quedan conectados a tus agentes, para que la parte que necesita criterio la resuelva la IA y el resto corra solo.</p>
             <div className="lp-workflow-points">
               <span>Lo diseña y lo monta nuestro equipo</span>
-              <span>Conectado a los agentes de tu workspace</span>
+              <span>Conectado a los agentes de tu empresa</span>
               <span>Corriendo 24/7, sin que abras la app</span>
             </div>
             <button className="lp-btn-pill" onClick={() => { const el = document.getElementById('asistente'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}>Cuéntanos tu proceso →</button>
