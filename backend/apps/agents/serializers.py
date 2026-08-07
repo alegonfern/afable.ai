@@ -117,6 +117,26 @@ class SkillWriteSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate_name(self, value):
+        """El nombre no se repite dentro de la misma empresa.
+
+        La base ya lo impedía (`unico_nombre_de_habilidad_por_empresa`), pero sin esta
+        validación la restricción saltaba como IntegrityError y la persona veía un error
+        del sistema en vez de "ya tiene una Habilidad con ese nombre". Un choque de
+        nombres es un caso normal, no una falla.
+        """
+        nombre = value.strip()
+        organizacion = self.context.get('organization')
+        if not nombre or organizacion is None:
+            return nombre
+
+        repetidas = Skill.objects.filter(organization=organizacion, name__iexact=nombre)
+        if self.instance is not None:
+            repetidas = repetidas.exclude(pk=self.instance.pk)
+        if repetidas.exists():
+            raise serializers.ValidationError('Ya tiene una Habilidad con ese nombre.')
+        return nombre
+
 
 class DocumentSerializer(serializers.ModelSerializer):
     class Meta:

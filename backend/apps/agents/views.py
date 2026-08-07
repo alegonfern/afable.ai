@@ -1633,7 +1633,7 @@ class SkillListCreateView(APIView):
 
     def post(self, request):
         org = _user_org(request.user, request.data.get('organization'))
-        serializer = SkillWriteSerializer(data=request.data)
+        serializer = SkillWriteSerializer(data=request.data, context={'organization': org})
         serializer.is_valid(raise_exception=True)
         habilidad = serializer.save(organization=org, created_by=request.user)
         self._enganchar(habilidad, request.data.get('agent_ids'), org)
@@ -1664,7 +1664,10 @@ class SkillDetailView(SkillListCreateView):
 
     def patch(self, request, pk):
         org, habilidad = self._get(request, pk)
-        serializer = SkillWriteSerializer(habilidad, data=request.data, partial=True)
+        serializer = SkillWriteSerializer(
+            habilidad, data=request.data, partial=True,
+            context={'organization': habilidad.organization},
+        )
         serializer.is_valid(raise_exception=True)
         serializer.save()
         self._enganchar(habilidad, request.data.get('agent_ids'), org)

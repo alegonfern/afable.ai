@@ -163,6 +163,27 @@ class HabilidadesTests(TestCase):
         creada = self.Skill.objects.get(pk=resp.json()['id'])
         self.assertEqual(creada.agents.count(), 0)
 
+    def test_repetir_el_nombre_avisa_en_vez_de_reventar(self):
+        """La base ya lo impedía, pero saltaba como IntegrityError: la persona veía un
+        error del sistema donde correspondía "ya tiene una con ese nombre"."""
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        datos = {'name': 'Tono formal', 'instructions': 'Trate de usted.'}
+
+        self.assertEqual(client.post('/api/v1/agents/habilidades/', datos, format='json').status_code, 201)
+        repetida = client.post('/api/v1/agents/habilidades/', datos, format='json')
+        self.assertEqual(repetida.status_code, 400)
+        self.assertIn('nombre', str(repetida.data).lower())
+
+    def test_el_nombre_repetido_no_distingue_mayusculas(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        client.post('/api/v1/agents/habilidades/',
+                    {'name': 'Tono formal', 'instructions': 'x'}, format='json')
+        r = client.post('/api/v1/agents/habilidades/',
+                        {'name': 'TONO FORMAL', 'instructions': 'x'}, format='json')
+        self.assertEqual(r.status_code, 400)
+
     def test_una_habilidad_sin_instrucciones_se_rechaza(self):
         client = APIClient()
         client.force_authenticate(user=self.user)
