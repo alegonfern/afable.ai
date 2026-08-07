@@ -6,13 +6,14 @@ import {
   Button, Menu, MenuItem, Collapse,
 } from '@mui/material';
 import {
-  Send, Paperclip, AtSign, Bot, User, Sparkles,
+  Send, Paperclip, AtSign, User, Sparkles,
   Database, FileText, TrendingUp, BarChart2, Users,
   Copy, ThumbsUp, ChevronDown, AlertCircle, RefreshCw,
   ArrowUpRight, X, Plug, GitBranch, Pencil,
 } from 'lucide-react';
 import { useNavigate, useLocation, useOutletContext } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { AfableMark } from '../components/Logo';
 import { api } from '../services/api';
 import AgentesGaleria from './trabajo/AgentesGaleria';
 import SelectorAgente from './trabajo/SelectorAgente';
@@ -220,7 +221,7 @@ function MessageBubble({ msg, onReintentar, onRamificar, onEditar }) {
       <Box sx={{ width: 28, height: 28, borderRadius: '8px', flexShrink: 0, mt: 0.25,
         background: 'linear-gradient(135deg, #586AD0 0%, #2F42A6 100%)',
         display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Bot size={14} color="#fff" />
+        <AfableMark size={14} color="#fff" />
       </Box>
       <Box sx={{ flex: 1, minWidth: 0 }}>
         {/* Quien contesto ESTE mensaje. En un hilo pueden haber contestado
@@ -820,7 +821,7 @@ export default function ChatPage() {
       {activeAgent && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 3, py: 1,
           borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'rgba(88, 106, 208,0.05)' }}>
-          <Bot size={14} color="#9BA6E3" />
+          <AfableMark size={14} color="#9BA6E3" />
           <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>
             Hablando con el agente <strong style={{ color: '#9BA6E3' }}>{activeAgent.name}</strong>
           </Typography>
@@ -865,7 +866,7 @@ export default function ChatPage() {
                 <Box sx={{ width: 28, height: 28, borderRadius: '8px', flexShrink: 0,
                   background: 'linear-gradient(135deg, #586AD0 0%, #2F42A6 100%)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Bot size={14} color="#fff" />
+                  <AfableMark size={14} color="#fff" />
                 </Box>
                 <ThinkingLoader step={thinkStep} label={liveStatus} />
               </Box>
