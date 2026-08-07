@@ -36,7 +36,6 @@ import {
   // Building2 kept for user menu items only
 } from 'lucide-react';
 import { toast } from 'react-toastify';
-import SelectorWorkspace from '../../../components/SelectorWorkspace';
 import SelectorEspacio from '../../../components/SelectorEspacio';
 import { authService } from '../../../services/auth';
 import { api } from '../../../services/api';
@@ -309,10 +308,6 @@ export default function Header({ open, handleDrawerToggle }) {
           </Typography>
         </Box>
       </Box>
-
-      {/* En qué empresa se está trabajando, arriba a la derecha y pegado al claro/oscuro:
-          los dos son ajustes del marco, no del contenido de la pantalla. */}
-      <SelectorWorkspace />
 
       {/* Claro / oscuro: arriba a la derecha, donde se busca sin pensar.
           Un solo icono, el del modo activo. Antes había sol + interruptor +
