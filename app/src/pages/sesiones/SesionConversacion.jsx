@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import { Bot, CheckCircle2, MessageSquare, Search, Send, Sparkles } from 'lucide-react';
 import { api } from '../../services/api';
+import HiloDeLaSesion from './HiloDeLaSesion';
 
 /**
  * La Conversación de una Sesión: el compositor arriba y debajo lo que pasó.
@@ -31,6 +32,9 @@ export default function SesionConversacion({ sesion, slug, onSaludo }) {
   const [error, setError] = useState('');
   const [mensaje, setMensaje] = useState('');
   const [busqueda, setBusqueda] = useState('');
+  // Qué hilo está desplegado. Uno a la vez: con varios abiertos el feed deja de servir
+  // para lo que sirve, que es ver de un vistazo qué pasó.
+  const [abierto, setAbierto] = useState(null);
   const [agentes, setAgentes] = useState([]);
   const [agente, setAgente] = useState('');
 
@@ -171,7 +175,11 @@ export default function SesionConversacion({ sesion, slug, onSaludo }) {
                 key={`${i.tipo}-${i.id}`}
                 direction="row" spacing={1.5} alignItems="flex-start"
                 onClick={() => {
-                  if (i.tipo === 'conversacion') navigate(`/app/chat?conversation=${i.id}`);
+                  // Se abre ACA, no en otra pantalla: seguir una conversación no puede
+                  // costar perder de vista todo lo demás que pasa en la Sesión.
+                  if (i.tipo === 'conversacion') {
+                    setAbierto((actual) => (actual === i.id ? null : i.id));
+                  }
                 }}
                 sx={{
                   p: 1.5, borderRadius: '10px',
@@ -225,6 +233,10 @@ export default function SesionConversacion({ sesion, slug, onSaludo }) {
                       {i.respuestas} {i.respuestas === 1 ? 'respuesta' : 'respuestas'}
                       {i.ultima_de && ` · la última de ${i.ultima_de}`}
                     </Typography>
+                  )}
+
+                  {abierto === i.id && i.tipo === 'conversacion' && (
+                    <HiloDeLaSesion conversationId={i.id} workspaceSlug={slug} />
                   )}
                 </Box>
               </Stack>

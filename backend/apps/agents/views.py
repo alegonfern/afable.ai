@@ -902,7 +902,7 @@ class DirectChatView(APIView):
             sesion = _sesion_del_pedido(request)
             agent = _agente_inicial(request, message, espacio, default_agent, sesion)
             conversation = Conversation.objects.create(
-                agent=agent, user=request.user, space=espacio, sesion=sesion,
+                agent=agent, user=request.user, workspace=espacio, sesion=sesion,
                 title=_conversation_title(agent, message))
 
         mention_system_id = request.data.get('system_id') or None
@@ -989,7 +989,7 @@ class DirectChatStreamView(APIView):
             sesion = _sesion_del_pedido(request)
             agent = _agente_inicial(request, message, espacio, default_agent, sesion)
             conversation = Conversation.objects.create(
-                agent=agent, user=request.user, space=espacio, sesion=sesion,
+                agent=agent, user=request.user, workspace=espacio, sesion=sesion,
                 title=_conversation_title(agent, message))
 
         mention_system_id = request.data.get('system_id') or None

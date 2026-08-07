@@ -61,6 +61,11 @@ export const api = {
 
   // ── Chat ──
   directChat: (message, history) => apiClient.post('/agents/direct-chat/', { message, history }),
+  // Responder DENTRO de un hilo que ya existe: es lo que convierte a la Sesión en una
+  // conversación del equipo y no en un muro de hilos sueltos. El permiso lo resuelve el
+  // backend (`hilo_para_escribir`): entra quien alcance la Sesión.
+  responderEnHilo: (conversationId, message, extra = {}) =>
+    apiClient.post('/agents/direct-chat/', { message, conversation_id: conversationId, ...extra }),
 
   // ── Documents ──
   getDocuments: () => apiClient.get('/agents/documents/'),
