@@ -19,16 +19,15 @@ const POLITICAS = [
 const DISPLAY = `'Sora', 'Inter', sans-serif`;
 
 /**
- * Workspace: el entorno de la empresa. **Uno por empresa, 1 a 1.**
+ * Los ajustes de LA EMPRESA: su nombre, rubro, RUT, logo y quién puede crear agentes.
  *
- * Reemplaza a la pantalla "Mis Empresas", que administraba el modelo Organization y
- * trataba las empresas como una lista. Aca no se coleccionan Workspace: son los
- * ajustes de SU empresa. Lo que se crea y se recorre dentro de ella son los
- * Espacios (conocimiento y permisos) y las Salas.
+ * Se llamaba "Workspace" de cuando ese era el nombre de la empresa. Desde los tres
+ * niveles (Empresa → Workspace → Sesión), el Workspace es otra cosa —un área adentro de
+ * la empresa— y esta pantalla no lo administra: los Workspaces se crean y se configuran
+ * en Conocimiento › Workspaces.
  *
- * Lo que se edita aca el backend lo refleja en la Organization enlazada, mientras el
- * chat, las conexiones y los documentos sigan colgando de ella
- * (ver Workspace.mirror_to_organization).
+ * El archivo conserva su nombre para no mover una ruta que ya anda; lo que se lee en
+ * pantalla es lo que tiene que ser correcto.
  */
 export default function WorkspacePage() {
   const theme = useTheme();
@@ -128,16 +127,17 @@ export default function WorkspacePage() {
     <Box sx={{ maxWidth: 1000, mx: 'auto', px: { xs: 2.5, md: 5 }, py: { xs: 4, md: 6 }, width: '100%' }}>
       <Building2 size={24} color={textMuted} strokeWidth={1.75} />
       <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.875rem', fontWeight: 600, mt: 1.5, letterSpacing: '-0.01em' }}>
-        Workspace
+        Su empresa
       </Typography>
       <Typography sx={{ color: textMuted, fontSize: '0.9375rem', mt: 0.75 }}>
-        El entorno de su empresa: sus datos, sus miembros y quién puede crear agentes.
+        Cómo se llama, a qué se dedica y quién puede crear agentes. Es lo que el agente
+        lee antes de contestar, y lo que se imprime en sus comprobantes.
       </Typography>
 
       {!workspace ? (
         <Box sx={{ mt: 4 }}>
           <Typography sx={{ color: textMuted, fontSize: '0.875rem' }}>
-            Todavía no tiene un Workspace. Cree el de su empresa para empezar.
+            Todavía no tiene una empresa creada. Cree la suya para empezar.
           </Typography>
           <Button
             onClick={() => setModalAbierto(true)}
@@ -145,19 +145,19 @@ export default function WorkspacePage() {
             variant="contained"
             sx={{ mt: 2, borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}
           >
-            Crear el Workspace
+            Crear la empresa
           </Button>
         </Box>
       ) : (
         <>
           {!esAdmin && (
             <Typography sx={{ color: textMuted, fontSize: '0.875rem', mt: 3 }}>
-              Su rol en este Workspace es {workspace.my_role}: puede ver estos datos, pero solo un
+              Su rol en esta empresa es {workspace.my_role}: puede ver estos datos, pero solo un
               administrador los edita.
             </Typography>
           )}
 
-          {/* El logo, arriba de los datos: es lo primero que se ve del Workspace en la
+          {/* El logo, arriba de los datos: es lo primero que se ve de la empresa en la
               barra lateral, así que también es lo primero acá. */}
           <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 3.5 }}>
             <MarcaWorkspace workspace={workspace} size={56} radio="12px" />
@@ -166,7 +166,7 @@ export default function WorkspacePage() {
                 Logo de la empresa
               </Typography>
               <Typography sx={{ fontSize: '0.8125rem', color: textMuted, mt: 0.25 }}>
-                Es cómo se reconoce este Workspace en la barra lateral. Sin logo se usa la
+                Es cómo se reconoce su empresa en la barra lateral. Sin logo se usa la
                 inicial del nombre.
               </Typography>
               {esAdmin && (
@@ -365,7 +365,7 @@ function ModalNuevoWorkspace({ abierto, cerrar, sectores, alCrear }) {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}
       >
-        Nuevo Workspace
+        Nueva empresa
         <IconButton size="small" onClick={cerrar} sx={{ color: textMuted }}>
           <X size={16} />
         </IconButton>

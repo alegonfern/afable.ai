@@ -280,7 +280,7 @@ export default function Drawer({ open, handleDrawerToggle }) {
       items: [
         { path: '/app/admin/personas',  label: 'Personas',      icon: <Users size={14} /> },
         { path: '/app/admin/agentes',   label: 'Agentes',       icon: <Bot size={14} /> },
-        { path: '/app/admin/workspace', label: 'Ajustes',       icon: <Building2 size={14} /> },
+        { path: '/app/admin/workspace', label: 'Su empresa',    icon: <Building2 size={14} /> },
         { path: '/app/configuracion',   label: 'Configuración', icon: <Settings size={14} /> },
         // Decia "Plan" y llevaba a la vitrina de precios, que no dice con que se esta
         // pagando ni que se cobro. La pantalla real es Facturacion.
