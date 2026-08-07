@@ -85,7 +85,7 @@ export default function HelpPage() {
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
       <PageHeader title="Ayuda" backLabel="Inicio" back="/app" />
 
-      <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 680 }}>
+      <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 680, width: '100%', mx: 'auto' }}>
 
         {/* ── Atajos de teclado ── */}
         <Section title="Atajos de teclado" icon={<Keyboard size={14} />}>

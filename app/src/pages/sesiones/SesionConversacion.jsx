@@ -86,7 +86,7 @@ export default function SesionConversacion({ sesion, slug, onSaludo }) {
     .filter((g) => g.items.length > 0);
 
   return (
-    <Box sx={{ px: { xs: 2.5, sm: 4 }, pt: 1, pb: 6, maxWidth: 900, width: '100%' }}>
+    <Box sx={{ px: { xs: 2.5, sm: 4 }, pt: 1, pb: 6, maxWidth: 900, width: '100%', mx: 'auto' }}>
       {/* El compositor, arriba */}
       <Box sx={{
         p: 1.75, mb: 2, borderRadius: '12px',

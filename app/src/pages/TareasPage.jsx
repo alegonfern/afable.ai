@@ -184,7 +184,7 @@ export default function TareasPage() {
         </Tabs>
       </Box>
 
-      <Box sx={{ px: { xs: 2.5, sm: 4 }, pt: 2.5, pb: 6, maxWidth: 900, width: '100%' }}>
+      <Box sx={{ px: { xs: 2.5, sm: 4 }, pt: 2.5, pb: 6, maxWidth: 900, width: '100%', mx: 'auto' }}>
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
 
         {/* El filtro por Sesión solo aparece cuando hay más de una: con una sola no

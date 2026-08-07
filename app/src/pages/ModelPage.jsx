@@ -248,7 +248,7 @@ export default function ModelPage() {
         }
       />
 
-      <Box sx={{ pt: 3, pb: 5, px: { xs: 2, sm: 3 }, width: '100%', maxWidth: 1180 }}>
+      <Box sx={{ pt: 3, pb: 5, px: { xs: 2, sm: 3 }, width: '100%', maxWidth: 1180, mx: 'auto' }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', pt: 8 }}><CircularProgress sx={{ color: '#586AD0' }} /></Box>
         ) : !hasModel ? (
