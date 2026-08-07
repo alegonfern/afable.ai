@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     'apps.tools',
     'apps.payments',
     'apps.leads',
+    'apps.soporte',
 ]
 
 MIDDLEWARE = [
@@ -128,6 +129,11 @@ CORS_ALLOWED_ORIGINS = config(
 CORS_ALLOW_CREDENTIALS = True
 
 AFABLE_TEAM_EMAIL = config('AFABLE_TEAM_EMAIL', default='alegonfern@gmail.com')
+
+# A dónde llegan los mensajes del formulario de soporte de la app. Va aparte del correo
+# del equipo a propósito: el día que soporte lo atienda otra persona, se cambia acá y no
+# hay que revisar quién más usaba esa dirección.
+SOPORTE_EMAIL = config('SOPORTE_EMAIL', default='alegonfern@gmail.com')
 
 ANTHROPIC_API_KEY = config('ANTHROPIC_API_KEY', default='')
 DEEPSEEK_API_KEY = config('DEEPSEEK_API_KEY', default='')

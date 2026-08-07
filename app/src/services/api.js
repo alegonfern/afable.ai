@@ -291,6 +291,11 @@ export const api = {
   deleteAutomation: (id) => apiClient.delete(`/agents/automations/${id}/`),
   runAutomation: (id) => apiClient.post(`/agents/automations/${id}/run/`),
 
+  // ── Soporte ──
+  // El formulario de la burbuja. El contexto (pantalla, empresa, Workspace, modelo y
+  // errores) lo arma el componente: quien está atascado no tiene por qué saberlo.
+  enviarMensajeSoporte: (data) => apiClient.post('/soporte/', data),
+
   // ── La primera hora ──
   // Qué le falta a la empresa. El avance lo calcula el backend del estado real, así que
   // acá no hay nada que recordar entre pantallas.
