@@ -51,6 +51,38 @@ acciones = [
     ('conversaciones',       'GET',    '/agents/conversations/', None),
 ]
 
+# ── Segunda tanda: EDITAR y BORRAR ──────────────────────────────────────────
+# Son los que menos se prueban y los que mas rompe una cirugia de modelos: crear algo
+# suele estar cubierto, pero editarlo o borrarlo recorre codigo que nadie mira.
+def crear(ruta, cuerpo):
+    """Crea algo y devuelve su id, para despues editarlo y borrarlo."""
+    codigo, resp = pedir('POST', ruta, tok, cuerpo)
+    if codigo not in (200, 201):
+        return None
+    try:
+        return json.loads(resp).get('id')
+    except Exception:
+        return None
+
+id_ws = crear(f'/workspaces/{EMP}/espacios/', {'name': 'Humo edicion', 'visibility': 'abierto'})
+id_hab = crear('/agents/habilidades/', {'name': 'Humo edicion', 'instructions': 'x'})
+id_ses = crear('/sesiones/', {'workspace': EMP, 'name': 'Humo edicion'})
+id_carp = crear(f'/archivos/carpetas/?workspace={EMP}', {'nombre': 'Humo edicion', 'workspace': EMP})
+id_agente = crear('/agents/constructor/', {'workspace': EMP, 'name': 'Humo edicion', 'instructions': 'x'})
+
+acciones += [
+    ('editar Workspace',   'PATCH',  f'/workspaces/{EMP}/espacios/humo-edicion/', {'description': 'x'}),
+    ('editar habilidad',   'PATCH',  f'/agents/habilidades/{id_hab}/', {'description': 'x'}),
+    ('editar Sesion',      'PATCH',  f'/sesiones/humo-edicion/', {'workspace': EMP, 'name': 'Humo 2'}),
+    ('editar carpeta',     'PATCH',  f'/archivos/carpetas/{id_carp}/?workspace={EMP}', {'nombre': 'Humo 2'}),
+    ('editar agente',      'PATCH',  f'/agents/constructor/{id_agente}/', {'workspace': EMP, 'description': 'x'}),
+    ('borrar habilidad',   'DELETE', f'/agents/habilidades/{id_hab}/', None),
+    ('borrar carpeta',     'DELETE', f'/archivos/carpetas/{id_carp}/?workspace={EMP}', None),
+    ('borrar Sesion',      'DELETE', f'/sesiones/humo-edicion/?workspace={EMP}', None),
+    ('borrar Workspace',   'DELETE', f'/workspaces/{EMP}/espacios/humo-edicion/', None),
+    ('borrar agente',      'DELETE', f'/agents/{id_agente}/', None),
+]
+
 print(f'{"":3} {"accion":24} {"codigo"}')
 malos = []
 for nombre, metodo, ruta, cuerpo in acciones:
