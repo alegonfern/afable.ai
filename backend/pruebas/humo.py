@@ -83,6 +83,41 @@ acciones += [
     ('borrar agente',      'DELETE', f'/agents/{id_agente}/', None),
 ]
 
+# ── Tercera tanda: archivos, versiones y permisos ───────────────────────────
+# Es la superficie con mas cirugia encima (carpetas, versiones, permisos por archivo) y
+# la que menos se recorre a mano: nadie abre el historial de un documento todos los dias.
+codigo, resp = pedir('GET', f'/archivos/?workspace={EMP}', tok)
+doc_id = None
+try:
+    docs = json.loads(resp).get('documentos') or []
+    doc_id = docs[0]['id'] if docs else None
+except Exception:
+    pass
+
+if doc_id:
+    acciones += [
+        ('ver documento',      'GET',   f'/archivos/documentos/{doc_id}/?workspace={EMP}', None),
+        ('contenido',          'GET',   f'/archivos/documentos/{doc_id}/contenido/?workspace={EMP}', None),
+        ('versiones',          'GET',   f'/archivos/documentos/{doc_id}/versiones/?workspace={EMP}', None),
+        ('permisos del doc',   'GET',   f'/archivos/compartir/?workspace={EMP}&documento={doc_id}', None),
+        ('restringir doc',     'POST',  f'/archivos/compartir/?workspace={EMP}',
+                                        {'workspace': EMP, 'documento': doc_id, 'restringido': True}),
+        ('abrir doc',          'POST',  f'/archivos/compartir/?workspace={EMP}',
+                                        {'workspace': EMP, 'documento': doc_id, 'restringido': False}),
+        ('renombrar doc',      'PATCH', f'/archivos/documentos/{doc_id}/?workspace={EMP}', {'title': 'Humo renombrado'}),
+    ]
+
+acciones += [
+    ('tareas de la empresa',  'GET',  f'/tareas/?workspace={EMP}&estado=abiertas', None),
+    ('planes publicos',       'GET',  '/payments/plans/', None),
+    ('medios de pago',        'GET',  f'/workspaces/{EMP}/facturacion/metodos/', None),
+    ('mis datos',             'GET',  '/user/me/', None),
+    ('mi contexto',           'GET',  '/user/me/context/', None),
+    ('personas',              'GET',  f'/workspaces/{EMP}/members/', None),
+    ('invitaciones',          'GET',  f'/workspaces/{EMP}/invitations/', None),
+    ('sectores',              'GET',  '/workspaces/sectores/', None),
+]
+
 print(f'{"":3} {"accion":24} {"codigo"}')
 malos = []
 for nombre, metodo, ruta, cuerpo in acciones:
