@@ -7,6 +7,7 @@ import {
 import { ArrowLeft, Bot, History, RotateCcw, Save, User, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { api } from '../../services/api';
+import VistaDelArchivo from './VistaDelArchivo';
 import { useWorkspace } from '../../context/WorkspaceContext';
 
 const DISPLAY = `'Sora', 'Inter', sans-serif`;
@@ -168,13 +169,13 @@ export default function DocumentoPage() {
 
           {!doc.editable && (
             <Alert severity="info" sx={{ mb: 2, fontSize: '0.85rem' }}>
-              Este archivo no es de texto ({doc.content_type || 'formato desconocido'}), así que
-              se muestra lo que se le extrajo y no se puede editar acá. Si hay que cambiarlo,
-              pídale a un agente que prepare un documento nuevo.
+              Este archivo no se edita como texto. Se muestra tal como es, y el agente lo
+              lee completo para responder sobre él.
             </Alert>
           )}
 
-          <TextField
+          {doc.editable ? (
+            <TextField
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
             disabled={!doc.editable}
@@ -189,6 +190,10 @@ export default function DocumentoPage() {
               },
             }}
           />
+
+          ) : (
+            <VistaDelArchivo documentoId={doc.id} workspaceSlug={slug} />
+          )}
 
           {doc.editable && sinGuardar && (
             <TextField

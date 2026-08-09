@@ -325,6 +325,25 @@ class DocumentoDetailView(APIView):
         return Response(serializar_documento(doc, request))
 
 
+class VistaView(APIView):
+    """Cómo se muestra este archivo: planilla, documento con formato, PDF o texto.
+
+    Va aparte de `ContenidoView` —que es el texto editable— porque son dos preguntas
+    distintas: qué se puede EDITAR y cómo se VE. Una planilla se ve como tabla aunque su
+    edición siga siendo por celdas.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        from services.vista_de_documento import vista_de
+
+        doc, error = ContenidoView()._doc(request, pk)
+        if error:
+            return error
+        return Response({'titulo': doc.title, **vista_de(doc)})
+
+
 class ContenidoView(APIView):
     """GET y PUT del texto de un documento."""
 

@@ -2,6 +2,7 @@
 from django.urls import path
 
 from .views import (
+    VistaView,
     CarpetaDetailView, CarpetaListCreateView, ContenidoView, DocumentoDetailView,
     CompartirView, ExploradorView, SubirView, VersionDetailView, VersionesView,
 )
@@ -14,6 +15,7 @@ urlpatterns = [
     path('carpetas/<int:pk>/', CarpetaDetailView.as_view(), name='carpeta'),
     path('documentos/<int:pk>/', DocumentoDetailView.as_view(), name='documento'),
     path('documentos/<int:pk>/contenido/', ContenidoView.as_view(), name='contenido'),
+    path('documentos/<int:pk>/vista/', VistaView.as_view(), name='vista'),
     path('documentos/<int:pk>/versiones/', VersionesView.as_view(), name='versiones'),
     path(
         'documentos/<int:pk>/versiones/<int:numero>/',

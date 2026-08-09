@@ -309,6 +309,10 @@ export const api = {
   loQueHizoAfable: (slug, dias) =>
     apiClient.get(`/workspaces/${slug}/lo-que-hizo/`, { params: dias ? { dias } : {} }),
 
+  // Cómo se MUESTRA un archivo: planilla, documento con formato, PDF o texto.
+  getVistaDelArchivo: (id, workspace) =>
+    apiClient.get(`/archivos/documentos/${id}/vista/`, { params: { workspace } }),
+
   // ── La primera hora ──
   // La empresa de ejemplo: documentos de verdad para poder preguntar antes de cargar
   // nada. Van marcados y se quitan de una sola vez.
