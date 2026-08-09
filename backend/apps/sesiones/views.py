@@ -116,9 +116,20 @@ class SesionListCreateView(APIView):
             )
 
         from apps.workspaces.models import Workspace
+        from apps.workspaces.permissions import require_workspace
+
+        # ⭐ La Sesión nace en el Workspace donde se está trabajando. Antes iba SIEMPRE al
+        # General: quien tenía "Ventas" elegido la creaba y desaparecía de su vista, con
+        # todo el aspecto de no haberse creado. Sin Workspace elegido ("Todos") va al
+        # General, que es el que ve toda la empresa.
+        elegido = (request.data.get('espacio') or '').strip()
+        destino = (
+            require_workspace(membership, elegido) if elegido
+            else Workspace.general_de(membership.organization, request.user)
+        )
 
         sesion = Sesion.objects.create(
-            workspace=Workspace.general_de(membership.organization, request.user),
+            workspace=destino,
             created_by=request.user,
             visibility=visibilidad or 'abierta', **campos,
         )

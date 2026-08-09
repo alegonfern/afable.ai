@@ -155,9 +155,19 @@ class Workspace(models.Model):
         Existe para que nunca haya una empresa sin dónde trabajar: es el que recibe las
         Sesiones y las conversaciones de quien todavía no armó áreas.
         """
+        # ⚠️ Por NOMBRE primero, y sólo después "cualquiera abierto". Buscar sólo por
+        # visibilidad devolvía el primero por orden alfabético, así que en cuanto la
+        # empresa cargó los datos de ejemplo ("Empresa de ejemplo" < "General") las
+        # Sesiones nuevas empezaron a caer entre los documentos de prueba. Lo que se crea
+        # sin elegir área tiene que ir al General, no al primero de la lista.
+        general = cls.objects.filter(
+            organization=organization, name=WORKSPACE_GENERAL,
+        ).first()
+        if general:
+            return general
         abierto = cls.objects.filter(
             organization=organization, visibility=VISIBILITY_OPEN,
-        ).first()
+        ).exclude(name__istartswith='Empresa de ejemplo').first()
         if abierto:
             return abierto
         return cls.objects.create(

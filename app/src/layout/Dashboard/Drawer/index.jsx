@@ -101,10 +101,15 @@ export default function Drawer({ open, handleDrawerToggle }) {
   const espacioSlug = localStorage.getItem(`afable_espacio_slug:${wsSlug}`);
   const cargarSesiones = useCallback(() => {
     if (!wsSlug) return;
-    api.getSesiones(wsSlug, espacioSlug ? { espacio: espacioSlug } : {})
+    // ⭐ La barra NO filtra por el Workspace elegido, a diferencia de Archivos o la
+    // galería de agentes. Es la NAVEGACIÓN: esconder acá no acota una búsqueda, hace
+    // creer que el trabajo se perdió — y quien no tiene claro que arriba hay un filtro
+    // no relaciona una cosa con la otra. Cada Sesión dice a qué Workspace pertenece,
+    // que informa sin ocultar.
+    api.getSesiones(wsSlug)
       .then(r => setSesiones(r.data.results || []))
       .catch(() => setSesiones([]));
-  }, [wsSlug, espacioSlug]);
+  }, [wsSlug]);
 
   useEffect(() => { cargarSesiones(); }, [cargarSesiones]);
   // Al crear, archivar o borrar una Sesion la barra tiene que reflejarlo sin recargar.
@@ -184,7 +189,12 @@ export default function Drawer({ open, handleDrawerToggle }) {
     const nombre = (nombreNueva || '').trim();
     if (!wsSlug || !nombre) return;
     try {
-      const { data } = await api.createSesion({ workspace: wsSlug, name: nombre });
+      // Nace donde se está trabajando: si hay un Workspace elegido arriba, ahí — si no,
+      // la Sesión se crearía en otro lado y desaparecería de la barra.
+      const { data } = await api.createSesion({
+        workspace: wsSlug, name: nombre,
+        ...(espacioSlug ? { espacio: espacioSlug } : {}),
+      });
       setNombreNueva(null);
       await cargarSesiones();
       navigate(`/app/sesiones/${data.slug}`);

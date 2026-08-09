@@ -24,6 +24,40 @@ from .permissions import membership_por_organizacion
 User = get_user_model()
 
 
+class ElGeneralEsElQueRecibeTests(TestCase):
+    """⚠️ `general_de` buscaba "el primer Workspace abierto", y eso se rompió solo.
+
+    En cuanto una empresa cargó los datos de ejemplo, "Empresa de ejemplo" quedó antes que
+    "General" por orden alfabético y las Sesiones nuevas empezaron a caer entre los
+    documentos de prueba — donde el filtro de la barra lateral no las mostraba, así que
+    parecían no haberse creado.
+    """
+
+    def setUp(self):
+        self.duena = User.objects.create_user(
+            username='duena@afable.test', email='duena@afable.test', password='afable123',
+        )
+        self.empresa = Organization.objects.create(owner=self.duena, name='Cocinas SpA')
+        self.empresa.agregar_miembro(self.duena, ROLE_ADMIN)
+
+    def test_el_general_gana_aunque_alfabeticamente_vaya_despues(self):
+        Workspace.objects.create(organization=self.empresa, name='Empresa de ejemplo')
+        general = Workspace.objects.create(organization=self.empresa, name='General')
+        Workspace.objects.create(organization=self.empresa, name='Alfa')
+
+        self.assertEqual(Workspace.general_de(self.empresa), general)
+
+    def test_sin_general_no_elige_el_de_los_datos_de_ejemplo(self):
+        """Lo que se crea sin elegir área no puede terminar entre datos inventados."""
+        Workspace.objects.create(organization=self.empresa, name='Empresa de ejemplo')
+        ventas = Workspace.objects.create(organization=self.empresa, name='Ventas')
+
+        self.assertEqual(Workspace.general_de(self.empresa), ventas)
+
+    def test_sin_ninguno_lo_crea(self):
+        self.assertEqual(Workspace.general_de(self.empresa).name, 'General')
+
+
 class LoQueHizoAfableTests(TestCase):
 
     def setUp(self):
