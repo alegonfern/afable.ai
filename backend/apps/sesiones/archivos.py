@@ -42,7 +42,11 @@ def serializar(doc, request=None):
             (doc.uploaded_by.get_full_name() or doc.uploaded_by.email)
             if doc.uploaded_by else None
         ),
-        'url': request.build_absolute_uri(doc.file.url) if (request and doc.file) else None,
+        # Igual que en el explorador: la ruta con permiso, no la de /media/.
+        'url': (
+            request.build_absolute_uri(f'/api/v1/archivos/documentos/{doc.pk}/archivo/')
+            if (request and doc.file) else None
+        ),
         'created_at': doc.created_at,
     }
 

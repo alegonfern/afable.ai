@@ -333,6 +333,13 @@ export const api = {
       responseType: 'blob',
     }),
 
+  // El archivo mismo, con la sesión puesta. Un <iframe src> o un <img src> lo pediría el
+  // navegador por su cuenta, sin la cabecera de sesión: por eso se baja como blob y se
+  // dibuja desde memoria.
+  descargarArchivo: (id, workspace) =>
+    apiClient.get(`/archivos/documentos/${id}/archivo/`, {
+      params: { workspace }, responseType: 'blob',
+    }),
   // Cómo se MUESTRA un archivo: planilla, documento con formato, PDF o texto.
   getVistaDelArchivo: (id, workspace) =>
     apiClient.get(`/archivos/documentos/${id}/vista/`, { params: { workspace } }),

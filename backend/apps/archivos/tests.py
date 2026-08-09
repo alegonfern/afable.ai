@@ -1038,3 +1038,32 @@ class LoQueElAgenteDejoEscritoTests(BaseArchivos):
             self.org, [], None, artifacts,
         )
         self.assertEqual(artifacts.get('documentos', []), [])
+
+
+class ElArchivoNoSaleSinPermisoTests(BaseArchivos):
+    """⚠️ Los documentos se entregaban por `/media/` a cualquiera con la dirección.
+
+    Sin sesión, sin ser de la empresa. El nombre lleva un sufijo al azar, pero eso es
+    dificultad para adivinar, no control de acceso: la dirección viajaba en cada respuesta
+    de la API. Para una empresa que sube su contrato, es exactamente lo que quiso evitar al
+    no usar una carpeta compartida.
+    """
+
+    def test_sin_sesion_no_se_baja(self):
+        self.client.force_authenticate(user=None)
+        r = self.client.get(f'{URL}documentos/{self.texto.pk}/archivo/', self.q())
+        self.assertEqual(r.status_code, 401)
+
+    def test_alguien_de_otra_empresa_no_lo_baja(self):
+        self.client.force_authenticate(user=self.ajeno)
+        r = self.client.get(f'{URL}documentos/{self.texto.pk}/archivo/', self.q())
+        self.assertIn(r.status_code, (403, 404))
+
+    def test_la_direccion_que_publica_la_api_no_es_la_de_media(self):
+        """Si volviera a mandar `/media/…`, la pantalla la usaría y se reabriría el agujero."""
+        self.como()
+        r = self.client.get(URL, self.q())
+        for doc in r.data['documentos']:
+            if doc['url']:
+                self.assertNotIn('/media/', doc['url'])
+                self.assertIn(f"/archivos/documentos/{doc['id']}/archivo/", doc['url'])

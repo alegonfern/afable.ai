@@ -724,6 +724,10 @@ export default function ChatPage() {
                     // Lo que el agente dejó escrito, para que la tarjeta aparezca al
                     // terminar y no recién al recargar el hilo.
                     artefactos: data.artefactos || [],
+                    // Y en qué se apoyó. El backend ya las mandaba y la pantalla las
+                    // tiraba: la cita que se abre de un clic solo aparecía al recargar,
+                    // o sea justo cuando ya nadie va a comprobar el dato.
+                    fuentes: data.fuentes || [],
                   };
                 }
                 if (m.id === uid && data.user_message_id) {

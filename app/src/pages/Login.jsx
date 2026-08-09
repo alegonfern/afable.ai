@@ -37,12 +37,12 @@ export default function Login() {
       const { access, refresh } = response.data;
       authService.login(access, refresh, rememberMe);
       window.dispatchEvent(new Event('auth-login'));
-      toast.success('¡Bienvenido a Afable!');
+      toast.success('Bienvenido a Afable');
       navigate(destino, { replace: true });
     },
     onError: (error) => {
       toast.error(
-        error.response?.data?.detail || 'Credenciales incorrectas. Inténtalo de nuevo.'
+        error.response?.data?.detail || 'Credenciales incorrectas. Vuelva a intentarlo.'
       );
     },
   });
@@ -66,7 +66,7 @@ export default function Login() {
           Bienvenido de <span className="accent">vuelta.</span>
         </h1>
         <p className="auth-subtitle">
-          Inicia sesión para gestionar tus agentes y automatizaciones.
+          Inicie sesión para trabajar con sus agentes y automatizaciones.
         </p>
 
         <form className="auth-form" onSubmit={handleSubmit(onSubmit)} noValidate>
@@ -77,7 +77,7 @@ export default function Login() {
                 id="email"
                 className="auth-input"
                 type="email"
-                placeholder="tu@empresa.com"
+                placeholder="nombre@empresa.com"
                 autoComplete="email"
                 {...register('email', {
                   required: 'El correo es requerido',
@@ -95,7 +95,7 @@ export default function Login() {
                 id="password"
                 className={`auth-input has-toggle`}
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Tu contraseña"
+                placeholder="Su contraseña"
                 autoComplete="current-password"
                 {...register('password', {
                   required: 'La contraseña es requerida',
@@ -123,7 +123,7 @@ export default function Login() {
               />
               Recordarme
             </label>
-            <Link className="auth-link" to="/forgot-password">¿Olvidaste tu contraseña?</Link>
+            <Link className="auth-link" to="/forgot-password">¿Olvidó su contraseña?</Link>
           </div>
 
           <button
@@ -148,7 +148,7 @@ export default function Login() {
         </button>
 
         <p className="auth-foot">
-          ¿No tienes cuenta? <Link className="auth-link" to={`/register${location.search}`}>Regístrate</Link>
+          ¿No tiene cuenta? <Link className="auth-link" to={`/register${location.search}`}>Regístrese</Link>
         </p>
       </div>
     </div>

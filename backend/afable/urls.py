@@ -1,7 +1,31 @@
 from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
-from django.conf.urls.static import static
+
+
+def _media_publica():
+    """Sirve por `/media/` SOLO lo que es público de verdad: logos y fotos de perfil.
+
+    ⚠️ Los documentos de empresa quedan fuera a propósito. Se entregaban a cualquiera que
+    tuviera la dirección, sin sesión — ahora salen por
+    `/api/v1/archivos/documentos/<id>/archivo/`, que comprueba permisos.
+
+    ⚠️ **Esto cubre lo que sirve Django.** Si en el servidor hay un nginx publicando
+    `/media/` por su cuenta, hay que cerrarle `company_documents/` ahí también: este
+    archivo no lo alcanza.
+    """
+    from django.urls import re_path
+    from django.views.static import serve
+
+    if not settings.DEBUG:
+        return []
+    return [
+        re_path(
+            r'^media/(?P<path>(?!company_documents/).*)$',
+            serve, {'document_root': settings.MEDIA_ROOT},
+        ),
+    ]
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -28,4 +52,4 @@ urlpatterns = [
         path('soporte/', include('apps.soporte.urls')),
         path('notificaciones/', include('apps.notificaciones.urls')),
     ])),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+] + _media_publica()

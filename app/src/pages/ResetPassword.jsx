@@ -70,7 +70,7 @@ export default function ResetPassword() {
           Nueva <span className="accent">contraseña.</span>
         </h1>
         <p className="auth-subtitle">
-          Elige una contraseña segura para tu cuenta de Afable.
+          Elija una contraseña segura para su cuenta de Afable.
         </p>
 
         <form className="auth-form" onSubmit={handleSubmit(onSubmit)} noValidate>
@@ -107,10 +107,10 @@ export default function ResetPassword() {
                 id="confirmPassword"
                 className="auth-input has-toggle"
                 type={showConfirm ? 'text' : 'password'}
-                placeholder="Repite tu contraseña"
+                placeholder="Repita su contraseña"
                 autoComplete="new-password"
                 {...register('confirmPassword', {
-                  required: 'Confirma tu contraseña',
+                  required: 'Confirme su contraseña',
                   validate: (v) => v === password || 'Las contraseñas no coinciden',
                 })}
               />

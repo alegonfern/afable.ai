@@ -144,6 +144,13 @@ class Organization(models.Model):
         empresa = cls.objects.create(owner=user, name=name)
         empresa.agregar_miembro(user, ROLE_ADMIN)
         Workspace.general_de(empresa, creado_por=user)
+
+        # ⭐ Y con quién hablar. Sin esto la empresa nace sin un solo agente: quien se
+        # registra abre la galería y no encuentra a nadie, que es la peor primera
+        # pantalla posible para un producto que se llama "IA para equipos".
+        from apps.agents.agentes_base import sembrar_en
+        sembrar_en(empresa)
+
         return empresa
 
 

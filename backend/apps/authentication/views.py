@@ -120,7 +120,9 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        Organization.crear_para_dueno(user)
+        Organization.crear_para_dueno(
+            user, name=(serializer.validated_data.get('empresa') or '').strip() or None,
+        )
         return Response(_tokens_for_user(user), status=status.HTTP_201_CREATED)
 
 

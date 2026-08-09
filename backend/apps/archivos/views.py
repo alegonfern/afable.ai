@@ -79,7 +79,12 @@ def serializar_documento(doc, request=None, nivel=None):
              'mensaje': ultima.mensaje}
             if ultima else None
         ),
-        'url': request.build_absolute_uri(doc.file.url) if (request and doc.file) else None,
+        # ⚠️ La ruta de la API, NO `doc.file.url`. Esa entregaba el archivo sin sesión a
+        # cualquiera que tuviera la dirección.
+        'url': (
+            request.build_absolute_uri(f'/api/v1/archivos/documentos/{doc.pk}/archivo/')
+            if (request and doc.file) else None
+        ),
         'created_at': doc.created_at,
     }
 
@@ -616,6 +621,55 @@ class CambiosDeVersionView(APIView):
             # peor que no ofrecerlo.
             'reversible': bool(doc.editable),
         })
+
+
+class ArchivoView(APIView):
+    """El archivo mismo, servido CON PERMISO.
+
+    ⭐ **Por qué existe.** Los documentos vivían en `/media/…` y Django los entregaba a
+    cualquiera que tuviera la dirección: sin sesión, sin ser de la empresa, sin ser
+    miembro. Se comprobó con un `curl` sin token — 200 y el contenido completo. El nombre
+    del archivo lleva un sufijo al azar, pero eso es dificultad para adivinar, no control
+    de acceso: la dirección viaja en cada respuesta de la API.
+
+    Para una empresa que sube su contrato o su lista de precios, eso es exactamente lo que
+    vino a evitar cuando eligió una herramienta en vez de un Drive compartido.
+
+    Pasa por el mismo embudo que leer el contenido (`ContenidoView._doc`): quien no ve el
+    documento, tampoco baja el archivo.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        from django.http import FileResponse
+
+        doc, error = ContenidoView()._doc(request, pk)
+        if error:
+            return error
+        if not doc.file:
+            return Response(
+                {'detail': 'Este documento no tiene archivo.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            archivo = doc.file.open('rb')
+        except FileNotFoundError:
+            # El registro existe y el archivo no: pasa con documentos de ejemplo y con
+            # respaldos restaurados a medias. Decirlo es mejor que un 500 sin explicación.
+            return Response(
+                {'detail': 'El archivo no está disponible.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return FileResponse(
+            archivo,
+            content_type=doc.content_type or 'application/octet-stream',
+            # `inline`: un PDF se mira en el visor sin bajarlo. Bajar es una acción aparte.
+            as_attachment=False,
+            filename=re.sub(r'[/\\?%*:|"<>]', '-', doc.title)[:80],
+        )
 
 
 MAX_ARCHIVO_MB = 10

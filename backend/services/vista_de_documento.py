@@ -10,8 +10,9 @@ Cada formato se devuelve como lo que es:
 - **Planilla** → hojas, filas y celdas. La pantalla dibuja una tabla de verdad.
 - **Documento de Word** → HTML acotado (títulos, negritas, listas, tablas). Se conserva la
   jerarquía, que es lo que hace leíble un contrato.
-- **PDF** → se manda a mostrar el archivo mismo, que el navegador ya sabe dibujar. Nada de
-  reconstruirlo: el original siempre se va a ver mejor que cualquier aproximación.
+- **PDF** → se muestra el archivo mismo, que el navegador ya sabe dibujar. Nada de
+  reconstruirlo: el original siempre se va a ver mejor que cualquier aproximación. La
+  pantalla lo baja por la API (con sesión) y lo dibuja desde memoria.
 - **Texto** → como estaba.
 
 ⚠️ **Se acota a propósito** (`MAX_FILAS`, `MAX_COLUMNAS`): una planilla de 50.000 filas
@@ -41,7 +42,10 @@ def vista_de(doc):
         if nombre.endswith(DOCUMENTO):
             return _documento(doc)
         if nombre.endswith(PDF):
-            return {'tipo': 'pdf', 'url': doc.file.url}
+            # Sin dirección: la pantalla lo pide por la API, que comprueba permisos. Antes
+            # se mandaba `doc.file.url` (/media/…), que cualquiera con la dirección abría
+            # sin sesión.
+            return {'tipo': 'pdf'}
     except Exception:
         # Un archivo dañado o con una variante rara del formato no puede dejar la
         # pantalla en blanco: se cae al texto extraído, que es lo que había antes.

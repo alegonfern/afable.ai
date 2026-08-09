@@ -19,10 +19,27 @@ export default function VistaDelArchivo({ documentoId, workspaceSlug }) {
   const d = theme.palette.mode === 'dark';
   const [vista, setVista] = useState(null);
   const [hoja, setHoja] = useState(0);
+  const [pdfUrl, setPdfUrl] = useState(null);
 
   const borde = theme.palette.divider;
   const textMuted = d ? 'rgba(255,255,255,0.66)' : 'rgba(0,0,0,0.62)';
   const bgSuave = d ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)';
+
+  // El PDF se baja aparte, con sesión, y se libera al salir: si no, el blob se queda
+  // ocupando memoria hasta recargar la página.
+  useEffect(() => {
+    if (vista?.tipo !== 'pdf') return undefined;
+    let vivo = true;
+    let url = null;
+    api.descargarArchivo(documentoId, workspaceSlug)
+      .then(({ data }) => {
+        if (!vivo) return;
+        url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
+        setPdfUrl(url);
+      })
+      .catch(() => {});
+    return () => { vivo = false; if (url) URL.revokeObjectURL(url); };
+  }, [vista?.tipo, documentoId, workspaceSlug]);
 
   useEffect(() => {
     let vivo = true;
@@ -117,10 +134,20 @@ export default function VistaDelArchivo({ documentoId, workspaceSlug }) {
 
   // ── PDF ───────────────────────────────────────────────────────────────────
   if (vista.tipo === 'pdf') {
+    // El iframe apunta a un blob de memoria, no a /media/: el archivo se bajó con la
+    // sesión puesta. Antes se le pasaba la dirección directa, que cualquiera abría sin
+    // estar logueado.
+    if (!pdfUrl) {
+      return (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
+          <CircularProgress size={22} />
+        </Box>
+      );
+    }
     return (
       <Box
         component="iframe"
-        src={vista.url}
+        src={pdfUrl}
         title="Documento"
         sx={{ width: '100%', height: 620, border: `1px solid ${borde}`, borderRadius: '10px' }}
       />
