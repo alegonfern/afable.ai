@@ -600,17 +600,49 @@ Cuando generes un reporte o análisis formal, usa títulos markdown (#, ##).{ACT
 
 
 def _get_or_create_default(user):
-    org, _ = Organization.objects.get_or_create(
-        owner=user,
-        name="Personal",
-        defaults={"sector": "otro"},
+    """Con qué agente contesta un hilo nuevo cuando nadie eligió otro.
+
+    ⭐ **Es el agente de SU EMPRESA, no uno aparte.** Antes cada chat creaba una
+    Organization llamada "Personal" con un agente "Afable Assistant" propio. Tres
+    problemas, y ninguno se veía de frente:
+
+    - Toda persona terminaba con una segunda empresa fantasma, además de la suya.
+    - Contestaba un agente SIN las instrucciones del agente base `@afable` — el que tiene
+      dicho que busque en las fuentes de la empresa y cite de dónde sacó cada dato. O sea
+      que el camino más usado del producto era el peor configurado.
+    - Esas empresas huérfanas son las que ya costaron una pérdida de datos al limpiarlas:
+      borrar tres se llevó agentes y conversaciones en cascada.
+
+    Media docena de consultas en el código hacían `.exclude(name='Personal')` para
+    esquivarlas: el codigo peleaba contra un artefacto propio.
+
+    Ahora que toda empresa nace con sus agentes base (`apps/agents/agentes_base.py`), el
+    por defecto tiene a dónde apuntar de verdad.
+
+    ⚠️ No se tocan las "Personal" que ya existen ni las conversaciones colgadas de ellas:
+    son datos de alguien. Solo se deja de crear más.
+    """
+    from apps.agents.agentes_base import sembrar_en
+
+    empresa = (
+        Organization.objects.filter(memberships__user=user)
+        .exclude(name='Personal').order_by('id').first()
+        or Organization.objects.filter(owner=user).exclude(name='Personal').order_by('id').first()
     )
-    agent, _ = Agent.objects.get_or_create(
-        organization=org,
-        name="Afable Assistant",
-        defaults={"description": "Agente personal de Afable", "is_active": True},
-    )
-    return org, agent
+    if empresa is None:
+        # Sin empresa no hay a quién preguntarle. Pasa solo con cuentas viejas anteriores
+        # a que el registro creara la empresa; se les arma la suya en vez de una "Personal".
+        empresa = Organization.crear_para_dueno(user)
+
+    agente = empresa.agents.filter(handle='afable', is_active=True).first()
+    if agente is None:
+        # Una empresa creada antes de que los agentes base fueran automáticos.
+        sembrar_en(empresa)
+        agente = (
+            empresa.agents.filter(handle='afable', is_active=True).first()
+            or empresa.agents.filter(is_active=True).order_by('id').first()
+        )
+    return empresa, agente
 
 
 def _resolve_agent(request, default_agent):

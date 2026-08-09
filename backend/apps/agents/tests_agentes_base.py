@@ -63,3 +63,54 @@ class UnaEmpresaNuevaNaceConAgentesTests(TestCase):
             empresa = Organization.crear_para_dueno(self.user)
         self.assertIsNotNone(empresa.pk)
         self.assertEqual(empresa.agents.count(), 0)
+
+
+class ElAgentePorDefectoEsElDeSuEmpresaTests(TestCase):
+    """⚠️ Cada chat creaba una Organization «Personal» con un agente aparte.
+
+    Tres problemas que no se veían de frente: toda persona terminaba con una segunda
+    empresa fantasma; contestaba un agente SIN las instrucciones del `@afable` —o sea que
+    el camino más usado del producto era el peor configurado—; y esas empresas huérfanas
+    son las que ya costaron una pérdida de datos al limpiarlas.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='rosa@afable.test', email='rosa@afable.test', password='afable123',
+            first_name='Rosa',
+        )
+        self.empresa = Organization.crear_para_dueno(self.user, name='Panadería del Sur')
+
+    def por_defecto(self):
+        from apps.agents.views import _get_or_create_default
+        return _get_or_create_default(self.user)
+
+    def test_contesta_el_agente_base_de_su_empresa(self):
+        org, agente = self.por_defecto()
+        self.assertEqual(org, self.empresa)
+        self.assertEqual(agente.handle, 'afable')
+        # Y trae las instrucciones de verdad, que es todo el punto: el agente que
+        # contesta por defecto tiene dicho que busque en las fuentes y que cite.
+        instrucciones = agente.instructions.lower()
+        self.assertIn('citando de dónde sacó cada dato', instrucciones)
+        self.assertIn('busque en las fuentes', instrucciones)
+
+    def test_no_se_crea_ninguna_empresa_Personal(self):
+        antes = Organization.objects.count()
+        self.por_defecto()
+        self.por_defecto()
+        self.assertEqual(Organization.objects.count(), antes)
+        self.assertFalse(Organization.objects.filter(name='Personal').exists())
+
+    def test_una_empresa_vieja_sin_agentes_se_repara_sola(self):
+        """Las creadas antes de que los agentes base fueran automáticos."""
+        self.empresa.agents.all().delete()
+        _, agente = self.por_defecto()
+        self.assertEqual(agente.handle, 'afable')
+
+    def test_una_cuenta_sin_ninguna_empresa_recibe_la_suya(self):
+        """Antes se le armaba una «Personal»; ahora, su empresa."""
+        self.empresa.delete()
+        org, agente = self.por_defecto()
+        self.assertNotEqual(org.name, 'Personal')
+        self.assertEqual(agente.handle, 'afable')
