@@ -112,6 +112,12 @@ export default function Drawer({ open, handleDrawerToggle }) {
   }, [wsSlug]);
 
   useEffect(() => { cargarSesiones(); }, [cargarSesiones]);
+
+  // La etiqueta del Workspace solo aparece si la lista mezcla varios. Con uno solo diría
+  // lo mismo en todas las filas, y una etiqueta que nunca cambia se deja de leer.
+  const variosWorkspaces = new Set(
+    sesiones.map((s) => s.workspace).filter(Boolean),
+  ).size > 1;
   // Al crear, archivar o borrar una Sesion la barra tiene que reflejarlo sin recargar.
   useEffect(() => {
     const alCambiar = () => cargarSesiones();
@@ -609,13 +615,27 @@ export default function Drawer({ open, handleDrawerToggle }) {
                         }}
                       >
                         <Typography sx={{ fontSize: '0.8rem', flexShrink: 0 }}>{s.icon || '💠'}</Typography>
-                        <Typography sx={{
-                          fontSize: '0.8rem', lineHeight: 1.4, flex: 1, minWidth: 0,
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                          fontWeight: activa ? 600 : 400,
-                        }}>
-                          {s.name}
-                        </Typography>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography sx={{
+                            fontSize: '0.8rem', lineHeight: 1.4,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            fontWeight: activa ? 600 : 400,
+                          }}>
+                            {s.name}
+                          </Typography>
+                          {/* De dónde viene. Es la alternativa a esconderla: quien eligió
+                              un Workspace arriba entiende por qué está acá una Sesión de
+                              otro, en vez de creer que se perdió la que buscaba. */}
+                          {variosWorkspaces && s.workspace_name && (
+                            <Typography sx={{
+                              fontSize: '0.66rem', lineHeight: 1.3, color: textDisabled,
+                              overflow: 'hidden', textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}>
+                              {s.workspace_name}
+                            </Typography>
+                          )}
+                        </Box>
                         <MenuDeFila
                           visible={encima === `ses-${s.id}`}
                           titulo={s.name}

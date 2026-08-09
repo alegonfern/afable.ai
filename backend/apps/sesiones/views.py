@@ -30,6 +30,11 @@ def serializar(sesion, rol=None, detalle=False):
         'icon': sesion.icon,
         'visibility': sesion.visibility,
         'archivada': sesion.archivada,
+        # A qué Workspace pertenece. Se manda SIEMPRE, aunque la pantalla decida no
+        # dibujarlo: es lo que permite decir de dónde viene una Sesión en vez de
+        # esconderla cuando no es la del Workspace elegido.
+        'workspace': sesion.workspace.slug if sesion.workspace_id else None,
+        'workspace_name': sesion.workspace.name if sesion.workspace_id else None,
         'mi_rol': rol,
         'puedo_administrar': rol == ROL_EDITOR,
         'updated_at': sesion.updated_at,
@@ -85,7 +90,7 @@ class SesionListCreateView(APIView):
         sesiones = sesiones_visibles(
             membership, incluir_archivadas=archivadas,
             workspace_slug=(request.query_params.get('espacio') or '').strip() or None,
-        ).prefetch_related(
+        ).select_related('workspace').prefetch_related(
             'miembros__user', 'tasks',
         )
         return Response({

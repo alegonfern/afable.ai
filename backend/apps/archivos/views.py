@@ -121,6 +121,10 @@ class ExploradorView(APIView):
         # pertenece a la empresa entera, así que se ve siempre — si desapareciera al
         # elegir un área, cargar un archivo sin asignarlo lo volvería invisible.
         espacio = (request.query_params.get('espacio') or '').strip()
+        # Lo que el filtro deja fuera se CUENTA antes de aplicarlo. Filtrar en silencio es
+        # lo que hace creer que un archivo se perdió: la pantalla tiene que poder decir
+        # "mostrando 3 de 11" y ofrecer la salida.
+        sin_filtrar = alcanzables
         if espacio:
             from django.db.models import Q
             alcanzables = alcanzables.filter(
@@ -143,7 +147,16 @@ class ExploradorView(APIView):
             from .permisos import nivel_sobre_documento
             return nivel_sobre_documento(request.user, doc, membership)
 
+        ocultos = 0
+        if espacio:
+            mismos = sin_filtrar.filter(title__icontains=q) if q else sin_filtrar.filter(carpeta=actual)
+            ocultos = max(0, mismos.count() - docs.count())
+
         return Response({
+            # Cuántos dejó fuera el Workspace elegido. Cero significa que el filtro no
+            # está escondiendo nada, y entonces la pantalla no dice nada: un aviso que
+            # aparece siempre se deja de leer.
+            'ocultos_por_espacio': ocultos,
             'arbol': [
                 serializar_carpeta(c, nivel_sobre_carpeta(request.user, c, membership))
                 for c in todas

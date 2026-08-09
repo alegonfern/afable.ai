@@ -28,7 +28,7 @@ export default function ArchivosPage() {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const navigate = useNavigate();
-  const { slug, espacioSlug } = useWorkspace();
+  const { slug, espacioSlug, espacio, seleccionarEspacio } = useWorkspace();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const textMuted = d ? 'rgba(255,255,255,0.66)' : 'rgba(0,0,0,0.62)';
@@ -547,6 +547,33 @@ export default function ArchivosPage() {
                 sx={{ fontSize: '0.9375rem', fontWeight: 600, flex: 1 }}
               />
             </Stack>
+          )}
+
+          {/* ⭐ Si el Workspace elegido arriba está escondiendo archivos, se DICE, con el
+              número y la salida. Un filtro que actúa en silencio no se lee como filtro:
+              se lee como «ese archivo no está», y quien no relaciona una cosa con la otra
+              lo da por perdido. */}
+          {datos.ocultos_por_espacio > 0 && (
+            <Box sx={{
+              display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap',
+              px: 1.5, py: 1, mb: 1.5, borderRadius: '8px',
+              bgcolor: 'action.hover',
+            }}>
+              <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>
+                Mostrando {datos.documentos.length} de{' '}
+                {datos.documentos.length + datos.ocultos_por_espacio} archivos.
+                {' '}El Workspace <strong>{espacio?.name}</strong> deja fuera el resto.
+              </Typography>
+              <Typography
+                onClick={() => seleccionarEspacio(null)}
+                sx={{
+                  fontSize: '0.78rem', fontWeight: 600, color: '#586AD0',
+                  cursor: 'pointer', '&:hover': { textDecoration: 'underline' },
+                }}
+              >
+                Ver todos
+              </Typography>
+            </Box>
           )}
 
           {vista === 'cuadricula' ? (
