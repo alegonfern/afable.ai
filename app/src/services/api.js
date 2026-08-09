@@ -61,6 +61,10 @@ export const api = {
 
   // ── Chat ──
   directChat: (message, history) => apiClient.post('/agents/direct-chat/', { message, history }),
+  // Abrir un hilo NUEVO dentro de una Sesión, sin salir de ella. `sesion` es lo que hace
+  // que la conversación quede colgada ahí y la vea el equipo.
+  directChatEnSesion: (data) => apiClient.post('/agents/direct-chat/', data),
+
   // Responder DENTRO de un hilo que ya existe: es lo que convierte a la Sesión en una
   // conversación del equipo y no en un muro de hilos sueltos. El permiso lo resuelve el
   // backend (`hilo_para_escribir`): entra quien alcance la Sesión.

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, CircularProgress, IconButton, Stack, Typography, useTheme } from '@mui/material';
 import { SendHorizontal } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { AfableMark } from '../../components/Logo';
 import { useApp } from '../../context/AppContext';
@@ -23,6 +24,7 @@ export default function HiloDeLaSesion({ conversationId, workspaceSlug }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const { currentUser } = useApp();
+  const navigate = useNavigate();
 
   const [mensajes, setMensajes] = useState(null);
   const [texto, setTexto] = useState('');
@@ -116,6 +118,29 @@ export default function HiloDeLaSesion({ conversationId, workspaceSlug }) {
                 <Typography sx={{ fontSize: '0.875rem', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
                   {m.content}
                 </Typography>
+                {/* En qué se apoyó, abrible de un clic — igual que en el chat. Que la
+                    misma respuesta se pueda comprobar en un lado y en el otro no es un
+                    detalle: es la diferencia entre confiar en el producto o en la
+                    pantalla en la que uno cayó. */}
+                {!!m.fuentes?.length && (
+                  <Box sx={{ display: 'flex', gap: 0.75, mt: 0.6, flexWrap: 'wrap' }}>
+                    {m.fuentes.filter((f) => f.id).map((f) => (
+                      <Box
+                        key={f.id}
+                        onClick={(e) => { e.stopPropagation(); navigate(`/app/archivos/${f.id}`); }}
+                        title="Abrir el documento"
+                        sx={{
+                          px: 0.75, py: 0.15, borderRadius: '5px', cursor: 'pointer',
+                          fontSize: '0.7rem', color: '#9BA6E3',
+                          border: '1px solid rgba(155, 166, 227, 0.3)',
+                          '&:hover': { bgcolor: 'rgba(155, 166, 227, 0.12)' },
+                        }}
+                      >
+                        {f.titulo}
+                      </Box>
+                    ))}
+                  </Box>
+                )}
               </Box>
             </Stack>
           );

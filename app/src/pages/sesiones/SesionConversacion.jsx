@@ -61,18 +61,35 @@ export default function SesionConversacion({ sesion, slug, onSaludo }) {
       .catch(() => {});
   }, [slug]);
 
-  // Enviar abre el hilo EN esta Sesión: el chat recibe la Sesión y la conversación
-  // queda colgada de ella, así la ve cualquiera que entre acá.
-  const enviar = () => {
+  // ⭐ El hilo se abre y se responde ACÁ, sin salir de la Sesión.
+  //
+  // Antes esto navegaba a `/app/chat`: alguien creaba una Sesión, escribía su primera
+  // frase y la app lo sacaba del lugar que acababa de armar. Se perdía el hilo de lo que
+  // estaba haciendo, y si abandonaba ahí, la Sesión quedaba vacía como si no se hubiera
+  // creado. La Sesión es el lugar de trabajo: lo que se escribe adentro se queda adentro.
+  const [enviando, setEnviando] = useState(false);
+
+  const enviar = async () => {
     const texto = mensaje.trim();
-    if (!texto) return;
-    navigate('/app/chat', {
-      state: {
-        initialMessage: texto,
-        sesionSlug: sesion.slug,
-        ...(agente ? { agentId: agente } : {}),
-      },
-    });
+    if (!texto || enviando) return;
+    try {
+      setEnviando(true);
+      const { data } = await api.directChatEnSesion({
+        message: texto,
+        workspace: slug,
+        sesion: sesion.slug,
+        ...(agente ? { agent_id: agente } : {}),
+      });
+      setMensaje('');
+      await cargar();
+      // Queda abierto el hilo recién creado: quien escribió tiene que ver su respuesta,
+      // no una lista donde adivinar cuál es la suya.
+      if (data.conversation_id) setAbierto(data.conversation_id);
+    } catch {
+      setError('No se pudo enviar. Intente de nuevo.');
+    } finally {
+      setEnviando(false);
+    }
   };
 
   if (feed === null) {
