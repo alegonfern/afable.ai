@@ -44,6 +44,33 @@ export default function DocumentoPage() {
   const [versiones, setVersiones] = useState([]);
   const [verHistorial, setVerHistorial] = useState(true);
   const [viendo, setViendo] = useState(null);     // versión que se está mirando
+  const [bajandoPdf, setBajandoPdf] = useState(false);
+
+  /**
+   * Trae el PDF con la sesión puesta y lo entrega como descarga.
+   *
+   * Se arma un enlace temporal en memoria en vez de mandar al navegador a la URL: la
+   * petición tiene que llevar el token, y una pestaña nueva no lo lleva.
+   */
+  const descargarPdf = async () => {
+    setBajandoPdf(true);
+    try {
+      const { data } = await api.descargarPdfDelArchivo(doc.id, slug);
+      const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
+      const enlace = document.createElement('a');
+      enlace.href = url;
+      enlace.download = `${(doc.title || 'documento').replace(/[/\\?%*:|"<>]/g, '-')}.pdf`;
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+      // Sin esto el blob queda ocupando memoria hasta que se recargue la página.
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('No se pudo generar el PDF de este documento.');
+    } finally {
+      setBajandoPdf(false);
+    }
+  };
 
   const cargar = useCallback(async () => {
     if (!slug || !docId) return;
@@ -148,12 +175,12 @@ export default function DocumentoPage() {
             PDF existiría solo en el backend — y una ruta sin enlace es una pantalla que
             no existe. */}
         <Button
-          component="a"
-          href={api.urlPdfDelArchivo(doc.id, slug)}
+          onClick={descargarPdf}
+          disabled={bajandoPdf}
           startIcon={<Download size={15} />}
           sx={{ textTransform: 'none', fontWeight: 600, color: textMuted }}
         >
-          PDF
+          {bajandoPdf ? 'Generando…' : 'PDF'}
         </Button>
         <Button
           onClick={() => setVerHistorial((v) => !v)}

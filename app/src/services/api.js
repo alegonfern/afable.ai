@@ -310,8 +310,16 @@ export const api = {
     apiClient.get(`/workspaces/${slug}/lo-que-hizo/`, { params: dias ? { dias } : {} }),
 
   // Descargar el documento como PDF con formato: es lo que se le manda a un cliente.
-  urlPdfDelArchivo: (id, workspace) =>
-    `${API_BASE_URL}/archivos/documentos/${id}/pdf/?workspace=${workspace}`,
+  //
+  // ⚠️ Baja por `apiClient`, NO como enlace directo. Un `<a href>` lo pide el navegador
+  // por su cuenta y no lleva la cabecera `Authorization`: la API contesta 401 y la
+  // persona ve un error donde esperaba su archivo. Además, así el PDF también aprovecha
+  // el reintento que refresca el token vencido.
+  descargarPdfDelArchivo: (id, workspace) =>
+    apiClient.get(`/archivos/documentos/${id}/pdf/`, {
+      params: { workspace },
+      responseType: 'blob',
+    }),
 
   // Cómo se MUESTRA un archivo: planilla, documento con formato, PDF o texto.
   getVistaDelArchivo: (id, workspace) =>
