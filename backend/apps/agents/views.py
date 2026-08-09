@@ -697,6 +697,27 @@ def _espacio_del_pedido(request):
         return None
 
 
+def fuentes_de_la_respuesta(texto, docs_en_prompt):
+    """Los documentos en los que se apoya la respuesta: `[{'id', 'titulo'}]`.
+
+    Mismo criterio conservador que la línea de texto: sólo los que la respuesta nombra.
+    Devolverlos como DATO es lo que permite abrirlos de un clic — y comprobar una
+    respuesta es justo lo que separa un juguete de una herramienta cuando alguien va a
+    decidir con ella.
+    """
+    if not texto or not docs_en_prompt:
+        return []
+    bajo = texto.lower()
+    vistos, fuentes = set(), []
+    for d in docs_en_prompt:
+        titulo = d.get('title')
+        if not titulo or titulo.lower() not in bajo or titulo in vistos:
+            continue
+        vistos.add(titulo)
+        fuentes.append({'id': d.get('id'), 'titulo': titulo})
+    return fuentes
+
+
 def citar_documentos_del_prompt(texto, docs_en_prompt):
     """Agrega a la respuesta la línea de fuente de los documentos que la sustentan.
 
@@ -936,16 +957,20 @@ class DirectChatView(APIView):
         else:
             response_text = chat_direct(full_history, system_prompt, model)
 
-        clean_response = citar_documentos_del_prompt(
-            _strip_action(response_text), context.get('docs_en_prompt'),
-        )
+        limpia = _strip_action(response_text)
+        docs = context.get('docs_en_prompt')
+        clean_response = citar_documentos_del_prompt(limpia, docs)
+        fuentes = fuentes_de_la_respuesta(limpia, docs)
         Message.objects.create(
             conversation=conversation, role='assistant', content=clean_response,
-            agent=agent, model_used=resolved_model,
+            agent=agent, model_used=resolved_model, fuentes=fuentes,
         )
         conversation.save()
 
-        return Response({'conversation_id': conversation.id, 'message': clean_response, 'model': resolved_model})
+        return Response({
+            'conversation_id': conversation.id, 'message': clean_response,
+            'model': resolved_model, 'fuentes': fuentes,
+        })
 
 
 class ChatAttachmentView(APIView):
@@ -1068,9 +1093,10 @@ class DirectChatStreamView(APIView):
                 # El modelo a veces responde SOLO con la acción; que el historial
                 # no quede con un mensaje vacío.
                 clean_response = action_result.get('message', '')
+            fuentes = fuentes_de_la_respuesta(_strip_action(full_response), docs_en_prompt)
             respuesta = Message.objects.create(
                 conversation_id=conv_id, role='assistant', content=clean_response,
-                agent_id=agent_id, model_used=resolved_model,
+                agent_id=agent_id, model_used=resolved_model, fuentes=fuentes,
             )
             Conversation.objects.filter(pk=conv_id).update()
 
@@ -1082,6 +1108,8 @@ class DirectChatStreamView(APIView):
                 'model': resolved_model,
                 'user_message_id': user_message_id,
                 'message_id': respuesta.id,
+                # En qué se apoyó, para poder abrirlo de un clic sin recargar el hilo.
+                'fuentes': fuentes,
             }
 
             if action_result:

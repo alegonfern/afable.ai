@@ -96,8 +96,44 @@ function ThinkingLoader({ step, label }) {
 }
 
 // ── Source badge ──────────────────────────────────────────────────────────────
-function SourceBadge({ content }) {
-  const match = content.match(/\[Fuente:\s*([^\]]+)\]/);
+/**
+ * En qué se apoyó la respuesta, y **se puede abrir de un clic**.
+ *
+ * Antes decía el nombre del documento en texto gris: quien quería comprobar la cifra
+ * tenía que ir a Archivos y buscarlo a mano. Para una empresa que va a DECIDIR con esa
+ * respuesta, poder verificarla en un clic es lo que separa un juguete de una herramienta.
+ *
+ * `fuentes` llega como dato (`[{id, titulo}]`) y se guarda en el mensaje, así que
+ * sobrevive a recargar. El texto plano se sigue leyendo como respaldo: los mensajes
+ * anteriores a este cambio no tienen `fuentes` y no por eso deben quedarse sin su cita.
+ */
+function SourceBadge({ content, fuentes, navigate }) {
+  const conId = (fuentes || []).filter((f) => f && f.id);
+  if (conId.length) {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.75, flexWrap: 'wrap' }}>
+        <Database size={11} color="#555" />
+        {conId.map((f) => (
+          <Box
+            key={f.id}
+            onClick={() => navigate(`/app/archivos/${f.id}`)}
+            title="Abrir el documento"
+            sx={{
+              display: 'inline-flex', alignItems: 'center', gap: 0.4,
+              px: 0.75, py: 0.15, borderRadius: '5px', cursor: 'pointer',
+              fontSize: '0.7rem', color: '#9BA6E3',
+              border: '1px solid rgba(155, 166, 227, 0.3)',
+              '&:hover': { bgcolor: 'rgba(155, 166, 227, 0.12)' },
+            }}
+          >
+            {f.titulo}
+          </Box>
+        ))}
+      </Box>
+    );
+  }
+
+  const match = (content || '').match(/\[Fuente:\s*([^\]]+)\]/);
   if (!match) return null;
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.75 }}>
@@ -139,7 +175,7 @@ function AttachmentBadge({ content }) {
 }
 
 // ── Message bubble ────────────────────────────────────────────────────────────
-function MessageBubble({ msg, onReintentar, onRamificar, onEditar, yoId }) {
+function MessageBubble({ msg, onReintentar, onRamificar, onEditar, yoId, navigate }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const [copied, setCopied] = useState(false);
@@ -267,7 +303,7 @@ function MessageBubble({ msg, onReintentar, onRamificar, onEditar, yoId }) {
         {!msg.streaming && (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 0.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <SourceBadge content={msg.content || ''} />
+              <SourceBadge content={msg.content || ''} fuentes={msg.fuentes} navigate={navigate} />
               <ModelBadge model={msg.model || msg.model_used} />
             </Box>
             <Box sx={{ display: 'flex', gap: 0.5 }}>
@@ -856,6 +892,7 @@ export default function ChatPage() {
                 key={msg.id || idx}
                 msg={msg}
                 yoId={currentUser?.id}
+                navigate={navigate}
                 onReintentar={
                   msg.role === 'assistant' && idx === messages.length - 1 && !loading
                     ? reintentar

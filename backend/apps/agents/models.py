@@ -167,6 +167,12 @@ class Message(models.Model):
         Agent, on_delete=models.SET_NULL, null=True, blank=True, related_name='messages'
     )
     model_used = models.CharField(max_length=100, null=True, blank=True)
+    # ⭐ En qué documentos se apoya esta respuesta: `[{'id': 12, 'titulo': '…'}]`.
+    # Se guardan como DATO y no solo como texto al final del mensaje, por dos razones:
+    # sobreviven a recargar el hilo, y permiten abrir el documento de un clic. Para una
+    # empresa que va a DECIDIR con esa respuesta, poder comprobarla es lo que separa un
+    # juguete de una herramienta.
+    fuentes = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

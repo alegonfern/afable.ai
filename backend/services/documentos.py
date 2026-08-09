@@ -87,11 +87,20 @@ def asegurar_version_inicial(doc, autor=None, mensaje='Como se subió'):
 
     if Version.objects.filter(document=doc).exists():
         return None
-    return Version.objects.create(
-        document=doc, numero=1, contenido=doc.extracted_text or '',
-        origen=ORIGEN_SISTEMA if autor is None else 'persona',
-        autor=autor, mensaje=mensaje[:300],
+    # `get_or_create` y no `create`: dos pedidos que abren el mismo documento a la vez
+    # entraban los dos al `if` y el segundo reventaba con IntegrityError contra
+    # `un_numero_por_documento`. Con varias personas mirando el mismo archivo —que es
+    # justamente para lo que sirve el producto— dejó de ser un caso raro.
+    version, _ = Version.objects.get_or_create(
+        document=doc, numero=1,
+        defaults={
+            'contenido': doc.extracted_text or '',
+            'origen': ORIGEN_SISTEMA if autor is None else 'persona',
+            'autor': autor,
+            'mensaje': mensaje[:300],
+        },
     )
+    return version
 
 
 def editar_por_reemplazo(doc, viejo, nuevo, *, autor=None, agente=None, mensaje=''):
