@@ -806,7 +806,21 @@ def _agente_de_conversacion(request, conversation):
     return agent
 
 
-ACTIONS_PROMPT = """
+# ⚠️ Regla de honestidad. El agente dijo "cotización guardada" sin haber llamado a
+# `crear_documento`: la persona lee que quedó guardada, va a buscarla y no está. Un
+# producto que dice haber hecho algo que no hizo se vuelve inservible más rápido que uno
+# que no sabe hacerlo, porque hay que revisarle todo.
+NO_MENTIR = """
+
+---
+LO QUE DICES QUE HICISTE:
+Nunca digas que guardaste, creaste, editaste o enviaste algo si no ejecutaste la
+herramienta correspondiente en este mismo turno. Si no tienes la herramienta o falló,
+dilo con todas sus letras y entrega el contenido en el chat para que la persona lo copie.
+Es preferible decir "no pude guardarlo" a que alguien salga a buscar un documento que no
+existe."""
+
+ACTIONS_PROMPT = NO_MENTIR + """
 
 ---
 ACCIONES DISPONIBLES EN LA PLATAFORMA:
@@ -856,10 +870,13 @@ def _extract_action(text):
 
 def _strip_action(text):
     found = _find_action_json(text)
-    if not found:
-        return text.strip()
-    _, start, end = found
-    return (text[:start].rstrip() + text[end:]).strip()
+    if found:
+        _, start, end = found
+        text = text[:start].rstrip() + text[end:]
+    # ⚠️ Y el marcador suelto, sin JSON detrás. El modelo a veces escribe `__ACTION__` y
+    # nada más; como no había JSON que recortar, quedaba impreso al final de la respuesta.
+    # Es basura de nuestra plomería asomando en la cara de la persona.
+    return text.replace('__ACTION__', '').strip()
 
 
 def _execute_action(action_data, user, conversation=None):

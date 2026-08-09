@@ -872,12 +872,15 @@ def build_citation(provenance: list) -> str:
     parts, seen = [], set()
     for p in provenance:
         prefix = _CATEGORY_PREFIX.get(p.get('category'))
-        for t in (p.get('tables') or [p.get('system')]):
+        # Sin tablas, la fuente es el sistema a secas. Antes se usaba el propio nombre del
+        # sistema como si fuera una tabla, y la cita de un documento salía repetida:
+        # «Documento X·Documento X». Un detalle, pero está al pie de cada respuesta.
+        for t in (p.get('tables') or [None]):
             key = (p['system'], t)
             if key in seen:
                 continue
             seen.add(key)
-            label = f"{p['system']}·{t}"
+            label = f"{p['system']}·{t}" if t else p['system']
             parts.append(f"{prefix}·{label}" if prefix else label)
     when = provenance[-1].get('at')
     return f"\n\n_[Fuente: {', '.join(parts)} · consultado {when}]_"

@@ -188,7 +188,7 @@ export default function ProfilePage() {
         <Divider sx={{ borderColor, mb: 3 }} />
 
         {/* ── Sección 2: Contexto profesional ── */}
-        <SectionLabel>Tu contexto para la IA</SectionLabel>
+        <SectionLabel>Su contexto para la IA</SectionLabel>
         <Typography sx={{ fontSize: '0.8rem', color: textMuted, mb: 2, mt: -1 }}>
           Afable adapta sus respuestas según tu rol y objetivos
         </Typography>
@@ -213,7 +213,7 @@ export default function ProfilePage() {
         </Box>
 
         {role === 'Otro' && (
-          <TextField label="Especifica tu rol" value={customRole} onChange={e => setCustomRole(e.target.value)} size="small" fullWidth sx={{ ...inputSx, mb: 2 }} />
+          <TextField label="Diga cuál es su rol" value={customRole} onChange={e => setCustomRole(e.target.value)} size="small" fullWidth sx={{ ...inputSx, mb: 2 }} />
         )}
 
         <TextField
@@ -238,7 +238,7 @@ export default function ProfilePage() {
         <Divider sx={{ borderColor, mb: 3 }} />
 
         {/* ── Lo que estaba en Mi Contexto › Personal ── */}
-        <SectionLabel>Tu trabajo y tus prioridades</SectionLabel>
+        <SectionLabel>Su trabajo y sus prioridades</SectionLabel>
         <Typography sx={{ fontSize: '0.8rem', color: textMuted, mb: 2, mt: -1 }}>
           Solo aplica a tus conversaciones. La IA lo combina con el contexto de la empresa
           para responderte a ti.

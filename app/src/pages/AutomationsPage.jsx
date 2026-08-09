@@ -239,7 +239,7 @@ export default function AutomationsPage() {
       <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 820, width: '100%', mx: 'auto' }}>
         <Typography sx={{ fontSize: '0.8rem', color: textMuted, mb: 3 }}>
           Automatiza qué quieres obtener de Afable: un prompt programado ("cada mañana envíame el
-          resumen de ventas") o un aviso cuando pase algo en tus sistemas ("notifícame si aparece
+          resumen de ventas") o un aviso cuando pase algo en sus sistemas ("notifícame si aparece
           una nueva base de datos"). Afable lo hace solo, sin que nadie lo pida, y el resultado te
           llega por correo o lo <strong>publica un agente en la Sesión</strong> donde trabaja el
           equipo.

@@ -150,7 +150,7 @@ export default function Notificaciones({ color }) {
               Nada por ahora.
             </Typography>
             <Typography sx={{ fontSize: '0.72rem', color: 'text.disabled', mt: 0.5 }}>
-              Acá va a llegar lo que escriban en tus Sesiones y las tareas que te asignen.
+              Acá va a llegar lo que escriban en sus Sesiones y las tareas que le asignen.
             </Typography>
           </Box>
         ) : (

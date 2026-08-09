@@ -518,13 +518,13 @@ def _run_ollama_agent_events(history, system_prompt, organization, model=None, a
             "Consulté los sistemas pero no logré cerrar la respuesta. Reformula la pregunta de forma más específica.",
             provenance, artifacts)
     except requests.exceptions.ConnectionError:
-        yield {'final': "No se pudo conectar con el modelo. Si usas Ollama local, asegúrate de que esté corriendo; si usas Ollama Cloud, revisa OLLAMA_API_KEY y la conexión."}
+        yield {'final': "No se pudo conectar con el modelo. Si usas Ollama local, asegúrate de que esté corriendo; si usas Ollama Cloud, revisa OLLAMA_API_KEY y la conexión.", 'documentos': list((artifacts or {}).get('documentos') or [])}
     except requests.exceptions.HTTPError:
         logger.exception("Ollama agent loop falló tras reintentos")
-        yield {'final': _MODEL_DOWN_MSG}
+        yield {'final': _MODEL_DOWN_MSG, 'documentos': list((artifacts or {}).get('documentos') or [])}
     except Exception as e:
         logger.exception("Ollama agent loop falló")
-        yield {'final': f"Error al consultar los sistemas: {str(e)}"}
+        yield {'final': f"Error al consultar los sistemas: {str(e)}", 'documentos': list((artifacts or {}).get('documentos') or [])}
 
 
 def _run_deepseek_agent_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None):
@@ -565,7 +565,7 @@ def _run_deepseek_agent_events(history, system_prompt, organization, model=None,
                     detail = resp.json().get('error', {}).get('message', resp.text)
                 except Exception:
                     detail = resp.text
-                yield {'final': f"DeepSeek respondió con un error: {detail}"}
+                yield {'final': f"DeepSeek respondió con un error: {detail}", 'documentos': list((artifacts or {}).get('documentos') or [])}
                 return
 
             msg = resp.json()['choices'][0]['message']
@@ -615,13 +615,13 @@ def _run_deepseek_agent_events(history, system_prompt, organization, model=None,
             "Consulté los sistemas pero no logré cerrar la respuesta. Reformula la pregunta de forma más específica.",
             provenance, artifacts)
     except requests.exceptions.ConnectionError:
-        yield {'final': "No se pudo conectar con la API de DeepSeek. Revisa la conexión."}
+        yield {'final': "No se pudo conectar con la API de DeepSeek. Revisa la conexión.", 'documentos': list((artifacts or {}).get('documentos') or [])}
     except requests.exceptions.HTTPError:
         logger.exception("DeepSeek agent loop falló tras reintentos")
-        yield {'final': _MODEL_DOWN_MSG}
+        yield {'final': _MODEL_DOWN_MSG, 'documentos': list((artifacts or {}).get('documentos') or [])}
     except Exception as e:
         logger.exception("DeepSeek agent loop falló")
-        yield {'final': f"Error al consultar los sistemas: {str(e)}"}
+        yield {'final': f"Error al consultar los sistemas: {str(e)}", 'documentos': list((artifacts or {}).get('documentos') or [])}
 
 
 def _run_anthropic_agent_live_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None):
@@ -661,7 +661,7 @@ def _run_anthropic_agent_live_events(history, system_prompt, organization, model
 
         yield _evento_final("Superé el límite de iteraciones. Intenta una pregunta más específica.", provenance, artifacts)
     except Exception as e:
-        yield {'final': f"Error al consultar los sistemas: {str(e)}"}
+        yield {'final': f"Error al consultar los sistemas: {str(e)}", 'documentos': list((artifacts or {}).get('documentos') or [])}
 
 
 _INLINE_IMG_RE = re.compile(r'!\[([^\]]*)\]\(data:image/[^)]+\)')
@@ -677,10 +677,20 @@ def _strip_inline_images(content: str) -> str:
 
 
 def _embed_figures(text: str, artifacts: dict) -> str:
-    """Sustituye los marcadores [[FIGURA_n]] por la imagen markdown real."""
-    if not artifacts:
+    """Sustituye los marcadores [[FIGURA_n]] por la imagen markdown real.
+
+    ⚠️ `artifacts` dejó de ser solo figuras: también lleva `documentos`, lo que el agente
+    dejó escrito. Sin filtrar, esa lista se pegaba en el mensaje como si fuera una imagen
+    —`![Gráfico](data:image/png;base64,[{'id': 36, ...}])`— y la persona veía un pegote de
+    código en medio de su respuesta. Acá SOLO se miran los marcadores de figura.
+    """
+    figuras = {
+        k: v for k, v in (artifacts or {}).items()
+        if _FIG_MARKER_RE.fullmatch(k or '')
+    }
+    if not figuras:
         return _FIG_MARKER_RE.sub('', text)
-    for marker, png_b64 in artifacts.items():
+    for marker, png_b64 in figuras.items():
         uri = f'data:image/png;base64,{png_b64}'
         # A veces el modelo envuelve el marcador en su propia sintaxis de imagen
         # (![alt]([[FIGURA_n]])): ahí el marcador es la URL, no el bloque entero.

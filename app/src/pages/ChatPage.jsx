@@ -1075,7 +1075,7 @@ export default function ChatPage() {
           </Collapse>
         </Box>
         <Typography sx={{ fontSize: '0.68rem', color: 'text.disabled', textAlign: 'center', mt: 1 }}>
-          Afable responde con datos reales de tus sistemas. Verifica información crítica con las fuentes.
+          Afable responde con datos reales de sus sistemas. Compruebe con la fuente lo que sea crítico.
         </Typography>
       </Box>
 
