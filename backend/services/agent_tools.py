@@ -236,6 +236,84 @@ def _tools_spec(org, allowed_ids=None, sesion=None):
             },
         },
         {
+            "name": "ver_planilla",
+            "description": (
+                "Qué hojas y columnas tiene una planilla de Excel. Úsalo SIEMPRE antes de "
+                "escribir en ella: sin esto adivinas los nombres de las columnas, y una "
+                "fórmula sobre la columna equivocada es peor que no hacer nada, porque "
+                "queda escrita y con cara de correcta."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"id": {"type": "integer", "description": "id del documento"}},
+                "required": ["id"],
+            },
+        },
+        {
+            "name": "escribir_en_planilla",
+            "description": (
+                "Cambia UNA celda de una planilla de Excel: por ejemplo marcar 'Vencido' en "
+                "C4. El resto del archivo queda intacto y el cambio se registra con tu "
+                "nombre. Usa `ver_planilla` primero para saber dónde estás escribiendo."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer", "description": "id del documento"},
+                    "celda": {"type": "string", "description": "Por ejemplo C4"},
+                    "valor": {"type": "string", "description": "Lo que va en la celda"},
+                    "hoja": {"type": "string", "description": "Nombre de la hoja (opcional)"},
+                },
+                "required": ["id", "celda", "valor"],
+            },
+        },
+        {
+            "name": "agregar_columna_a_planilla",
+            "description": (
+                "Agrega una columna al final de una planilla, con una fórmula por fila o con "
+                "valores. En la fórmula, escribe {fila} donde va el número de fila: "
+                "'=B{fila}*0.19' pone el IVA de cada fila. Es la forma de hacer 'agrégale el "
+                "margen' sin enumerar 300 celdas ni equivocarte en la 217."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer", "description": "id del documento"},
+                    "titulo": {"type": "string", "description": "Encabezado de la columna"},
+                    "formula": {
+                        "type": "string",
+                        "description": "Fórmula con {fila}, por ejemplo '=B{fila}*0.19'",
+                    },
+                    "valores": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": "Alternativa a la fórmula: un valor por fila",
+                    },
+                    "hoja": {"type": "string", "description": "Nombre de la hoja (opcional)"},
+                },
+                "required": ["id", "titulo"],
+            },
+        },
+        {
+            "name": "editar_documento_word",
+            "description": (
+                "Cambia un fragmento EXACTO dentro de un documento de Word (.docx), sin "
+                "tocar el resto ni crear una copia. Lee el documento primero y copia el "
+                "fragmento tal como está. Si el párrafo tenía negritas o cursivas mezcladas, "
+                "puede quedar con formato parejo — se te avisa en la respuesta y conviene "
+                "que se lo digas a la persona. El original queda siempre en la versión 1."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "integer", "description": "id del documento"},
+                    "viejo": {"type": "string", "description": "El fragmento tal como está hoy"},
+                    "nuevo": {"type": "string", "description": "Con qué reemplazarlo"},
+                    "mensaje": {"type": "string", "description": "Qué cambiaste, en una línea"},
+                },
+                "required": ["id", "viejo", "nuevo"],
+            },
+        },
+        {
             "name": "editar_documento",
             "description": (
                 "Cambia un fragmento EXACTO del texto de un documento por otro, sin tocar el "
@@ -604,6 +682,26 @@ def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None,
                 "errores": errores or None,
             }
 
+        if name == 'editar_documento_word':
+            from services.documentos_word import ErrorDeWord, reemplazar
+
+            doc = _documentos(org, allowed_doc_ids).filter(id=(args or {}).get('id')).first()
+            if doc is None:
+                return {"error": f"No existe un documento con id={(args or {}).get('id')} a tu alcance."}
+            try:
+                return {"ok": True, "mensaje": reemplazar(
+                    doc, (args or {}).get('viejo'), (args or {}).get('nuevo'),
+                    agente=agente, mensaje=(args or {}).get('mensaje', ''),
+                )}
+            except ErrorDeWord as e:
+                return {"error": str(e)}
+            except Exception as e:
+                logger.exception('Falló la edición del Word %s', doc.pk)
+                return {"error": f'No se pudo escribir en el documento: {e}'}
+
+        if name in ('ver_planilla', 'escribir_en_planilla', 'agregar_columna_a_planilla'):
+            return _tocar_planilla(name, args or {}, org, allowed_doc_ids, agente)
+
         if name in ('crear_documento', 'editar_documento', 'reescribir_documento'):
             return _escribir_documento(name, args or {}, org, provenance, allowed_doc_ids, now, agente)
 
@@ -743,6 +841,48 @@ def build_citation(provenance: list) -> str:
 
 
 # ── Escribir documentos ───────────────────────────────────────────────────────
+
+def _tocar_planilla(name, args, org, allowed_doc_ids, agente=None):
+    """Las tres herramientas de planilla, con el mismo embudo de permisos que el resto.
+
+    El documento sale de `_documentos(org, allowed_doc_ids)` — el alcance del agente— así
+    que una planilla que él no alcanza no existe para estas herramientas tampoco. Sin eso,
+    escribir sería la puerta de atrás de todo lo que los permisos cuidan al leer.
+    """
+    from services.planillas import (
+        ErrorDePlanilla, agregar_columna, escribir_celda, resumen_de,
+    )
+
+    doc = _documentos(org, allowed_doc_ids).filter(id=args.get('id')).first()
+    if doc is None:
+        return {"error": f"No existe una planilla con id={args.get('id')} a tu alcance."}
+
+    try:
+        if name == 'ver_planilla':
+            return {"planilla": doc.title, "hojas": resumen_de(doc)}
+
+        if name == 'escribir_en_planilla':
+            mensaje = escribir_celda(
+                doc, args.get('celda'), args.get('valor'),
+                hoja=args.get('hoja'), agente=agente,
+            )
+            return {"ok": True, "mensaje": mensaje}
+
+        valores = args.get('valores')
+        mensaje = agregar_columna(
+            doc, args.get('titulo'), valores=valores, formula=args.get('formula'),
+            hoja=args.get('hoja'), agente=agente,
+        )
+        return {"ok": True, "mensaje": mensaje}
+
+    except ErrorDePlanilla as e:
+        # Es un error que la persona puede corregir ("no hay una hoja Ventas; las que hay
+        # son…"), así que se devuelve tal cual para que el agente lo diga.
+        return {"error": str(e)}
+    except Exception as e:
+        logger.exception('Falló una operación sobre la planilla %s', doc.pk)
+        return {"error": f'No se pudo escribir en la planilla: {e}'}
+
 
 def _escribir_documento(name, args, org, provenance, allowed_doc_ids, now, agente=None):
     """Las tres herramientas de escritura: crear, editar por reemplazo y reescribir.

@@ -4,7 +4,7 @@ import {
   Alert, Box, Button, Chip, CircularProgress, IconButton, Stack, TextField,
   Typography, useTheme,
 } from '@mui/material';
-import { ArrowLeft, Bot, History, RotateCcw, Save, User, X } from 'lucide-react';
+import { ArrowLeft, Bot, Download, History, RotateCcw, Save, User, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { api } from '../../services/api';
 import VistaDelArchivo from './VistaDelArchivo';
@@ -144,6 +144,17 @@ export default function DocumentoPage() {
             ].filter(Boolean).join(' · ')}
           </Typography>
         </Box>
+        {/* Lo que sale de Afable y se le manda a alguien. Sin este botón, generar el
+            PDF existiría solo en el backend — y una ruta sin enlace es una pantalla que
+            no existe. */}
+        <Button
+          component="a"
+          href={api.urlPdfDelArchivo(doc.id, slug)}
+          startIcon={<Download size={15} />}
+          sx={{ textTransform: 'none', fontWeight: 600, color: textMuted }}
+        >
+          PDF
+        </Button>
         <Button
           onClick={() => setVerHistorial((v) => !v)}
           startIcon={<History size={15} />}

@@ -48,6 +48,41 @@ class TextoNoEncontrado(Exception):
 
 
 @transaction.atomic
+def registrar_version_de_binario(doc, *, autor=None, agente=None, mensaje=''):
+    """Deja versión de un archivo que NO es texto (una planilla, un Word).
+
+    ⚠️ La versión guarda el **texto extraído** después del cambio, no el binario: sirve
+    para leer qué cambió y para volver a indexar, pero **"volver a esta versión" no
+    restaura el archivo**. Restaurar un binario exigiría guardar una copia completa por
+    cada cambio, y eso es una decisión de costo de almacenamiento que no corresponde
+    tomar sola. Se dice en la pantalla en vez de esconderlo.
+    """
+    from apps.archivos.models import ORIGEN_AGENTE, ORIGEN_PERSONA, Version
+    from .document_processing import process_document
+
+    origen = ORIGEN_AGENTE if agente is not None else ORIGEN_PERSONA
+    ultimo = Version.objects.filter(document=doc).order_by('-numero').first()
+    numero = (ultimo.numero if ultimo else 0) + 1
+
+    try:
+        doc.file.seek(0)
+        resultado = process_document(doc.file, doc.content_type)
+        doc.extracted_text = resultado.get('text', '') or doc.extracted_text
+        doc.save(update_fields=['extracted_text'])
+    except Exception:
+        # Si no se puede releer, el archivo YA quedó escrito: la versión se registra
+        # igual con el texto anterior. Perder el registro del cambio sería peor.
+        logger.exception('No se pudo releer %s después de escribirlo', doc.pk)
+
+    version = Version.objects.create(
+        document=doc, numero=numero, contenido=doc.extracted_text or '',
+        origen=origen, autor=autor, agente=agente, mensaje=mensaje[:300],
+    )
+    _reindexar(doc)
+    return version
+
+
+@transaction.atomic
 def escribir(doc, contenido, *, autor=None, agente=None, mensaje='', origen=None):
     """Guarda `contenido` como el texto del documento y deja la versión.
 

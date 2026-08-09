@@ -325,6 +325,32 @@ class DocumentoDetailView(APIView):
         return Response(serializar_documento(doc, request))
 
 
+class ExportarPdfView(APIView):
+    """Descargar un documento como PDF con formato, listo para mandar.
+
+    Existe porque hasta acá todo lo que Afable producía se quedaba adentro: no había nada
+    que se le pudiera pasar a un cliente. Un informe o una propuesta que sale prolija en
+    PDF es lo que convierte el trabajo del agente en algo entregable.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        from django.http import HttpResponse
+
+        from services.exportar_pdf import desde_documento
+
+        doc, error = ContenidoView()._doc(request, pk)
+        if error:
+            return error
+
+        pdf = desde_documento(doc)
+        respuesta = HttpResponse(pdf, content_type='application/pdf')
+        nombre = (doc.title or 'documento').replace('"', "'")
+        respuesta['Content-Disposition'] = f'attachment; filename="{nombre}.pdf"'
+        return respuesta
+
+
 class VistaView(APIView):
     """Cómo se muestra este archivo: planilla, documento con formato, PDF o texto.
 

@@ -53,15 +53,31 @@ def vista_de(doc):
 def _planilla(doc):
     from openpyxl import load_workbook
 
+    # Dos lecturas: `data_only` trae el valor calculado, pero una fórmula que Excel
+    # todavía no evaluó viene vacía — y una columna recién agregada por el agente se
+    # vería en blanco, como si no hubiera hecho nada. La segunda lectura trae la fórmula
+    # para mostrarla mientras tanto.
     libro = load_workbook(doc.file.path, data_only=True, read_only=True)
+    try:
+        formulas = load_workbook(doc.file.path, data_only=False)
+    except Exception:
+        formulas = None
     hojas = []
     for hoja in libro.worksheets:
+        crudas = None
+        if formulas is not None and hoja.title in formulas.sheetnames:
+            crudas = list(formulas[hoja.title].iter_rows(values_only=True))
+
         filas, recortada = [], False
         for i, fila in enumerate(hoja.iter_rows(values_only=True)):
             if i >= MAX_FILAS:
                 recortada = True
                 break
-            celdas = ['' if c is None else str(c) for c in fila[:MAX_COLUMNAS]]
+            celdas = []
+            for j, c in enumerate(fila[:MAX_COLUMNAS]):
+                if c is None and crudas and i < len(crudas) and j < len(crudas[i]):
+                    c = crudas[i][j]
+                celdas.append('' if c is None else str(c))
             filas.append(celdas)
         hojas.append({
             'nombre': hoja.title,
@@ -72,6 +88,8 @@ def _planilla(doc):
             'total_filas': hoja.max_row,
         })
     libro.close()
+    if formulas is not None:
+        formulas.close()
     return {'tipo': 'planilla', 'hojas': hojas}
 
 

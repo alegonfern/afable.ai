@@ -309,6 +309,10 @@ export const api = {
   loQueHizoAfable: (slug, dias) =>
     apiClient.get(`/workspaces/${slug}/lo-que-hizo/`, { params: dias ? { dias } : {} }),
 
+  // Descargar el documento como PDF con formato: es lo que se le manda a un cliente.
+  urlPdfDelArchivo: (id, workspace) =>
+    `${API_BASE_URL}/archivos/documentos/${id}/pdf/?workspace=${workspace}`,
+
   // Cómo se MUESTRA un archivo: planilla, documento con formato, PDF o texto.
   getVistaDelArchivo: (id, workspace) =>
     apiClient.get(`/archivos/documentos/${id}/vista/`, { params: { workspace } }),
