@@ -941,11 +941,17 @@ class DirectChatView(APIView):
         model = (request.data.get('model') or '').strip() or context.get('agent_model')
         _, resolved_model = resolve_model(model)
 
+        # Lo que el agente deje escrito. Empieza vacía: un chat sin herramientas no
+        # escribe nada, y la pantalla tiene que poder contar con que el campo existe.
+        artefactos = []
         if context.get('mode') == 'con_herramientas':
             from services.agent_service import run_agent_live
             response_text = run_agent_live(
                 full_history, context['org'], system_prompt, model,
                 context.get('allowed_ids'), context.get('allowed_doc_ids'),
+                # Se llena con lo que el agente deje escrito, para que el chat pueda
+                # ofrecer abrirlo sin mandar a la persona a otra pantalla.
+                tocados=artefactos,
                 # Para firmar las versiones que escriba: el historial de un documento
                 # dice qué agente lo tocó, no solo que "lo tocó la IA".
                 agente=agent,
@@ -964,12 +970,13 @@ class DirectChatView(APIView):
         Message.objects.create(
             conversation=conversation, role='assistant', content=clean_response,
             agent=agent, model_used=resolved_model, fuentes=fuentes,
+            artefactos=artefactos,
         )
         conversation.save()
 
         return Response({
             'conversation_id': conversation.id, 'message': clean_response,
-            'model': resolved_model, 'fuentes': fuentes,
+            'model': resolved_model, 'fuentes': fuentes, 'artefactos': artefactos,
         })
 
 
@@ -1048,6 +1055,7 @@ class DirectChatStreamView(APIView):
 
         def event_stream():
             accumulated = []
+            artefactos = []
             yield f"data: {json.dumps({'conversation_id': conv_id, 'model': resolved_model, 'agent': agente_payload})}\n\n"
 
             if mode == 'con_herramientas':
@@ -1063,6 +1071,7 @@ class DirectChatStreamView(APIView):
                         yield f"data: {json.dumps({'status': event['status']})}\n\n"
                     elif 'final' in event:
                         full_text = event['final']
+                        artefactos = list(event.get('documentos') or [])
                 accumulated.append(full_text)
                 clean_stream = _strip_action(full_text)
                 for piece in _chunk_text(clean_stream):
@@ -1097,6 +1106,7 @@ class DirectChatStreamView(APIView):
             respuesta = Message.objects.create(
                 conversation_id=conv_id, role='assistant', content=clean_response,
                 agent_id=agent_id, model_used=resolved_model, fuentes=fuentes,
+                artefactos=artefactos,
             )
             Conversation.objects.filter(pk=conv_id).update()
 
@@ -1106,6 +1116,7 @@ class DirectChatStreamView(APIView):
             done_payload = {
                 'done': True,
                 'model': resolved_model,
+                'artefactos': artefactos,
                 'user_message_id': user_message_id,
                 'message_id': respuesta.id,
                 # En qué se apoyó, para poder abrirlo de un clic sin recargar el hilo.

@@ -534,7 +534,49 @@ def _crear_tarea(args, sesion, agente, provenance, now):
     }
 
 
+# Las herramientas que DEJAN ALGO ESCRITO. Se anotan aparte de `provenance` porque no son
+# lo mismo: `provenance` dice en qué se apoyó la respuesta, y esto dice qué quedó hecho.
+# Lo que quedó hecho tiene que poder abrirse desde el chat mismo — si no, el agente
+# trabaja y la persona se entera solo por una frase.
+ESCRIBEN_DOCUMENTO = {
+    'crear_documento': 'creado',
+    'editar_documento': 'editado',
+    'reescribir_documento': 'reescrito',
+    'editar_documento_word': 'editado',
+    'escribir_en_planilla': 'editado',
+    'agregar_columna_a_planilla': 'editado',
+}
+
+
 def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None, artifacts: dict = None, allowed_doc_ids=None, agente=None, sesion=None) -> dict:
+    """Ejecuta la herramienta y, si dejó algo escrito, lo anota en `artifacts`.
+
+    El envoltorio existe para que anotar el documento tocado no dependa de acordarse en
+    cada rama: hay seis herramientas que escriben y van a ser más.
+    """
+    resultado = _ejecutar(
+        name, args, org, provenance, allowed_ids, artifacts, allowed_doc_ids, agente, sesion,
+    )
+
+    accion = ESCRIBEN_DOCUMENTO.get(name)
+    if accion and artifacts is not None and isinstance(resultado, dict) and resultado.get('id'):
+        tocados = artifacts.setdefault('documentos', [])
+        # Si el agente toca el mismo documento tres veces, es UNA tarjeta, no tres: lo que
+        # a la persona le importa es el documento, no cuántas herramientas usó.
+        for ya in tocados:
+            if ya['id'] == resultado['id']:
+                ya['accion'] = 'creado' if ya['accion'] == 'creado' else accion
+                break
+        else:
+            tocados.append({
+                'id': resultado['id'],
+                'titulo': resultado.get('titulo') or '',
+                'accion': accion,
+            })
+    return resultado
+
+
+def _ejecutar(name: str, args: dict, org, provenance: list, allowed_ids=None, artifacts: dict = None, allowed_doc_ids=None, agente=None, sesion=None) -> dict:
     """Ejecuta una herramienta y registra procedencia en `provenance`.
     `allowed_ids` (si viene) limita a qué sistemas conectados puede acceder el agente.
     `allowed_doc_ids` hace lo mismo con los documentos: los dos salen del Espacio
@@ -689,10 +731,11 @@ def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None,
             if doc is None:
                 return {"error": f"No existe un documento con id={(args or {}).get('id')} a tu alcance."}
             try:
-                return {"ok": True, "mensaje": reemplazar(
+                mensaje = reemplazar(
                     doc, (args or {}).get('viejo'), (args or {}).get('nuevo'),
                     agente=agente, mensaje=(args or {}).get('mensaje', ''),
-                )}
+                )
+                return {"ok": True, "mensaje": mensaje, "id": doc.id, "titulo": doc.title}
             except ErrorDeWord as e:
                 return {"error": str(e)}
             except Exception as e:
@@ -866,14 +909,14 @@ def _tocar_planilla(name, args, org, allowed_doc_ids, agente=None):
                 doc, args.get('celda'), args.get('valor'),
                 hoja=args.get('hoja'), agente=agente,
             )
-            return {"ok": True, "mensaje": mensaje}
+            return {"ok": True, "mensaje": mensaje, "id": doc.id, "titulo": doc.title}
 
         valores = args.get('valores')
         mensaje = agregar_columna(
             doc, args.get('titulo'), valores=valores, formula=args.get('formula'),
             hoja=args.get('hoja'), agente=agente,
         )
-        return {"ok": True, "mensaje": mensaje}
+        return {"ok": True, "mensaje": mensaje, "id": doc.id, "titulo": doc.title}
 
     except ErrorDePlanilla as e:
         # Es un error que la persona puede corregir ("no hay una hoja Ventas; las que hay

@@ -945,3 +945,147 @@ class QuienRestringeNoSeQuedaAfueraTests(PermisosBase):
         suya.refresh_from_db()
         self.assertTrue(suya.restringida)
         self.assertEqual(self.nivel_carp(self.ana, suya), 'edicion')
+
+
+class QueCambioTests(BaseArchivos):
+    """El diff de una versión: lo que convierte «el agente editó» en algo revisable.
+
+    El historial ya decía QUE alguien cambió algo. Sin ver QUÉ cambió, revisar significa
+    leer el documento entero acordándose de cómo estaba antes — nadie hace eso, así que en
+    la práctica el trabajo del agente se acepta a ciegas.
+    """
+
+    def cambios(self, doc, numero):
+        self.como()
+        return self.client.get(f'{URL}documentos/{doc.pk}/versiones/{numero}/cambios/', self.q())
+
+    def test_muestra_la_linea_que_cambio_y_la_anterior(self):
+        from services.documentos import asegurar_version_inicial, editar_por_reemplazo
+
+        asegurar_version_inicial(self.texto)
+        editar_por_reemplazo(self.texto, 'Paso 2: aprobar.', 'Paso 2: firmar.',
+                             agente=self.agente)
+
+        r = self.cambios(self.texto, 2)
+        self.assertEqual(r.status_code, 200)
+        tipos = {(l['tipo'], l['texto']) for l in r.data['lineas']}
+        self.assertIn(('menos', 'Paso 2: aprobar.'), tipos)
+        self.assertIn(('mas', 'Paso 2: firmar.'), tipos)
+        # Y lo que no se tocó no aparece como cambio.
+        self.assertNotIn(('mas', 'Paso 1: revisar.'), tipos)
+
+    def test_la_primera_version_se_marca_como_tal(self):
+        """No hay «qué cambió» contra la nada: hay que poder decirlo, no inventar un diff."""
+        from services.documentos import asegurar_version_inicial
+
+        asegurar_version_inicial(self.texto)
+        r = self.cambios(self.texto, 1)
+        self.assertTrue(r.data['primera'])
+
+    def test_en_un_binario_avisa_que_deshacer_no_devuelve_el_archivo(self):
+        """⚠️ La versión de un binario guarda el TEXTO, no el .xlsx.
+
+        Ofrecer «deshacer» ahí prometería algo que no se cumple, y quien confía en eso se
+        entera cuando ya no tiene el archivo original.
+        """
+        from services.documentos import asegurar_version_inicial
+
+        asegurar_version_inicial(self.pdf)
+        r = self.cambios(self.pdf, 1)
+        self.assertFalse(r.data['reversible'])
+
+
+class EnviarPorCorreoTests(BaseArchivos):
+    """La salida: que el documento llegue a alguien y no muera en Descargas."""
+
+    def enviar(self, doc, **datos):
+        self.como()
+        return self.client.post(
+            f'{URL}documentos/{doc.pk}/enviar/', {**self.q(), **datos}, format='json',
+        )
+
+    def test_sale_con_el_pdf_adjunto(self):
+        from django.core import mail
+
+        r = self.enviar(self.texto, para='cliente@ejemplo.cl', mensaje='Le comparto esto.')
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(mail.outbox), 1)
+        correo = mail.outbox[0]
+        self.assertEqual(correo.to, ['cliente@ejemplo.cl'])
+        nombre, contenido, tipo = correo.attachments[0]
+        self.assertTrue(nombre.endswith('.pdf'))
+        self.assertEqual(tipo, 'application/pdf')
+        self.assertTrue(contenido.startswith(b'%PDF'))
+
+    def test_va_firmado_y_se_le_puede_responder_a_la_persona(self):
+        """Sale desde una dirección de Afable: sin esto, quien recibe no sabe de quién es."""
+        from django.core import mail
+
+        self.enviar(self.texto, para='cliente@ejemplo.cl')
+        correo = mail.outbox[0]
+        self.assertIn(self.user.email, correo.body)
+        self.assertEqual(correo.reply_to, [self.user.email])
+
+    def test_una_direccion_mal_escrita_no_sale(self):
+        from django.core import mail
+
+        r = self.enviar(self.texto, para='no-es-un-correo')
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_un_ajeno_no_puede_mandar_documentos_de_esta_empresa(self):
+        """El envío pasa por el mismo embudo de permisos que leer: si no lo ve, no lo manda."""
+        from django.core import mail
+
+        self.client.force_authenticate(user=self.ajeno)
+        r = self.client.post(
+            f'{URL}documentos/{self.texto.pk}/enviar/',
+            {**self.q(), 'para': 'cliente@ejemplo.cl'}, format='json',
+        )
+        self.assertIn(r.status_code, (403, 404))
+        self.assertEqual(len(mail.outbox), 0)
+
+
+class LoQueElAgenteDejoEscritoTests(BaseArchivos):
+    """Que el chat pueda ofrecer abrir lo que el agente escribió, en vez de solo contarlo."""
+
+    def test_se_anota_el_documento_que_toco(self):
+        from services.agent_tools import execute_tool
+
+        artifacts = {}
+        r = execute_tool(
+            'crear_documento', {'titulo': 'Propuesta', 'contenido': 'Valor: 100'},
+            self.org, [], None, artifacts, agente=self.agente,
+        )
+        self.assertTrue(r['ok'])
+        self.assertEqual(
+            artifacts['documentos'],
+            [{'id': r['id'], 'titulo': 'Propuesta', 'accion': 'creado'}],
+        )
+
+    def test_tocarlo_tres_veces_es_UNA_tarjeta(self):
+        """A la persona le importa el documento, no cuántas herramientas usó el agente."""
+        from services.agent_tools import execute_tool
+
+        artifacts = {}
+        r = execute_tool(
+            'crear_documento', {'titulo': 'Propuesta', 'contenido': 'Plazo: 30 dias'},
+            self.org, [], None, artifacts, agente=self.agente,
+        )
+        execute_tool(
+            'editar_documento', {'id': r['id'], 'viejo': '30 dias', 'nuevo': '45 dias'},
+            self.org, [], None, artifacts, agente=self.agente,
+        )
+        self.assertEqual(len(artifacts['documentos']), 1)
+        # Y sigue diciendo «creado»: es lo que pasó, editarlo después no lo cambia.
+        self.assertEqual(artifacts['documentos'][0]['accion'], 'creado')
+
+    def test_una_herramienta_que_solo_lee_no_deja_tarjeta(self):
+        from services.agent_tools import execute_tool
+
+        artifacts = {}
+        execute_tool(
+            'read_company_document', {'id': self.texto.pk},
+            self.org, [], None, artifacts,
+        )
+        self.assertEqual(artifacts.get('documentos', []), [])

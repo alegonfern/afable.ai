@@ -39,7 +39,7 @@ class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
         fields = ['id', 'role', 'content', 'agent', 'agent_name', 'agent_handle',
-                  'autor', 'fuentes', 'model_used', 'created_at']
+                  'autor', 'fuentes', 'artefactos', 'model_used', 'created_at']
         read_only_fields = ['id', 'created_at']
 
     def get_autor(self, obj):

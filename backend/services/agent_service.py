@@ -439,8 +439,13 @@ def run_agent_live_events(history: list[dict], organization, system_prompt: str,
         yield from _run_ollama_agent_events(history, system_prompt, organization, model, allowed_ids, allowed_doc_ids, agente, sesion)
 
 
-def run_agent_live(history: list[dict], organization, system_prompt: str, model: str = None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None) -> str:
-    """Versión no-streaming: drena el generador y devuelve solo el texto final."""
+def run_agent_live(history: list[dict], organization, system_prompt: str, model: str = None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None, tocados: list = None) -> str:
+    """Versión no-streaming: drena el generador y devuelve solo el texto final.
+
+    `tocados`, si viene, se llena con los documentos que el agente dejó escritos. Es una
+    lista que pone quien llama en vez de un segundo valor de retorno para no romper a los
+    que ya usan esta función esperando un texto.
+    """
     final = ''
     for event in run_agent_live_events(
         history, organization, system_prompt, model, allowed_ids, allowed_doc_ids, agente,
@@ -448,6 +453,8 @@ def run_agent_live(history: list[dict], organization, system_prompt: str, model:
     ):
         if 'final' in event:
             final = event['final']
+            if tocados is not None:
+                tocados.extend(event.get('documentos') or [])
     return final
 
 
@@ -483,7 +490,7 @@ def _run_ollama_agent_events(history, system_prompt, organization, model=None, a
                                      'arguments': json.dumps(args_sueltos or {})},
                     }]
                 else:
-                    yield {'final': _finalize((msg.get('content') or '').strip(), provenance, artifacts)}
+                    yield _evento_final((msg.get('content') or '').strip(), provenance, artifacts)
                     return
 
             messages.append({
@@ -507,9 +514,9 @@ def _run_ollama_agent_events(history, system_prompt, organization, model=None, a
                 result = agent_tools.execute_tool(name, args, organization, provenance, allowed_ids, artifacts, allowed_doc_ids, agente, sesion)
                 messages.append({"role": "tool", "content": _tool_result_json(result)})
 
-        yield {'final': _finalize(
+        yield _evento_final(
             "Consulté los sistemas pero no logré cerrar la respuesta. Reformula la pregunta de forma más específica.",
-            provenance, artifacts)}
+            provenance, artifacts)
     except requests.exceptions.ConnectionError:
         yield {'final': "No se pudo conectar con el modelo. Si usas Ollama local, asegúrate de que esté corriendo; si usas Ollama Cloud, revisa OLLAMA_API_KEY y la conexión."}
     except requests.exceptions.HTTPError:
@@ -575,7 +582,7 @@ def _run_deepseek_agent_events(history, system_prompt, organization, model=None,
                                      'arguments': json.dumps(args_sueltos or {})},
                     }]
                 else:
-                    yield {'final': _finalize((msg.get('content') or '').strip(), provenance, artifacts)}
+                    yield _evento_final((msg.get('content') or '').strip(), provenance, artifacts)
                     return
 
             messages.append({
@@ -604,9 +611,9 @@ def _run_deepseek_agent_events(history, system_prompt, organization, model=None,
                     "content": _tool_result_json(result),
                 })
 
-        yield {'final': _finalize(
+        yield _evento_final(
             "Consulté los sistemas pero no logré cerrar la respuesta. Reformula la pregunta de forma más específica.",
-            provenance, artifacts)}
+            provenance, artifacts)
     except requests.exceptions.ConnectionError:
         yield {'final': "No se pudo conectar con la API de DeepSeek. Revisa la conexión."}
     except requests.exceptions.HTTPError:
@@ -636,7 +643,7 @@ def _run_anthropic_agent_live_events(history, system_prompt, organization, model
                 messages=messages,
             )
             if response.stop_reason != "tool_use":
-                yield {'final': _finalize(_extract_text(response), provenance, artifacts)}
+                yield _evento_final(_extract_text(response), provenance, artifacts)
                 return
 
             messages.append({"role": "assistant", "content": response.content})
@@ -652,7 +659,7 @@ def _run_anthropic_agent_live_events(history, system_prompt, organization, model
                     })
             messages.append({"role": "user", "content": results})
 
-        yield {'final': _finalize("Superé el límite de iteraciones. Intenta una pregunta más específica.", provenance, artifacts)}
+        yield _evento_final("Superé el límite de iteraciones. Intenta una pregunta más específica.", provenance, artifacts)
     except Exception as e:
         yield {'final': f"Error al consultar los sistemas: {str(e)}"}
 
@@ -730,6 +737,20 @@ def _quitar_llamadas_visibles(texto: str) -> str:
         salida.append(bruto)
         i = fin + 1
     return ''.join(salida).strip()
+
+
+def _evento_final(text: str, provenance: list, artifacts: dict = None) -> dict:
+    """El cierre del generador: el texto y lo que quedó ESCRITO.
+
+    Van juntos a propósito. Si el documento que el agente acaba de escribir no viaja con
+    la respuesta, el chat solo puede decir "listo, lo dejé guardado" y la persona tiene
+    que salir a buscarlo a otra pantalla — que es exactamente lo que hacía sentir que el
+    trabajo del agente se perdía.
+    """
+    return {
+        'final': _finalize(text, provenance, artifacts),
+        'documentos': list((artifacts or {}).get('documentos') or []),
+    }
 
 
 def _finalize(text: str, provenance: list, artifacts: dict = None) -> str:

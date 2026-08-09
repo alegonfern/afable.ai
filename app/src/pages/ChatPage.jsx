@@ -21,6 +21,7 @@ import MencionAgentes, { aplicarMencion, detectarMencion, filtrarAgentes }
   from '../components/MencionAgentes';
 import { useApp } from '../context/AppContext';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { DocumentoAlLado, TarjetaDeArtefacto } from '../components/DocumentoDelChat';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Cookies2 from 'js-cookie';
@@ -175,7 +176,7 @@ function AttachmentBadge({ content }) {
 }
 
 // ── Message bubble ────────────────────────────────────────────────────────────
-function MessageBubble({ msg, onReintentar, onRamificar, onEditar, yoId, navigate }) {
+function MessageBubble({ msg, onReintentar, onRamificar, onEditar, yoId, navigate, onAbrirDoc }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const [copied, setCopied] = useState(false);
@@ -299,6 +300,11 @@ function MessageBubble({ msg, onReintentar, onRamificar, onEditar, yoId, navigat
               </Box>
             </Box>
           ) : <MarkdownContent content={cleanContent} /> }
+          {/* Lo que el agente dejó ESCRITO en esta respuesta. Va dentro de la burbuja y
+              no al pie con las fuentes: no es en qué se apoyó, es lo que hizo. */}
+          {!msg.streaming && onAbrirDoc && (
+            <TarjetaDeArtefacto artefactos={msg.artefactos} onAbrir={onAbrirDoc} />
+          )}
         </Box>
         {!msg.streaming && (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 0.5 }}>
@@ -498,6 +504,9 @@ export default function ChatPage() {
   const { focusMode } = useOutletContext() || {};
   const { aiModel, currentUser } = useApp();
   const { slug, espacioSlug } = useWorkspace();
+  // Qué documento está abierto al lado. Uno solo: dos paneles competirían por el ancho y
+  // la conversación quedaría en una franja.
+  const [docAlLado, setDocAlLado] = useState(null);
   // La Sesion desde la que se abrio el hilo, si vino de una.
   //
   // Es una REFERENCIA y no estado a proposito: el mensaje inicial se manda en el mismo
@@ -710,6 +719,9 @@ export default function ChatPage() {
                   return {
                     ...m, ...(fallback ? { content: fallback } : {}), streaming: false,
                     ...(data.message_id ? { id: data.message_id } : {}),
+                    // Lo que el agente dejó escrito, para que la tarjeta aparezca al
+                    // terminar y no recién al recargar el hilo.
+                    artefactos: data.artefactos || [],
                   };
                 }
                 if (m.id === uid && data.user_message_id) {
@@ -865,7 +877,8 @@ export default function ChatPage() {
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: 'background.default', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minWidth: 0, bgcolor: 'background.default', overflow: 'hidden' }}>
 
       {activeAgent && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 3, py: 1,
@@ -893,6 +906,7 @@ export default function ChatPage() {
                 msg={msg}
                 yoId={currentUser?.id}
                 navigate={navigate}
+                onAbrirDoc={setDocAlLado}
                 onReintentar={
                   msg.role === 'assistant' && idx === messages.length - 1 && !loading
                     ? reintentar
@@ -1058,6 +1072,15 @@ export default function ChatPage() {
         </Typography>
       </Box>
 
+    </Box>
+
+    {/* El documento al lado de la conversación. Se abre desde la tarjeta del mensaje:
+        revisar lo que el agente escribió no debería costar salir del chat. */}
+    {docAlLado && (
+      <DocumentoAlLado
+        docId={docAlLado} workspace={slug} onCerrar={() => setDocAlLado(null)}
+      />
+    )}
     </Box>
   );
 }

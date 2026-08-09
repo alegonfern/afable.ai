@@ -173,6 +173,12 @@ class Message(models.Model):
     # empresa que va a DECIDIR con esa respuesta, poder comprobarla es lo que separa un
     # juguete de una herramienta.
     fuentes = models.JSONField(default=list, blank=True)
+    # ⭐ Qué quedó ESCRITO en esta respuesta: `[{'id', 'titulo', 'accion'}]`.
+    # Distinto de `fuentes`: aquellas son en qué se apoyó para contestar, esto es lo que
+    # hizo. Va como dato para que el chat pueda ofrecer abrirlo ahí mismo; si no, el
+    # agente escribe un documento, lo menciona en una frase, y la persona tiene que ir a
+    # buscarlo a otra pantalla y confiar en que está.
+    artefactos = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

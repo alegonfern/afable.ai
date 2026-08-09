@@ -5,6 +5,9 @@ empresa. Los permisos por archivo y por carpeta (compartir con alguien, lectura 
 edición) son el bloque siguiente — hasta que existan, esto NO es un lugar para guardar
 algo que no pueda ver el resto del equipo, y la pantalla lo dice.
 """
+import logging
+import re
+
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
@@ -15,6 +18,8 @@ from apps.organizations.models import CompanyDocument
 from apps.workspaces.permissions import require_membership
 
 from .models import Carpeta, Version
+
+logger = logging.getLogger(__name__)
 
 
 def _org(request):
@@ -540,6 +545,128 @@ class VersionDetailView(APIView):
             'contenido': doc.extracted_text or '',
             'version': {'numero': nueva.numero, 'quien': nueva.quien},
         })
+
+
+class CambiosDeVersionView(APIView):
+    """Qué cambió EXACTAMENTE en una versión, comparada con la anterior.
+
+    ⭐ El historial ya decía *que* alguien cambió algo y *cuándo*. Eso alcanza para
+    auditar después, pero no para decidir: quien recibe "el agente editó el contrato" no
+    tiene forma de saber si lo que hizo está bien sin leer el documento entero y
+    acordarse de cómo estaba antes. Nadie hace eso, así que en la práctica se acepta a
+    ciegas.
+
+    Se devuelven las líneas agregadas y quitadas, no un texto para leer: la pantalla las
+    pinta, y así el cambio se mira en dos segundos.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk, numero):
+        import difflib
+
+        doc, version, error = VersionDetailView()._version(request, pk, numero)
+        if error:
+            return error
+
+        anterior = (
+            Version.objects.filter(document=doc, numero__lt=numero)
+            .order_by('-numero').first()
+        )
+        antes = (anterior.contenido if anterior else '').splitlines()
+        despues = (version.contenido or '').splitlines()
+
+        lineas = []
+        for linea in difflib.unified_diff(antes, despues, lineterm='', n=1):
+            # Las tres primeras marcas de `unified_diff` son encabezados del formato, no
+            # contenido: mostrarlas sería filtrar la herramienta a la pantalla.
+            if linea.startswith(('---', '+++')):
+                continue
+            if linea.startswith('@@'):
+                lineas.append({'tipo': 'salto', 'texto': ''})
+            elif linea.startswith('+'):
+                lineas.append({'tipo': 'mas', 'texto': linea[1:]})
+            elif linea.startswith('-'):
+                lineas.append({'tipo': 'menos', 'texto': linea[1:]})
+            else:
+                lineas.append({'tipo': 'igual', 'texto': linea[1:] if linea else ''})
+
+        return Response({
+            'numero': version.numero,
+            'quien': version.quien,
+            'mensaje': version.mensaje,
+            'primera': anterior is None,
+            'lineas': lineas,
+            # ⚠️ Se dice de frente si "deshacer" alcanza al archivo o solo al texto: en un
+            # binario la versión guarda el TEXTO extraído, así que restaurar NO devuelve
+            # el .xlsx anterior. Ofrecer un botón que promete más de lo que hace sería
+            # peor que no ofrecerlo.
+            'reversible': bool(doc.editable),
+        })
+
+
+class EnviarPorCorreoView(APIView):
+    """Mandar el documento por correo, en PDF y adjunto.
+
+    ⭐ **Es la salida que le faltaba a todo lo demás.** El agente podía escribir un
+    informe y la persona podía bajarlo, pero después tenía que abrir su correo, buscar el
+    archivo en Descargas y adjuntarlo a mano. El trabajo terminaba en la carpeta de
+    Descargas y no en manos de quien tenía que recibirlo.
+
+    ⚠️ **Lo dispara una persona, no el agente.** Un agente que elige destinatarios por su
+    cuenta puede sacar un documento interno de la empresa con una sola interpretación
+    equivocada, y un correo no se puede deshacer. Acá el destinatario y el asunto los
+    escribe y confirma alguien, con lo que va a salir a la vista.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        from django.core.mail import EmailMessage
+        from django.conf import settings
+
+        from services.exportar_pdf import desde_documento
+
+        doc, error = ContenidoView()._doc(request, pk)
+        if error:
+            return error
+
+        para = (request.data.get('para') or '').strip()
+        if '@' not in para or ' ' in para:
+            return Response(
+                {'detail': 'Escribe una dirección de correo válida.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        asunto = (request.data.get('asunto') or '').strip()[:200] or doc.title
+        cuerpo = (request.data.get('mensaje') or '').strip()
+        if not cuerpo:
+            cuerpo = f'Te comparto «{doc.title}».'
+        # Quién lo manda, en el cuerpo: el correo sale desde una dirección de Afable, así
+        # que sin esto quien lo recibe no sabe de qué persona viene.
+        firma = request.user.get_full_name() or request.user.email
+        cuerpo = f'{cuerpo}\n\n— {firma}'
+
+        correo = EmailMessage(
+            subject=asunto,
+            body=cuerpo,
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'afable@localhost'),
+            to=[para],
+            reply_to=[request.user.email] if request.user.email else None,
+        )
+        nombre = re.sub(r'[/\\?%*:|"<>]', '-', doc.title)[:80]
+        correo.attach(f'{nombre}.pdf', desde_documento(doc), 'application/pdf')
+
+        try:
+            correo.send(fail_silently=False)
+        except Exception as e:
+            logger.exception('No se pudo enviar el documento %s por correo', doc.pk)
+            return Response(
+                {'detail': f'No se pudo enviar el correo: {e}'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        return Response({'ok': True, 'para': para, 'asunto': asunto})
 
 
 MAX_ARCHIVO_MB = 10
