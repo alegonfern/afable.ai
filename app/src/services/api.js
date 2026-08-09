@@ -302,6 +302,10 @@ export const api = {
   enviarMensajeSoporte: (data) => apiClient.post('/soporte/', data),
 
   // ── La primera hora ──
+  // La empresa de ejemplo: documentos de verdad para poder preguntar antes de cargar
+  // nada. Van marcados y se quitan de una sola vez.
+  cargarDatosDeEjemplo: (slug) => apiClient.post(`/workspaces/${slug}/ejemplo/`),
+  quitarDatosDeEjemplo: (slug) => apiClient.delete(`/workspaces/${slug}/ejemplo/`),
   // Qué le falta a la empresa. El avance lo calcula el backend del estado real, así que
   // acá no hay nada que recordar entre pantallas.
   getPrimerosPasos: (slug) => apiClient.get(`/workspaces/${slug}/primeros-pasos/`),

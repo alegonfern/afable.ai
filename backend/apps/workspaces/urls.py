@@ -11,7 +11,7 @@ cuando se escribió esta ruta. La dirección miente, el código no.
 
 from django.urls import path
 
-from .primeros_pasos import PrimerosPasosView
+from .primeros_pasos import DatosDeEjemploView, PrimerosPasosView
 from .views import (
     EmpresaDetailView, EmpresaListCreateView,
     InvitationDetailView, InvitationListCreateView, InvitationResendView,
@@ -28,6 +28,10 @@ urlpatterns = [
     path(
         '<slug:slug>/primeros-pasos/',
         PrimerosPasosView.as_view(), name='empresa-primeros-pasos',
+    ),
+    path(
+        '<slug:slug>/ejemplo/',
+        DatosDeEjemploView.as_view(), name='empresa-datos-de-ejemplo',
     ),
     path('<slug:slug>/members/', MemberListView.as_view(), name='empresa-members'),
     path('<slug:slug>/members/<int:pk>/', MemberDetailView.as_view(), name='empresa-member-detail'),

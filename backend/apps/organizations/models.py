@@ -296,6 +296,10 @@ class CompanyDocument(models.Model):
     SOURCES = [
         ('manual', 'Subido manualmente'),
         ('drive_sync', 'Sincronizado desde Google Drive'),
+        # Los datos de ejemplo se marcan para poder sacarlos de una: quien probó con
+        # ellos y después cargó los suyos no puede quedar con las dos cosas mezcladas,
+        # porque el agente citaría un contrato inventado como si fuera de la empresa.
+        ('ejemplo', 'Datos de ejemplo'),
     ]
 
     organization = models.ForeignKey(

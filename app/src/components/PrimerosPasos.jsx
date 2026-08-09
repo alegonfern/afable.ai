@@ -32,6 +32,7 @@ export default function PrimerosPasos() {
 
   const [datos, setDatos] = useState(null);
   const [abierto, setAbierto] = useState(true);
+  const [cargandoEjemplo, setCargandoEjemplo] = useState(false);
 
   const cargar = useCallback(async () => {
     if (!slug || !esAdmin) return;
@@ -46,6 +47,19 @@ export default function PrimerosPasos() {
   }, [slug, esAdmin]);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  const cargarEjemplo = async () => {
+    if (cargandoEjemplo) return;
+    try {
+      setCargandoEjemplo(true);
+      const { data } = await api.cargarDatosDeEjemplo(slug);
+      // Se va derecho al chat con la primera pregunta escrita: quien recién llega no
+      // tiene que inventar qué preguntar, que es justo donde la gente se traba.
+      navigate('/app/chat', { state: { initialMessage: data.preguntas?.[0] } });
+    } catch {
+      setCargandoEjemplo(false);
+    }
+  };
 
   const cerrar = async () => {
     setDatos(null);
@@ -144,6 +158,23 @@ export default function PrimerosPasos() {
                   {destacado && (
                     <Typography sx={{ fontSize: '0.8125rem', color: textMuted, mt: 0.35 }}>
                       {paso.ayuda}
+                    </Typography>
+                  )}
+                  {/* El paso que más cuesta es traer los datos, y es el que traba a la
+                      mayoría: sin ellos el agente contesta como cualquier IA gratuita y
+                      nadie llega a ver de qué se trata. Con la empresa de ejemplo se
+                      puede preguntar antes de cargar nada. */}
+                  {!paso.hecho && paso.id === 'conocimiento' && (
+                    <Typography
+                      onClick={(e) => { e.stopPropagation(); cargarEjemplo(); }}
+                      sx={{
+                        fontSize: '0.8125rem', fontWeight: 600, color: '#586AD0',
+                        mt: 0.75, cursor: 'pointer', '&:hover': { textDecoration: 'underline' },
+                      }}
+                    >
+                      {cargandoEjemplo
+                        ? 'Preparando la empresa de ejemplo...'
+                        : '…o pruébelo primero con una empresa de ejemplo →'}
                     </Typography>
                   )}
                   {paso.detalle && paso.hecho && (

@@ -21,6 +21,7 @@ que decidió no contratar plan nunca llegaría a 6 de 6, y un panel que no se pu
 se vuelve un reproche permanente.
 """
 
+from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -132,6 +133,33 @@ def calcular_pasos(empresa):
             'accion': 'Ver planes',
         },
     ]
+
+
+class DatosDeEjemploView(APIView):
+    """Cargar (o quitar) la empresa de ejemplo.
+
+    Va con los primeros pasos porque es parte de la misma pregunta —"¿esto me sirve?"— y
+    porque el paso que más cuesta es el segundo: traer lo que la empresa sabe. Con esto se
+    puede contestar antes de cargar nada.
+    """
+
+    permission_classes = [IsAdmin]
+
+    def post(self, request, slug):
+        from apps.organizations.datos_de_ejemplo import PREGUNTAS_SUGERIDAS, crear_para
+
+        workspace, creados = crear_para(request.empresa, creado_por=request.user)
+        return Response({
+            'workspace': workspace.slug,
+            'documentos': creados,
+            'preguntas': PREGUNTAS_SUGERIDAS,
+        }, status=status.HTTP_201_CREATED)
+
+    def delete(self, request, slug):
+        from apps.organizations.datos_de_ejemplo import quitar_de
+
+        borrados = quitar_de(request.empresa)
+        return Response({'borrados': borrados}, status=status.HTTP_200_OK)
 
 
 class PrimerosPasosView(APIView):
