@@ -22,6 +22,8 @@ from rest_framework.views import APIView
 
 from apps.workspaces.permissions import require_membership
 
+from apps.notificaciones.avisos import avisar_de_la_tarea
+
 from .models import TAREA_ESTADOS, TAREA_LISTA, TAREA_PENDIENTE, Task
 from .permissions import require_sesion
 
@@ -192,6 +194,9 @@ class TareaListCreateView(APIView):
             assignee=persona,
             created_by=request.user,
         )
+        # A quien le tocó, no a toda la Sesión: una tarea tiene un responsable, y avisarle
+        # a todos es la forma de que nadie se dé por aludido.
+        avisar_de_la_tarea(tarea, request.user)
         return Response(serializar(tarea, request.user), status=status.HTTP_201_CREATED)
 
 

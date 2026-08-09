@@ -26,5 +26,6 @@ urlpatterns = [
         path('payments/', include('apps.payments.urls')),
         path('leads/', include('apps.leads.urls')),
         path('soporte/', include('apps.soporte.urls')),
+        path('notificaciones/', include('apps.notificaciones.urls')),
     ])),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

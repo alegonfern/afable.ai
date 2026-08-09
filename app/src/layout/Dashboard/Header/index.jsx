@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import SelectorEspacio from '../../../components/SelectorEspacio';
+import Notificaciones from '../../../components/Notificaciones';
 import { authService } from '../../../services/auth';
 import { api } from '../../../services/api';
 import { DRAWER_WIDTH, MINI_DRAWER_WIDTH } from '../../../config';
@@ -308,6 +309,10 @@ export default function Header({ open, handleDrawerToggle }) {
           </Typography>
         </Box>
       </Box>
+
+      {/* La campana, al lado del modo claro/oscuro: los dos son de la persona y no de
+          la pantalla en la que está. */}
+      <Notificaciones color={textMuted} />
 
       {/* Claro / oscuro: arriba a la derecha, donde se busca sin pensar.
           Un solo icono, el del modo activo. Antes había sol + interruptor +

@@ -19,6 +19,7 @@ from .serializers import (
     AutomationSerializer, SkillSerializer, SkillWriteSerializer, RoutineSerializer,
 )
 from apps.organizations.models import Organization
+from apps.notificaciones.avisos import avisar_del_mensaje
 from apps.workspaces.permissions import alcance_de_agente
 from services.agent_service import chat_direct, stream_direct, resolve_model
 
@@ -1034,6 +1035,10 @@ class DirectChatStreamView(APIView):
         mensaje_usuario = Message.objects.create(
             conversation=conversation, role='user', content=message, user=request.user,
         )
+        # Si el hilo es de una Sesión, lo que se escribe ahí es del EQUIPO: al resto le
+        # llega el aviso. Sin esto, escribir en una Sesión es dejar un papel sobre un
+        # escritorio vacío y esperar que alguien pase.
+        avisar_del_mensaje(conversation, request.user, message)
         full_history = list(conversation.messages.values('role', 'content').order_by('created_at'))
 
         conv_id = conversation.id

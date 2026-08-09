@@ -215,6 +215,13 @@ export const api = {
       params: { workspace },
     }),
 
+  // ── Notificaciones ──
+  // Lo dirigido a ESTA persona. El contador viene aparte del listado: es sobre todas las
+  // sin leer, no sobre las que se alcanzan a mostrar.
+  getNotificaciones: () => apiClient.get('/notificaciones/'),
+  marcarNotificacionesLeidas: () => apiClient.post('/notificaciones/'),
+  marcarNotificacionLeida: (id) => apiClient.post(`/notificaciones/${id}/leida/`),
+
   // ── Sesiones ──
   // Donde trabaja el equipo: conversaciones, tareas y archivos. El Workspace va como
   // `?workspace=`, no en la ruta (ver apps/sesiones/urls.py).
