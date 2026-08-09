@@ -507,6 +507,8 @@ export default function ChatPage() {
   // Qué documento está abierto al lado. Uno solo: dos paneles competirían por el ancho y
   // la conversación quedaría en una franja.
   const [docAlLado, setDocAlLado] = useState(null);
+  // Sube cada vez que el agente deja algo escrito, para que el panel abierto se ponga al día.
+  const [refrescoDoc, setRefrescoDoc] = useState(0);
   // La Sesion desde la que se abrio el hilo, si vino de una.
   //
   // Es una REFERENCIA y no estado a proposito: el mensaje inicial se manda en el mismo
@@ -729,6 +731,7 @@ export default function ChatPage() {
                 }
                 return m;
               }));
+              if (data.artefactos?.length) setRefrescoDoc((n) => n + 1);
               if (data.action?.type === 'navigate') navigate(data.action.path);
               if (data.action?.type === 'save_document' && data.action?.success) {
                 setSavedDoc({ title: data.action.document_title });
@@ -1078,7 +1081,8 @@ export default function ChatPage() {
         revisar lo que el agente escribió no debería costar salir del chat. */}
     {docAlLado && (
       <DocumentoAlLado
-        docId={docAlLado} workspace={slug} onCerrar={() => setDocAlLado(null)}
+        docId={docAlLado} workspace={slug} refresco={refrescoDoc}
+        onCerrar={() => setDocAlLado(null)}
       />
     )}
     </Box>

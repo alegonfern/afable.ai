@@ -209,10 +209,6 @@ export const api = {
     apiClient.get(`/archivos/documentos/${id}/versiones/${numero}/`, { params: { workspace } }),
   restaurarVersion: (id, numero, workspace) =>
     apiClient.post(`/archivos/documentos/${id}/versiones/${numero}/`, { workspace }),
-  // Mandar el documento por correo, en PDF adjunto. Lo confirma una persona: el
-  // destinatario y el asunto van a la vista antes de salir.
-  enviarDocumento: (id, data) =>
-    apiClient.post(`/archivos/documentos/${id}/enviar/`, data),
   // Qué cambió exactamente en una versión: líneas agregadas y quitadas.
   getCambiosDeVersion: (id, numero, workspace) =>
     apiClient.get(`/archivos/documentos/${id}/versiones/${numero}/cambios/`, {

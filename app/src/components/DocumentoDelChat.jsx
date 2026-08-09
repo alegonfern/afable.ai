@@ -18,7 +18,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   Box, Button, CircularProgress, IconButton, Stack, Tooltip, Typography, useTheme,
 } from '@mui/material';
-import { Download, ExternalLink, FileText, RotateCcw, Send, X } from 'lucide-react';
+import { Download, ExternalLink, FileText, RotateCcw, Save, X } from 'lucide-react';
 import TextField from '@mui/material/TextField';
 import { toast } from 'react-toastify';
 import { api } from '../services/api';
@@ -122,87 +122,13 @@ function Cambios({ lineas }) {
 }
 
 /**
- * Mandar el documento a alguien, en PDF.
- *
- * ⚠️ **Lo confirma una persona, no lo dispara el agente.** El destinatario se escribe y
- * se ve antes de que salga: un agente eligiendo a quién mandar un documento interno se
- * equivoca una vez y no hay forma de deshacerlo.
- */
-function Enviar({ docId, workspace, titulo, onListo }) {
-  const [abierto, setAbierto] = useState(false);
-  const [para, setPara] = useState('');
-  const [mensaje, setMensaje] = useState('');
-  const [enviando, setEnviando] = useState(false);
-
-  if (!abierto) {
-    return (
-      <Button
-        size="small" onClick={() => setAbierto(true)} startIcon={<Send size={13} />}
-        sx={{ textTransform: 'none', fontSize: '0.75rem', color: 'text.secondary' }}
-      >
-        Enviar por correo
-      </Button>
-    );
-  }
-
-  const enviar = async () => {
-    setEnviando(true);
-    try {
-      await api.enviarDocumento(docId, {
-        workspace, para: para.trim(), asunto: titulo, mensaje,
-      });
-      toast.success(`Enviado a ${para.trim()}.`);
-      setAbierto(false); setPara(''); setMensaje('');
-      onListo?.();
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || 'No se pudo enviar.');
-    } finally {
-      setEnviando(false);
-    }
-  };
-
-  return (
-    <Stack spacing={1} sx={{ width: '100%' }}>
-      <TextField
-        size="small" fullWidth autoFocus placeholder="correo@ejemplo.cl"
-        value={para} onChange={(e) => setPara(e.target.value)}
-        inputProps={{ style: { fontSize: '0.82rem' } }}
-      />
-      <TextField
-        size="small" fullWidth multiline minRows={2} placeholder="Un mensaje (opcional)"
-        value={mensaje} onChange={(e) => setMensaje(e.target.value)}
-        inputProps={{ style: { fontSize: '0.82rem' } }}
-      />
-      <Typography sx={{ fontSize: '0.7rem', color: 'text.disabled' }}>
-        Va «{titulo}» en PDF adjunto. Sale desde Afable, con tu correo para responder.
-      </Typography>
-      <Stack direction="row" spacing={1}>
-        <Button
-          size="small" variant="contained" onClick={enviar}
-          disabled={enviando || !para.includes('@')}
-          sx={{ textTransform: 'none', borderRadius: '8px', fontSize: '0.78rem' }}
-        >
-          {enviando ? 'Enviando…' : 'Enviar'}
-        </Button>
-        <Button
-          size="small" onClick={() => setAbierto(false)}
-          sx={{ textTransform: 'none', fontSize: '0.78rem', color: 'text.disabled' }}
-        >
-          Cancelar
-        </Button>
-      </Stack>
-    </Stack>
-  );
-}
-
-/**
  * El documento abierto al lado de la conversación.
  *
  * Lo primero que se ve es **qué cambió en la última versión**, no el documento entero:
  * quien acaba de pedir un cambio quiere revisar ESE cambio. El documento completo está
  * debajo, y "Abrir en Archivos" lleva a la pantalla con todo el historial.
  */
-export function DocumentoAlLado({ docId, workspace, onCerrar }) {
+export function DocumentoAlLado({ docId, workspace, onCerrar, refresco = 0 }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
 
@@ -210,6 +136,11 @@ export function DocumentoAlLado({ docId, workspace, onCerrar }) {
   const [cambios, setCambios] = useState(null);
   const [cargando, setCargando] = useState(true);
   const [deshaciendo, setDeshaciendo] = useState(false);
+  // El texto que se está escribiendo, y lo último que confirmó el servidor. La diferencia
+  // entre los dos es lo que hay sin guardar.
+  const [texto, setTexto] = useState('');
+  const [guardado, setGuardado] = useState('');
+  const [guardando, setGuardando] = useState(false);
 
   const cargar = useCallback(async () => {
     if (!docId || !workspace) return;
@@ -217,6 +148,8 @@ export function DocumentoAlLado({ docId, workspace, onCerrar }) {
     try {
       const { data } = await api.getContenido(docId, workspace);
       setDoc(data);
+      setTexto(data.contenido || '');
+      setGuardado(data.contenido || '');
       // El diff se pide aparte y su fallo no rompe el panel: si no se puede calcular,
       // igual se ve el documento, que es lo mínimo que la persona vino a buscar.
       const numero = data.ultima_version?.numero;
@@ -238,6 +171,21 @@ export function DocumentoAlLado({ docId, workspace, onCerrar }) {
 
   useEffect(() => { cargar(); }, [cargar]);
 
+  // Si el agente escribe sobre el documento que se está mirando, el panel se pone al día
+  // solo: ver aparecer el cambio es la diferencia entre mirar un documento y trabajar
+  // con alguien sobre él.
+  //
+  // ⚠️ Salvo que haya algo escrito sin guardar. Recargar ahí borraría lo que la persona
+  // acaba de tipear, y perder texto propio es peor que ver el documento desactualizado
+  // un rato.
+  const hayCambiosPropios = texto !== guardado;
+  useEffect(() => {
+    if (refresco && !hayCambiosPropios) cargar();
+    // `hayCambiosPropios` a propósito fuera de las dependencias: es una condición del
+    // momento en que llega el aviso, no algo que deba volver a disparar la recarga.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refresco]);
+
   const deshacer = async () => {
     const numero = cambios?.numero;
     if (!numero || numero <= 1) return;
@@ -250,6 +198,21 @@ export function DocumentoAlLado({ docId, workspace, onCerrar }) {
       toast.error(e?.response?.data?.detail || 'No se pudo deshacer.');
     } finally {
       setDeshaciendo(false);
+    }
+  };
+
+  const guardar = async () => {
+    setGuardando(true);
+    try {
+      const { data } = await api.saveContenido(docId, { workspace, contenido: texto });
+      setGuardado(data.contenido ?? texto);
+      // Se recarga el diff: lo que la persona acaba de escribir es la versión nueva, y
+      // el panel tiene que mostrar SU cambio y no el anterior del agente.
+      await cargar();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'No se pudo guardar.');
+    } finally {
+      setGuardando(false);
     }
   };
 
@@ -272,6 +235,7 @@ export function DocumentoAlLado({ docId, workspace, onCerrar }) {
   // Deshacer solo se ofrece si de verdad deshace. En un binario la versión guarda el
   // texto extraído y no el archivo, así que el botón prometería algo que no cumple.
   const sePuedeDeshacer = cambios && !cambios.primera && cambios.reversible;
+  const sinGuardar = texto !== guardado;
 
   return (
     <Box sx={{
@@ -291,6 +255,15 @@ export function DocumentoAlLado({ docId, workspace, onCerrar }) {
         }}>
           {doc?.title || 'Documento'}
         </Typography>
+        {sinGuardar && (
+          <Button
+            size="small" variant="contained" onClick={guardar} disabled={guardando}
+            startIcon={<Save size={13} />}
+            sx={{ textTransform: 'none', borderRadius: '8px', fontSize: '0.75rem', py: 0.3 }}
+          >
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </Button>
+        )}
         {doc?.editable && (
           <Tooltip title="Descargar en PDF">
             <IconButton size="small" onClick={descargarPdf} sx={{ color: 'text.disabled' }}>
@@ -309,15 +282,6 @@ export function DocumentoAlLado({ docId, workspace, onCerrar }) {
         <IconButton size="small" onClick={onCerrar} sx={{ color: 'text.disabled' }}>
           <X size={15} />
         </IconButton>
-      </Box>
-
-      {/* La salida, arriba y no escondida al final: es lo que convierte al documento en
-          algo que sale de Afable y llega a alguien. */}
-      <Box sx={{
-        px: 2, py: 1.25, borderBottom: `1px solid ${theme.palette.divider}`,
-        display: 'flex', alignItems: 'center',
-      }}>
-        <Enviar docId={docId} workspace={workspace} titulo={doc?.title || 'Documento'} />
       </Box>
 
       <Box sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
@@ -369,11 +333,16 @@ export function DocumentoAlLado({ docId, workspace, onCerrar }) {
               Documento
             </Typography>
             {doc?.editable ? (
-              <Typography sx={{
-                whiteSpace: 'pre-wrap', fontSize: '0.86rem', lineHeight: 1.7,
-              }}>
-                {doc.contenido || ''}
-              </Typography>
+              // ⭐ Se ESCRIBE acá, no se mira. Un panel de solo lectura al lado del chat
+              // sigue obligando a irse a otra pantalla para corregir una cifra, que es
+              // justo lo que este panel venía a evitar.
+              <TextField
+                fullWidth multiline variant="standard"
+                value={texto} onChange={(e) => setTexto(e.target.value)}
+                placeholder="Escribe acá…"
+                InputProps={{ disableUnderline: true }}
+                sx={{ '& textarea': { fontSize: '0.86rem', lineHeight: 1.7 } }}
+              />
             ) : (
               <VistaDelArchivo documentoId={docId} workspaceSlug={workspace} />
             )}

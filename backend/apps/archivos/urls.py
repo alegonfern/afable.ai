@@ -3,7 +3,6 @@ from django.urls import path
 
 from .views import (
     CambiosDeVersionView,
-    EnviarPorCorreoView,
     ExportarPdfView,
     VistaView,
     CarpetaDetailView, CarpetaListCreateView, ContenidoView, DocumentoDetailView,
@@ -20,7 +19,6 @@ urlpatterns = [
     path('documentos/<int:pk>/contenido/', ContenidoView.as_view(), name='contenido'),
     path('documentos/<int:pk>/vista/', VistaView.as_view(), name='vista'),
     path('documentos/<int:pk>/pdf/', ExportarPdfView.as_view(), name='exportar-pdf'),
-    path('documentos/<int:pk>/enviar/', EnviarPorCorreoView.as_view(), name='enviar-documento'),
     path('documentos/<int:pk>/versiones/', VersionesView.as_view(), name='versiones'),
     path(
         'documentos/<int:pk>/versiones/<int:numero>/',

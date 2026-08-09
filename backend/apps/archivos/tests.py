@@ -995,57 +995,6 @@ class QueCambioTests(BaseArchivos):
         self.assertFalse(r.data['reversible'])
 
 
-class EnviarPorCorreoTests(BaseArchivos):
-    """La salida: que el documento llegue a alguien y no muera en Descargas."""
-
-    def enviar(self, doc, **datos):
-        self.como()
-        return self.client.post(
-            f'{URL}documentos/{doc.pk}/enviar/', {**self.q(), **datos}, format='json',
-        )
-
-    def test_sale_con_el_pdf_adjunto(self):
-        from django.core import mail
-
-        r = self.enviar(self.texto, para='cliente@ejemplo.cl', mensaje='Le comparto esto.')
-        self.assertEqual(r.status_code, 200)
-        self.assertEqual(len(mail.outbox), 1)
-        correo = mail.outbox[0]
-        self.assertEqual(correo.to, ['cliente@ejemplo.cl'])
-        nombre, contenido, tipo = correo.attachments[0]
-        self.assertTrue(nombre.endswith('.pdf'))
-        self.assertEqual(tipo, 'application/pdf')
-        self.assertTrue(contenido.startswith(b'%PDF'))
-
-    def test_va_firmado_y_se_le_puede_responder_a_la_persona(self):
-        """Sale desde una dirección de Afable: sin esto, quien recibe no sabe de quién es."""
-        from django.core import mail
-
-        self.enviar(self.texto, para='cliente@ejemplo.cl')
-        correo = mail.outbox[0]
-        self.assertIn(self.user.email, correo.body)
-        self.assertEqual(correo.reply_to, [self.user.email])
-
-    def test_una_direccion_mal_escrita_no_sale(self):
-        from django.core import mail
-
-        r = self.enviar(self.texto, para='no-es-un-correo')
-        self.assertEqual(r.status_code, 400)
-        self.assertEqual(len(mail.outbox), 0)
-
-    def test_un_ajeno_no_puede_mandar_documentos_de_esta_empresa(self):
-        """El envío pasa por el mismo embudo de permisos que leer: si no lo ve, no lo manda."""
-        from django.core import mail
-
-        self.client.force_authenticate(user=self.ajeno)
-        r = self.client.post(
-            f'{URL}documentos/{self.texto.pk}/enviar/',
-            {**self.q(), 'para': 'cliente@ejemplo.cl'}, format='json',
-        )
-        self.assertIn(r.status_code, (403, 404))
-        self.assertEqual(len(mail.outbox), 0)
-
-
 class LoQueElAgenteDejoEscritoTests(BaseArchivos):
     """Que el chat pueda ofrecer abrir lo que el agente escribió, en vez de solo contarlo."""
 
