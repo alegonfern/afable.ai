@@ -11,6 +11,7 @@ cuando se escribió esta ruta. La dirección miente, el código no.
 
 from django.urls import path
 
+from .lo_que_hizo_afable import LoQueHizoAfableView
 from .primeros_pasos import DatosDeEjemploView, PrimerosPasosView
 from .views import (
     EmpresaDetailView, EmpresaListCreateView,
@@ -32,6 +33,10 @@ urlpatterns = [
     path(
         '<slug:slug>/ejemplo/',
         DatosDeEjemploView.as_view(), name='empresa-datos-de-ejemplo',
+    ),
+    path(
+        '<slug:slug>/lo-que-hizo/',
+        LoQueHizoAfableView.as_view(), name='empresa-lo-que-hizo',
     ),
     path('<slug:slug>/members/', MemberListView.as_view(), name='empresa-members'),
     path('<slug:slug>/members/<int:pk>/', MemberDetailView.as_view(), name='empresa-member-detail'),

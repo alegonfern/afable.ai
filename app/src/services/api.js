@@ -301,6 +301,10 @@ export const api = {
   // errores) lo arma el componente: quien está atascado no tiene por qué saberlo.
   enviarMensajeSoporte: (data) => apiClient.post('/soporte/', data),
 
+  // Lo que los agentes hicieron solos: la evidencia del trabajo autónomo.
+  loQueHizoAfable: (slug, dias) =>
+    apiClient.get(`/workspaces/${slug}/lo-que-hizo/`, { params: dias ? { dias } : {} }),
+
   // ── La primera hora ──
   // La empresa de ejemplo: documentos de verdad para poder preguntar antes de cargar
   // nada. Van marcados y se quitan de una sola vez.

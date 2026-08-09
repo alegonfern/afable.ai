@@ -5,6 +5,7 @@ import { Bot, Paperclip, SendHorizontal, Wrench } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import AgentesGaleria from './AgentesGaleria';
 import PrimerosPasos from '../../components/PrimerosPasos';
+import LoQueHizoAfable from '../../components/LoQueHizoAfable';
 
 const SALUDOS = [
   { texto: 'Qué bueno verlo', emoji: '👋' },
@@ -46,6 +47,9 @@ export default function TrabajoHome() {
     <Box sx={{ maxWidth: 820, mx: 'auto', px: { xs: 2.5, md: 4 }, py: { xs: 4, md: 6 }, width: '100%' }}>
       {/* Lo que le falta a la empresa. Se dibuja solo mientras falte algo, y solo al
           administrador: los pasos son cosas que unicamente el puede hacer. */}
+      {/* Primero lo que Afable hizo solo —es la razón por la que se vuelve— y después
+          lo que falta configurar. */}
+      <LoQueHizoAfable />
       <PrimerosPasos />
 
       <Typography
