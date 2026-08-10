@@ -24,7 +24,9 @@ haberlas editado, y un seed que revienta el trabajo ajeno es peor que no correr.
 
 from django.core.management.base import BaseCommand
 
-from apps.agents.agentes_base import AGENTES_BASE, sembrar_en
+from apps.agents.agentes_base import (
+    AGENTES_BASE, acortar_handles, poner_caras, sembrar_en,
+)
 from apps.organizations.models import Organization
 
 class Command(BaseCommand):
@@ -42,12 +44,18 @@ class Command(BaseCommand):
             orgs = orgs.filter(pk=options['org'])
 
         creados = existentes = 0
+        caras = cortos = 0
         for org in orgs:
             nuevos = sembrar_en(org)
             creados += nuevos
             existentes += len(AGENTES_BASE) - nuevos
+            # Y los que ya existían sin cara: la galería no puede quedar a medias, con
+            # unos agentes reconocibles y otros en gris.
+            caras += poner_caras(org)
+            cortos += acortar_handles(org)
 
         self.stdout.write(self.style.SUCCESS(
             f'{creados} agentes base creados, {existentes} ya estaban, '
+            f'{caras} recibieron su cara, {cortos} handles acortados, '
             f'en {orgs.count()} empresa(s).'
         ))

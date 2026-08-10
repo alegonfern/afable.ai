@@ -32,6 +32,8 @@ CIERRE = (
 AGENTES_BASE = [
     {
         'handle': 'afable',
+        'icon': '✳️',
+        'accent': '#586AD0',
         'name': 'Afable',
         'description': 'Busca en todo lo que la empresa tiene conectado.',
         'instructions': (
@@ -44,6 +46,8 @@ AGENTES_BASE = [
     },
     {
         'handle': 'claude',
+        'icon': '◻️',
+        'accent': '#D9A388',
         'name': 'Claude',
         'description': 'El modelo directo, sin datos de la empresa de por medio.',
         'instructions': (
@@ -56,6 +60,8 @@ AGENTES_BASE = [
     },
     {
         'handle': 'analisis',
+        'icon': '🔎',
+        'accent': '#3E8E7E',
         'name': 'Análisis profundo',
         'description': 'Cruza varias fuentes antes de contestar.',
         'instructions': (
@@ -68,6 +74,8 @@ AGENTES_BASE = [
     },
     {
         'handle': 'constructor',
+        'icon': '🛠️',
+        'accent': '#C77D3E',
         'name': 'Constructor de agentes',
         'description': 'Ayuda a escribir y afinar las instrucciones de otros agentes.',
         'instructions': (
@@ -101,6 +109,8 @@ def sembrar_en(organization):
                     'description': base['description'],
                     'instructions': base['instructions'],
                     'area': base['area'],
+                    'icon': base.get('icon', ''),
+                    'accent': base.get('accent', ''),
                     'is_active': True,
                 },
             )
@@ -108,3 +118,85 @@ def sembrar_en(organization):
     except Exception:
         logger.exception('No se pudieron sembrar los agentes base en %s', organization.pk)
     return creados
+
+
+# Las caras de los agentes que trae Afable, incluidos los de rol que siembran otros
+# comandos. Está acá y no en cada seed porque es una sola cosa —cómo se ven los agentes
+# oficiales— y repartida en cuatro archivos se desincroniza sola.
+CARAS_CONOCIDAS = {
+    'afable': ('✳️', '#586AD0'),
+    'claude': ('◻️', '#D9A388'),
+    'analisis': ('🔎', '#3E8E7E'),
+    'constructor': ('🛠️', '#C77D3E'),
+    'afable-assistant': ('✳️', '#586AD0'),
+    'agente-de-contabilidad': ('📊', '#3E8E7E'),
+    'agente-de-facturacion': ('🧾', '#4F7CC4'),
+    'agente-sii': ('🇨🇱', '#C25B5B'),
+    'cientifico-de-datos': ('📈', '#9A7BC8'),
+}
+
+
+def poner_caras(organization=None):
+    """Le pone su cara a los agentes oficiales que todavía no la tienen.
+
+    ⚠️ Solo rellena lo VACÍO. Si alguien eligió un emoji para su agente, pisárselo sería
+    exactamente el tipo de seed que revienta el trabajo ajeno.
+    """
+    from .models import Agent
+
+    qs = Agent.objects.all()
+    if organization is not None:
+        qs = qs.filter(organization=organization)
+
+    tocados = 0
+    for agente in qs.filter(handle__in=CARAS_CONOCIDAS):
+        icono, color = CARAS_CONOCIDAS[agente.handle]
+        campos = []
+        if not agente.icon:
+            agente.icon = icono
+            campos.append('icon')
+        if not agente.accent:
+            agente.accent = color
+            campos.append('accent')
+        if campos:
+            agente.save(update_fields=campos)
+            tocados += 1
+    return tocados
+
+
+# Handles cortos para los agentes oficiales. `@agente-de-contabilidad` es impronunciable
+# y nadie lo escribe: en un producto donde se invoca con `@`, el handle ES la interfaz.
+HANDLES_CORTOS = {
+    'agente-de-contabilidad': 'contabilidad',
+    'agente-de-facturacion': 'facturacion',
+    'agente-sii': 'sii',
+    'cientifico-de-datos': 'datos',
+}
+
+
+def acortar_handles(organization=None):
+    """Acorta los handles largos de los agentes oficiales. Devuelve cuántos cambió.
+
+    ⚠️ **Solo si nadie lo mencionó todavía.** Un handle es la identidad con la que se lo
+    invoca: cambiarlo rompe las menciones ya escritas en los hilos, y un `@` que dejó de
+    resolver es un mensaje del pasado que cambia de significado. Por eso se comprueba
+    mensaje por mensaje antes de tocar nada, y el que ya se usó se queda como está.
+    """
+    from .models import Agent, Message
+
+    qs = Agent.objects.filter(handle__in=HANDLES_CORTOS)
+    if organization is not None:
+        qs = qs.filter(organization=organization)
+
+    cambiados = 0
+    for agente in qs:
+        nuevo = HANDLES_CORTOS[agente.handle]
+        if Message.objects.filter(content__icontains=f'@{agente.handle}').exists():
+            logger.info('No se acorta @%s: ya está mencionado en un hilo', agente.handle)
+            continue
+        if Agent.objects.filter(organization=agente.organization, handle=nuevo).exists():
+            continue
+        agente.handle = nuevo
+        agente.save(update_fields=['handle'])
+        cambiados += 1
+    return cambiados

@@ -594,6 +594,10 @@ export default function ChatPage() {
     if (location.state?.agentId && !cid) {
       const { agentId, agentName } = location.state;
       setActiveAgent({ id: agentId, name: agentName });
+      // Una pregunta de ejemplo llega ESCRITA en el compositor, no mandada: quien la
+      // eligió todavía puede cambiarle una palabra antes de enviarla, que es lo que hace
+      // que el ejemplo enseñe en vez de solo demostrar.
+      if (location.state.pregunta) setInput(location.state.pregunta);
       api.getAgentConversations(agentId)
         .then(r => {
           const existing = (r.data || [])[0]; // ordenado por -updated_at

@@ -19,7 +19,7 @@ class AgentSerializer(serializers.ModelSerializer):
         model = Agent
         fields = ['id', 'organization', 'name', 'handle', 'description', 'instructions',
                   'area', 'systems', 'model', 'tools_summary',
-                  'recommended_frequency', 'is_active', 'created_at']
+                  'recommended_frequency', 'icon', 'accent', 'is_active', 'created_at']
         # `handle` lo genera `Agent.save()` desde el nombre y no se recalcula al
         # renombrar: es la identidad con la que se lo menciona en las conversaciones.
         # Estaba escribible y ademas salia como REQUERIDO, asi que un POST sin handle

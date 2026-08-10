@@ -29,6 +29,12 @@ class Agent(models.Model):
     # Contenido de la "tarjeta del agente" (ventana de detalle antes de chatear):
     tools_summary = models.CharField(max_length=280, blank=True)          # qué herramientas usa / cómo analiza
     recommended_frequency = models.CharField(max_length=60, blank=True)   # ej. "Diario", "Semanal"
+    # ⭐ La cara del agente. Sin esto la galería son diez tarjetas idénticas con el mismo
+    # robot gris: nadie distingue al que revisa el IVA del que redacta propuestas, y un
+    # componente que no se reconoce no se usa. `icon` es un emoji y `accent` el color de
+    # fondo del avatar — barato de producir y suficiente para que cada uno sea otro.
+    icon = models.CharField(max_length=8, blank=True)
+    accent = models.CharField(max_length=9, blank=True)
     is_active = models.BooleanField(default=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
@@ -56,6 +62,22 @@ class Agent(models.Model):
         if not self.handle:
             self.handle = self._handle_disponible(slugify(self.name)[:50] or 'agente')
         super().save(*args, **kwargs)
+
+    # Paleta para los agentes que nadie vistió a mano. Se elige por el handle, así que
+    # un agente SIEMPRE tiene el mismo color: si cambiara entre pantallas dejaría de
+    # servir para reconocerlo, que es todo el punto.
+    PALETA = ('#586AD0', '#3E8E7E', '#C77D3E', '#B4568F', '#4F7CC4', '#9A7BC8', '#C25B5B')
+
+    @property
+    def cara(self):
+        """El emoji y el color con los que se dibuja. Nunca vacío.
+
+        Un agente sin cara vuelve a ser una fila de texto: la galería entera se lee como
+        una lista gris y no se distingue el que revisa el IVA del que redacta propuestas.
+        """
+        semilla = self.handle or self.name or ''
+        color = self.accent or self.PALETA[sum(map(ord, semilla)) % len(self.PALETA)]
+        return {'icon': self.icon or '', 'accent': color}
 
     def _handle_disponible(self, base):
         candidato, n = base, 2

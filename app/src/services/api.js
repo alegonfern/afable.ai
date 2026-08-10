@@ -95,6 +95,9 @@ export const api = {
 
   // ── Agents ──
   getAgents: () => apiClient.get('/agents/'),
+  // La ficha de un agente: a qué alcanza, qué preguntarle y qué ya hizo.
+  getFichaDelAgente: (id, workspace) =>
+    apiClient.get(`/agents/${id}/ficha/`, { params: { workspace } }),
   // Galeria de la vista Trabajo: pestañas, buscador, orden y paginado.
   getAgentGallery: (params) => apiClient.get('/agents/gallery/', { params }),
   favoriteAgent: (id, workspace) => apiClient.post(`/agents/${id}/favorite/`, { workspace }),

@@ -51,8 +51,14 @@ def serializar(agent, editable):
     return {
         'id': agent.id,
         'name': agent.name,
+        # El handle sale a la vista: es CÓMO se lo invoca. Escondido, había que abrir el
+        # constructor para saber que se escribe `@analisis` — o sea que la funcionalidad
+        # más propia del producto quedaba a ciegas.
+        'handle': agent.handle,
         'description': agent.description,
         'area': agent.area,
+        # Su cara: emoji y color. Nunca vacía, para que ninguna tarjeta caiga al robot gris.
+        'cara': agent.cara,
         'author': (autor.get_full_name() or autor.email) if autor else 'Afable',
         'is_favorite': agent.es_favorito,
         'editable': editable,
@@ -60,6 +66,43 @@ def serializar(agent, editable):
         'recommended_frequency': agent.recommended_frequency,
         'tools_summary': agent.tools_summary,
     }
+
+
+class FichaDelAgenteView(APIView):
+    """GET /api/v1/agents/<pk>/ficha/?workspace=<slug> — qué hace y a qué alcanza.
+
+    Pasa por el mismo embudo que todo lo demás: quien no es miembro no ve la ficha de un
+    agente de esa empresa.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, pk):
+        slug = request.query_params.get('workspace')
+        if not slug:
+            return Response({'detail': 'Falta el Workspace.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        membership = require_membership(request.user, slug)
+        agente = Agent.objects.filter(
+            organization=membership.organization, pk=pk, is_active=True,
+        ).first()
+        if agente is None:
+            return Response({'detail': 'Agente no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+        from .ficha import ficha_de
+
+        autor = agente.created_by
+        return Response({
+            'id': agente.id,
+            'name': agente.name,
+            'handle': agente.handle,
+            'description': agente.description,
+            'cara': agente.cara,
+            'author': (autor.get_full_name() or autor.email) if autor else 'Afable',
+            'tools_summary': agente.tools_summary,
+            'recommended_frequency': agente.recommended_frequency,
+            **ficha_de(agente, membership.organization),
+        })
 
 
 class AgentGalleryView(APIView):
