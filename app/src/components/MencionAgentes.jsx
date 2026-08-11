@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { Box, Typography, useTheme } from '@mui/material';
-import { Bot } from 'lucide-react';
+import { Bot, User } from 'lucide-react';
 
 // La `@` cuenta como mención sólo si arranca palabra: en "correo@empresa.cl" no
 // se abre nada, que es lo que uno espera al escribir un correo en el chat.
@@ -26,12 +26,13 @@ export function aplicarMencion(texto, mencion, handle) {
   return { texto: nuevo, cursor: (antes + '@' + handle + ' ').length };
 }
 
-/** Los agentes que matchean lo tipeado, por handle o por nombre. */
-export function filtrarAgentes(agentes, consulta) {
-  if (!consulta) return agentes.slice(0, 6);
+/** Lo que matchea lo tipeado, por handle o por nombre. Agentes Y personas. */
+export function filtrarAgentes(mencionables, consulta) {
+  if (!consulta) return mencionables.slice(0, 6);
   const q = consulta.toLowerCase();
-  return agentes
-    .filter((a) => (a.handle || '').includes(q) || (a.name || '').toLowerCase().includes(q))
+  return mencionables
+    .filter((m) => (m.handle || '').includes(q)
+      || (m.nombre || m.name || '').toLowerCase().includes(q))
     .slice(0, 6);
 }
 
@@ -65,32 +66,45 @@ export default function MencionAgentes({ agentes, indice, onElegir }) {
         boxShadow: '0 8px 24px rgba(0,0,0,0.16)', py: 0.5,
       }}
     >
-      {agentes.map((a, i) => (
-        <Box
-          key={a.id}
-          onMouseDown={(e) => { e.preventDefault(); onElegir(a); }}
-          sx={{
-            display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 0.9, cursor: 'pointer',
-            bgcolor: i === indice ? (d ? 'rgba(255,255,255,0.06)' : 'rgba(88,106,208,0.08)') : 'transparent',
-          }}
-        >
-          <Box sx={{
-            width: 24, height: 24, borderRadius: '7px', flexShrink: 0,
-            background: 'linear-gradient(135deg, #586AD0 0%, #2F42A6 100%)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Bot size={12} color="#fff" />
+      {agentes.map((a, i) => {
+        const esPersona = a.tipo === 'persona';
+        const cara = a.cara || {};
+        return (
+          <Box
+            key={`${a.tipo || 'agente'}-${a.handle}`}
+            onMouseDown={(e) => { e.preventDefault(); onElegir(a); }}
+            sx={{
+              display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 0.9, cursor: 'pointer',
+              bgcolor: i === indice ? (d ? 'rgba(255,255,255,0.06)' : 'rgba(88,106,208,0.08)') : 'transparent',
+            }}
+          >
+            {/* La cara del agente, o la silueta de una persona. Se distinguen de un
+                vistazo porque mencionar a un colega y mencionar a un agente hacen cosas
+                muy distintas: una avisa, la otra contesta. */}
+            <Box sx={{
+              width: 24, height: 24, borderRadius: esPersona ? '50%' : '7px', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 12, lineHeight: 1, color: '#fff',
+              bgcolor: esPersona
+                ? (d ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.14)')
+                : (cara.icon ? `${cara.accent}26` : (cara.accent || '#586AD0')),
+              border: !esPersona && cara.icon ? `1px solid ${cara.accent}59` : 'none',
+            }}>
+              {esPersona
+                ? <User size={12} />
+                : (cara.icon || <Bot size={12} color="#fff" />)}
+            </Box>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, lineHeight: 1.3 }}>
+                @{a.handle}
+              </Typography>
+              <Typography noWrap sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>
+                {esPersona ? a.nombre : (a.detalle || a.description || a.nombre || a.name)}
+              </Typography>
+            </Box>
           </Box>
-          <Box sx={{ minWidth: 0 }}>
-            <Typography sx={{ fontSize: '0.82rem', fontWeight: 600, lineHeight: 1.3 }}>
-              @{a.handle}
-            </Typography>
-            <Typography noWrap sx={{ fontSize: '0.72rem', color: 'text.secondary' }}>
-              {a.description || a.name}
-            </Typography>
-          </Box>
-        </Box>
-      ))}
+        );
+      })}
     </Box>
   );
 }

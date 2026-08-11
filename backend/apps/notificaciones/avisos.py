@@ -97,3 +97,31 @@ def avisar_de_la_tarea(tarea, autor):
         organization=organizacion,
         excepto=autor,
     )
+
+
+def avisar_de_la_mencion(conversation, autor, destinatario, texto):
+    """A alguien lo mencionaron con `@` en una conversación.
+
+    Distinto del aviso de mensaje: acá le hablaron A ÉL. Por eso se manda aunque ya haya
+    recibido el aviso general del hilo — "escribieron en la Sesión" y "te preguntaron algo"
+    no son la misma noticia, y tratarlas igual hace que la segunda se pierda entre las
+    primeras.
+    """
+    from .models import TIPO_MENSAJE
+
+    sesion = getattr(conversation, 'sesion', None)
+    quien = autor.get_full_name() or autor.email
+    organizacion = (
+        sesion.workspace.organization
+        if sesion is not None and getattr(sesion, 'workspace_id', None) else None
+    )
+    enlace = f'/app/sesiones/{sesion.slug}' if sesion is not None else '/app/chat'
+    return avisar(
+        [destinatario],
+        tipo=TIPO_MENSAJE,
+        titulo=f'{quien} te mencionó',
+        detalle=(texto or '').strip()[:200],
+        enlace=enlace,
+        organization=organizacion,
+        excepto=autor,
+    )

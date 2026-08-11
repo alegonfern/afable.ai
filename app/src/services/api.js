@@ -95,6 +95,10 @@ export const api = {
 
   // ── Agents ──
   getAgents: () => apiClient.get('/agents/'),
+  // A quién se puede mencionar acá: agentes Y personas, en una sola lista. Para quien
+  // escribe, `@` es UNA cosa —"a quién le hablo"— y no dos.
+  getMencionables: (workspace, sesion) =>
+    apiClient.get('/agents/mencionables/', { params: { workspace, sesion } }),
   // La ficha de un agente: a qué alcanza, qué preguntarle y qué ya hizo.
   getFichaDelAgente: (id, workspace) =>
     apiClient.get(`/agents/${id}/ficha/`, { params: { workspace } }),

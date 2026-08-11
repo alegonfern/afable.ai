@@ -834,11 +834,15 @@ export default function ChatPage() {
   // la lista cambia poco y no vale la pena volver a consultarla por cada tecla.
   useEffect(() => {
     let vivo = true;
-    api.getAgents()
-      .then(({ data }) => { if (vivo) setAgentesMencionables(Array.isArray(data) ? data : []); })
+    if (!slug) return undefined;
+    // La Sesión, si el hilo está en una: es lo que decide si hay personas a quien
+    // mencionar. En un hilo privado no hay nadie, y ofrecer nombres ahí prometería un
+    // aviso que no va a llegar.
+    api.getMencionables(slug, sesionDelHilo.current || undefined)
+      .then(({ data }) => { if (vivo) setAgentesMencionables(data.mencionables || []); })
       .catch(() => {});
     return () => { vivo = false; };
-  }, []);
+  }, [slug, convId]);
 
   const sugerencias = mencion ? filtrarAgentes(agentesMencionables, mencion.consulta) : [];
 

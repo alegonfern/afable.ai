@@ -116,11 +116,28 @@ export default function MenuDeFila({ acciones, onElegir, visible = true, titulo 
  * privado de quien la escribió y pasa a verla el equipo de esa Sesión. No hay un enlace
  * público ni un permiso nuevo — se apoya en lo que la Sesión ya significa.
  */
-export function DialogoCompartir({ abierto, onCerrar, sesiones, sesionActual, onCompartir }) {
+export function DialogoCompartir({
+  abierto, onCerrar, sesiones, sesionActual, onCompartir, conversacion,
+}) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const textMuted = d ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.55)';
   const [elegida, setElegida] = useState(sesionActual || '');
+  const [copiado, setCopiado] = useState(false);
+
+  // El enlace del hilo. Abrirlo lleva a la conversación; quién puede leerla lo decide el
+  // backend con la misma regla de siempre (hilo de Sesión = quien alcanza la Sesión).
+  const enlace = conversacion
+    ? `${window.location.origin}/app/chat?conversation=${conversacion.id}`
+    : '';
+
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(enlace);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 1800);
+    } catch { /* si el navegador lo bloquea, el enlace igual está a la vista */ }
+  };
 
   return (
     <Dialog
@@ -154,6 +171,41 @@ export function DialogoCompartir({ abierto, onCerrar, sesiones, sesionActual, on
               </MenuItem>
             ))}
           </Select>
+        )}
+
+        {/* ⭐ El enlace, para mandárselo a alguien por donde sea. Compartir a una Sesión
+            ya existía, pero no había forma de DECIRLE al otro dónde mirar: quedaba
+            esperando que entrara por su cuenta a buscarlo. */}
+        {enlace && (
+          <Box sx={{ mt: 2.5 }}>
+            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, mb: 0.75 }}>
+              Enlace a esta conversación
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{
+                flex: 1, minWidth: 0, px: 1.25, py: 0.75, borderRadius: '8px',
+                border: `1px solid ${theme.palette.divider}`,
+                fontSize: '0.78rem', color: textMuted,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {enlace}
+              </Box>
+              <Button
+                size="small" onClick={copiar}
+                sx={{ textTransform: 'none', fontWeight: 600, flexShrink: 0 }}
+              >
+                {copiado ? 'Copiado' : 'Copiar'}
+              </Button>
+            </Box>
+            {/* Se dice de frente: un enlace a un hilo privado no lo abre nadie más, y
+                mandarlo creyendo que sí es peor que no tenerlo. */}
+            {!(elegida || sesionActual) && (
+              <Typography sx={{ fontSize: '0.73rem', color: textMuted, mt: 0.75 }}>
+                Mientras esté en su historial privado, este enlace solo lo abre usted.
+                Elija una Sesión arriba para que su equipo pueda entrar.
+              </Typography>
+            )}
+          </Box>
         )}
       </DialogContent>
       <DialogActions sx={{ px: 3, pb: 2.5 }}>

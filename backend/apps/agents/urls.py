@@ -12,12 +12,14 @@ from .views import (
     RoutineListCreateView, RoutineDetailView, RoutineRunNowView,
 )
 from .gallery import AgentFavoriteView, AgentGalleryView, FichaDelAgenteView
+from .menciones import MencionablesView
 from .admin_agents import AgenteAdminDetailView, AgentesAdminListView
 from .builder import (
     AgenteConstructorDetailView, AgenteConstructorListCreateView, OpcionesConstructorView,
 )
 
 urlpatterns = [
+    path('mencionables/', MencionablesView.as_view(), name='mencionables'),
     path('<int:pk>/ficha/', FichaDelAgenteView.as_view(), name='ficha-agente'),
     path('', AgentListCreateView.as_view(), name='agent-list'),
     path('models/', AvailableModelsView.as_view(), name='available-models'),

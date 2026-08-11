@@ -733,6 +733,7 @@ export default function Drawer({ open, handleDrawerToggle }) {
         onCerrar={() => setCompartiendo(null)}
         sesiones={sesiones}
         sesionActual={compartiendo?.sesion_slug || ''}
+        conversacion={compartiendo}
         onCompartir={compartir}
       />
 

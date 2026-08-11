@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from django.http import StreamingHttpResponse
 from django.shortcuts import get_object_or_404
@@ -9,6 +10,8 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
 from .hilos import hilo_para_escribir
+
+logger = logging.getLogger(__name__)
 from .models import (
     AgentConfig, Agent, AgentTemplate, Conversation, Message, Document, Automation,
     Routine, Skill, habilidades_como_contexto,
@@ -19,7 +22,7 @@ from .serializers import (
     AutomationSerializer, SkillSerializer, SkillWriteSerializer, RoutineSerializer,
 )
 from apps.organizations.models import Organization
-from apps.notificaciones.avisos import avisar_del_mensaje
+from apps.notificaciones.avisos import avisar_de_la_mencion, avisar_del_mensaje
 from apps.workspaces.permissions import alcance_de_agente
 from services.agent_service import chat_direct, stream_direct, resolve_model
 
@@ -976,16 +979,48 @@ class DirectChatView(APIView):
                 agent=agent, user=request.user, workspace=espacio, sesion=sesion,
                 title=_conversation_title(agent, message))
 
+        from .menciones import agentes_mencionados, personas_mencionadas
+
         mention_system_id = request.data.get('system_id') or None
+
+        Message.objects.create(
+            conversation=conversation, role='user', content=message, user=request.user,
+        )
+        avisar_del_mensaje(conversation, request.user, message)
+
+        # ⭐ A QUIÉN LE HABLARON. El `@` es la interfaz del producto y hasta acá resolvía
+        # una sola cosa: el PRIMER agente. "@analisis busca X y @datos hazme el gráfico"
+        # hacía contestar a uno y descartaba al otro en silencio.
+        alcanzables = _agentes_del_usuario(request.user)
+        mencionados = agentes_mencionados(alcanzables, message)
+
+        # Y las personas. Mencionar a un compañero le AVISA — sin esto, pedirle algo a
+        # alguien en un hilo es dejar un papel sobre un escritorio vacío.
+        if conversation.sesion_id:
+            del_equipo = list(conversation.sesion.members.all())
+            for quien in personas_mencionadas(message, del_equipo):
+                avisar_de_la_mencion(conversation, request.user, quien, message)
+
+        # ⚠️ En un hilo de EQUIPO el agente contesta sólo si lo mencionan. La regla estaba
+        # escrita y probada en `hilos.py` desde que se construyó el chat grupal, y no la
+        # llamaba nadie: el agente venía contestando los 8 de 8 mensajes de un hilo entre
+        # personas. Es exactamente el error que hace que los bots terminen apagados.
+        if conversation.sesion_id and not mencionados:
+            conversation.save()
+            return Response({
+                'conversation_id': conversation.id, 'message': '', 'escucha': True,
+            })
+
+        # El agente al que le hablaron manda sobre el que venía en el hilo.
+        if mencionados:
+            agent = mencionados[0]
+
         context = _build_onboarding_context(
             request.user, agent, mention_system_id, consulta=message,
             sesion=conversation.sesion,
         )
         system_prompt = context['system_prompt']
 
-        Message.objects.create(
-            conversation=conversation, role='user', content=message, user=request.user,
-        )
         full_history = list(conversation.messages.values('role', 'content').order_by('created_at'))
 
         model = (request.data.get('model') or '').strip() or context.get('agent_model')
@@ -1022,12 +1057,92 @@ class DirectChatView(APIView):
             agent=agent, model_used=resolved_model, fuentes=fuentes,
             artefactos=artefactos,
         )
+
+        # Los demás agentes mencionados, cada uno con SUS instrucciones y SU alcance —
+        # que es el sentido de tener agentes distintos. Uno detrás de otro y no en
+        # paralelo: cada uno lee lo que contestó el anterior, que es lo que convierte dos
+        # respuestas sueltas en una colaboración.
+        extras = [
+            respuesta for respuesta in (
+                self._responder(conversation, otro, request, message, model)
+                for otro in mencionados[1:]
+            ) if respuesta is not None
+        ]
+
         conversation.save()
 
         return Response({
             'conversation_id': conversation.id, 'message': clean_response,
             'model': resolved_model, 'fuentes': fuentes, 'artefactos': artefactos,
+            'agente': {'id': agent.id, 'handle': agent.handle, 'cara': agent.cara},
+            'respuestas_extra': extras,
         })
+
+    def _responder(self, conversation, agente, request, consulta, model):
+        """Un agente más contesta en el mismo hilo. Devuelve su mensaje, o None.
+
+        ⚠️ **La historia no puede terminar en la respuesta del otro agente.** Se probó y
+        el segundo agente devolvía VACÍO: para el modelo, el último turno era de un
+        asistente y no había ninguna pregunta que contestar. Se repite la consulta como
+        turno del usuario — que es exactamente lo que este agente está respondiendo — con
+        lo que dijo el anterior arriba, como contexto. Eso es lo que hace que la segunda
+        respuesta sea una continuación y no un monólogo aparte.
+        """
+        context = _build_onboarding_context(
+            request.user, agente, None, consulta=consulta, sesion=conversation.sesion,
+        )
+        historia = list(
+            conversation.messages.values('role', 'content').order_by('created_at')
+        )
+        if historia and historia[-1]['role'] != 'user':
+            # Y se le dice QUÉ LE TOCA. Repetir la consulta a secas hacía que el segundo
+            # agente rehiciera la tarea entera —se probó: @claude escribía el saludo y
+            # @analisis volvía a escribirlo en vez de opinar—, o sea dos monólogos en vez
+            # de una colaboración.
+            historia.append({
+                'role': 'user',
+                'content': (
+                    f'Te mencionaron en este mensaje: «{consulta}»\n\n'
+                    f'Otro agente ya respondió arriba lo que le correspondía. '
+                    f'Responde SOLO la parte que te toca a ti, sin repetir lo que él '
+                    f'ya dijo. Si no queda nada tuyo por aportar, dilo en una línea.'
+                ),
+            })
+        modelo = model or context.get('agent_model')
+        _, resuelto = resolve_model(modelo)
+
+        artefactos = []
+        if context.get('mode') == 'con_herramientas':
+            from services.agent_service import run_agent_live
+            texto = run_agent_live(
+                historia, context['org'], context['system_prompt'], modelo,
+                context.get('allowed_ids'), context.get('allowed_doc_ids'),
+                tocados=artefactos, agente=agente, sesion=conversation.sesion,
+            )
+        else:
+            texto = chat_direct(historia, context['system_prompt'], modelo)
+
+        limpia = _strip_action(texto)
+        docs = context.get('docs_en_prompt')
+        contenido = citar_documentos_del_prompt(limpia, docs)
+        fuentes = fuentes_de_la_respuesta(limpia, docs)
+
+        # Una respuesta vacía no se guarda: dejaría una burbuja en blanco firmada por el
+        # agente, que se lee como que contestó y no dijo nada.
+        if not contenido.strip():
+            logger.warning('El agente %s no devolvió texto en el hilo %s',
+                           agente.handle, conversation.pk)
+            return None
+
+        msg = Message.objects.create(
+            conversation=conversation, role='assistant', content=contenido,
+            agent=agente, model_used=resuelto, fuentes=fuentes, artefactos=artefactos,
+        )
+        return {
+            'id': msg.id, 'message': contenido, 'model': resuelto,
+            'fuentes': fuentes, 'artefactos': artefactos,
+            'agente': {'id': agente.id, 'handle': agente.handle, 'cara': agente.cara},
+        }
 
 
 class ChatAttachmentView(APIView):
@@ -1074,12 +1189,9 @@ class DirectChatStreamView(APIView):
                 agent=agent, user=request.user, workspace=espacio, sesion=sesion,
                 title=_conversation_title(agent, message))
 
+        from .menciones import agentes_mencionados, personas_mencionadas
+
         mention_system_id = request.data.get('system_id') or None
-        context = _build_onboarding_context(
-            request.user, agent, mention_system_id, consulta=message,
-            sesion=conversation.sesion,
-        )
-        system_prompt = context['system_prompt']
 
         mensaje_usuario = Message.objects.create(
             conversation=conversation, role='user', content=message, user=request.user,
@@ -1088,6 +1200,33 @@ class DirectChatStreamView(APIView):
         # llega el aviso. Sin esto, escribir en una Sesión es dejar un papel sobre un
         # escritorio vacío y esperar que alguien pase.
         avisar_del_mensaje(conversation, request.user, message)
+
+        alcanzables = _agentes_del_usuario(request.user)
+        mencionados = agentes_mencionados(alcanzables, message)
+
+        if conversation.sesion_id:
+            for quien in personas_mencionadas(message, list(conversation.sesion.members.all())):
+                avisar_de_la_mencion(conversation, request.user, quien, message)
+
+        # ⚠️ En un hilo de EQUIPO el agente escucha y sólo contesta cuando lo mencionan
+        # (ver `hilos.le_hablan_a_la_ia`). Un asistente que responde cada mensaje de una
+        # conversación entre cinco personas la vuelve inusable.
+        if conversation.sesion_id and not mencionados:
+            conversation.save()
+            return Response({
+                'conversation_id': conversation.id,
+                'user_message_id': mensaje_usuario.id,
+                'escucha': True,
+            })
+
+        if mencionados:
+            agent = mencionados[0]
+
+        context = _build_onboarding_context(
+            request.user, agent, mention_system_id, consulta=message,
+            sesion=conversation.sesion,
+        )
+        system_prompt = context['system_prompt']
         full_history = list(conversation.messages.values('role', 'content').order_by('created_at'))
 
         conv_id = conversation.id
@@ -1104,7 +1243,8 @@ class DirectChatStreamView(APIView):
         # Quien va a contestar viaja en el primer evento: si la mencion cambio el
         # agente, la pantalla tiene que enterarse antes de que empiece el texto.
         agente_payload = (
-            {'id': agent.id, 'name': agent.name, 'handle': agent.handle} if agent else None
+            {'id': agent.id, 'name': agent.name, 'handle': agent.handle, 'cara': agent.cara}
+            if agent else None
         )
 
         def event_stream():
@@ -1449,7 +1589,18 @@ class UserConversationDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, conv_id):
-        conv = get_object_or_404(Conversation, pk=conv_id, user=request.user)
+        """Los mensajes del hilo.
+
+        ⚠️ **Filtraba por `user=request.user`**, así que un hilo compartido a una Sesión
+        no lo podía LEER nadie más que quien lo escribió — aunque el equipo entero
+        alcanzara la Sesión y pudiera escribir en él. Compartir dejaba ver el hilo en la
+        lista y daba 404 al abrirlo.
+
+        Se resuelve con el mismo embudo que la escritura (`hilo_para_escribir`): hilo
+        personal = de quien lo abrió; hilo de una Sesión = de quien alcanza la Sesión.
+        Una sola regla para leer y para escribir, que es lo que evita que se separen.
+        """
+        conv = hilo_para_escribir(request.user, conv_id)
         return Response(ConversationSerializer(conv).data)
 
     def patch(self, request, conv_id):

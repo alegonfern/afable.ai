@@ -58,7 +58,7 @@ def _alcanza_la_sesion(user, sesion):
     return sesiones_visibles(membership).filter(pk=sesion.pk).exists()
 
 
-def le_hablan_a_la_ia(texto, hay_mas_de_uno):
+def le_hablan_a_la_ia(texto, hay_mas_de_uno, agentes_alcanzables=None):
     """Si el agente tiene que contestar este mensaje.
 
     En un hilo de una persona contesta siempre: es un chat con la IA. En uno donde hay
@@ -66,7 +66,18 @@ def le_hablan_a_la_ia(texto, hay_mas_de_uno):
     de una conversación entre cinco personas la vuelve inusable, y es el error que hace que
     los bots terminen apagados. El resto del tiempo escucha: lo que se dijo queda como
     contexto para cuando lo llamen.
+
+    ⚠️ **Mencionar a un COMPAÑERO no llama a la IA.** Antes la regla era "¿hay un @ en el
+    texto?", así que escribirle "@rosa ¿puedes revisar esto?" hacía contestar al agente
+    encima de un pedido dirigido a una persona. Ahora se comprueba que el `@` apunte a un
+    agente de verdad.
     """
     if not hay_mas_de_uno:
         return True
-    return '@' in (texto or '')
+    if agentes_alcanzables is None:
+        # Sin la lista no se puede distinguir a quién apunta el `@`; se conserva el
+        # comportamiento viejo antes que dejar mudo al agente.
+        return '@' in (texto or '')
+
+    from .menciones import agentes_mencionados
+    return bool(agentes_mencionados(agentes_alcanzables, texto))
