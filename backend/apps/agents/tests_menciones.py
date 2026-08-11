@@ -127,6 +127,38 @@ class ElAgenteEscuchaYNoInterrumpeTests(Base):
         self.assertEqual(self.hilo.messages.filter(role='user').count(), 1)
         self.assertEqual(self.hilo.messages.filter(role='assistant').count(), 0)
 
+    def test_UN_aviso_por_mensaje_y_no_dos(self):
+        """⚠️ Recibía «te mencionó» Y «escribió en la Sesión» por el mismo mensaje.
+
+        Dos avisos para una sola cosa es justo lo que hace que la campana se vuelva ruido
+        y se deje de mirar — la regla que la sostiene entera.
+        """
+        self.client.force_authenticate(self.ana)
+        self.client.post('/api/v1/agents/direct-chat/', {
+            'message': '@beto-soto ¿lo revisas?',
+            'conversation_id': self.hilo.pk,
+        }, format='json')
+        avisos = Notificacion.objects.filter(user=self.beto)
+        self.assertEqual(avisos.count(), 1)
+        self.assertIn('te mencionó', avisos.first().titulo)
+
+    def test_a_quien_NO_nombraron_le_llega_el_aviso_general(self):
+        """El resto del equipo igual se entera de que se escribió algo."""
+        tercero = User.objects.create_user(
+            username='caro@afable.test', email='caro@afable.test', password='afable123',
+            first_name='Caro', last_name='Díaz',
+        )
+        SesionMiembro.objects.create(sesion=self.sesion, user=tercero)
+
+        self.client.force_authenticate(self.ana)
+        self.client.post('/api/v1/agents/direct-chat/', {
+            'message': '@beto-soto ¿lo revisas?',
+            'conversation_id': self.hilo.pk,
+        }, format='json')
+        aviso = Notificacion.objects.filter(user=tercero).first()
+        self.assertIsNotNone(aviso)
+        self.assertIn('escribió en', aviso.titulo)
+
     def test_al_mencionar_a_alguien_le_llega_el_aviso(self):
         self.client.force_authenticate(self.ana)
         self.client.post('/api/v1/agents/direct-chat/', {

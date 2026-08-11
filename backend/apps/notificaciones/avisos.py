@@ -50,11 +50,16 @@ def avisar(destinatarios, *, tipo, titulo, detalle='', enlace='', organization=N
     return len(unicos)
 
 
-def avisar_del_mensaje(conversation, autor, texto):
+def avisar_del_mensaje(conversation, autor, texto, excepto_a=None):
     """Alguien escribió en un hilo de una Sesión: se le avisa al resto del equipo.
 
     Un hilo personal no avisa a nadie — no hay a quién. Lo que hace multiplayer a una
     Sesión es que lo escrito ahí llegue solo, sin que los demás tengan que pasar a mirar.
+
+    ⚠️ `excepto_a` son los MENCIONADOS: a ellos les llega el aviso de la mención, que dice
+    más. Sin esto recibían los dos por un mismo mensaje —"te mencionó" y "escribió en
+    Cliente Rever"— y dos avisos para una sola cosa es justo lo que hace que la campana se
+    vuelva ruido y se deje de mirar.
     """
     sesion = getattr(conversation, 'sesion', None)
     if sesion is None:
@@ -66,8 +71,10 @@ def avisar_del_mensaje(conversation, autor, texto):
     organizacion = (
         sesion.workspace.organization if getattr(sesion, 'workspace_id', None) else None
     )
+    ya_avisados = {getattr(u, 'id', u) for u in (excepto_a or [])}
+    destinatarios = [u for u in sesion.members.all() if u.pk not in ya_avisados]
     return avisar(
-        list(sesion.members.all()),
+        destinatarios,
         tipo=TIPO_MENSAJE,
         titulo=f'{quien} escribió en {sesion.name}',
         detalle=(texto or '').strip()[:200],

@@ -986,7 +986,6 @@ class DirectChatView(APIView):
         Message.objects.create(
             conversation=conversation, role='user', content=message, user=request.user,
         )
-        avisar_del_mensaje(conversation, request.user, message)
 
         # ⭐ A QUIÉN LE HABLARON. El `@` es la interfaz del producto y hasta acá resolvía
         # una sola cosa: el PRIMER agente. "@analisis busca X y @datos hazme el gráfico"
@@ -996,10 +995,15 @@ class DirectChatView(APIView):
 
         # Y las personas. Mencionar a un compañero le AVISA — sin esto, pedirle algo a
         # alguien en un hilo es dejar un papel sobre un escritorio vacío.
+        nombrados = []
         if conversation.sesion_id:
             del_equipo = list(conversation.sesion.members.all())
-            for quien in personas_mencionadas(message, del_equipo):
+            nombrados = personas_mencionadas(message, del_equipo)
+            for quien in nombrados:
                 avisar_de_la_mencion(conversation, request.user, quien, message)
+        # El aviso general va al RESTO: a los nombrados ya les llegó el de la mención,
+        # que dice más. Uno por persona y por mensaje.
+        avisar_del_mensaje(conversation, request.user, message, excepto_a=nombrados)
 
         # ⚠️ En un hilo de EQUIPO el agente contesta sólo si lo mencionan. La regla estaba
         # escrita y probada en `hilos.py` desde que se construyó el chat grupal, y no la
@@ -1196,17 +1200,19 @@ class DirectChatStreamView(APIView):
         mensaje_usuario = Message.objects.create(
             conversation=conversation, role='user', content=message, user=request.user,
         )
-        # Si el hilo es de una Sesión, lo que se escribe ahí es del EQUIPO: al resto le
-        # llega el aviso. Sin esto, escribir en una Sesión es dejar un papel sobre un
-        # escritorio vacío y esperar que alguien pase.
-        avisar_del_mensaje(conversation, request.user, message)
-
         alcanzables = _agentes_del_usuario(request.user)
         mencionados = agentes_mencionados(alcanzables, message)
 
+        nombrados = []
         if conversation.sesion_id:
-            for quien in personas_mencionadas(message, list(conversation.sesion.members.all())):
+            nombrados = personas_mencionadas(
+                message, list(conversation.sesion.members.all()),
+            )
+            for quien in nombrados:
                 avisar_de_la_mencion(conversation, request.user, quien, message)
+        # Lo que se escribe en una Sesión es del EQUIPO: al resto le llega el aviso. A los
+        # nombrados NO — ya recibieron el de la mención, que dice más.
+        avisar_del_mensaje(conversation, request.user, message, excepto_a=nombrados)
 
         # ⚠️ En un hilo de EQUIPO el agente escucha y sólo contesta cuando lo mencionan
         # (ver `hilos.le_hablan_a_la_ia`). Un asistente que responde cada mensaje de una
