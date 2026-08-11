@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Box, Typography, useTheme } from '@mui/material';
 import { Bot, User } from 'lucide-react';
 
@@ -46,6 +46,15 @@ export default function MencionAgentes({ agentes, indice, onElegir }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const contenedor = useRef(null);
+  // Hacia dónde abrirse. Un compositor al pie de la pantalla necesita la lista arriba;
+  // uno al tope de la página —como el de "Empezar algo en esta Sesión"— la necesita
+  // abajo, o se corta contra el borde y no se ve lo que se está eligiendo.
+  const [haciaArriba, setHaciaArriba] = useState(true);
+
+  useEffect(() => {
+    const caja = contenedor.current?.parentElement?.getBoundingClientRect();
+    if (caja) setHaciaArriba(caja.top > 280);
+  }, [agentes.length]);
 
   // Que el resaltado siempre quede a la vista cuando se navega con las flechas.
   useEffect(() => {
@@ -59,7 +68,10 @@ export default function MencionAgentes({ agentes, indice, onElegir }) {
     <Box
       ref={contenedor}
       sx={{
-        position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, right: 0,
+        position: 'absolute', left: 0, right: 0,
+        ...(haciaArriba
+          ? { bottom: 'calc(100% + 8px)' }
+          : { top: 'calc(100% + 8px)' }),
         maxHeight: 240, overflowY: 'auto', zIndex: 20,
         bgcolor: d ? '#1e1e1e' : '#fff',
         border: `1px solid ${theme.palette.divider}`, borderRadius: '12px',
@@ -107,4 +119,79 @@ export default function MencionAgentes({ agentes, indice, onElegir }) {
       })}
     </Box>
   );
+}
+
+
+/**
+ * Todo lo que hace falta para que un compositor entienda `@`.
+ *
+ * ⭐ **Existe porque la lógica vivía suelta dentro de ChatPage**, así que el selector solo
+ * funcionaba ahí: en el hilo de una Sesión —justo donde mencionar a una PERSONA tiene
+ * sentido— escribir `@` no mostraba nada. Un mecanismo que hay que copiar a mano a cada
+ * pantalla termina existiendo en una sola.
+ *
+ * Devuelve el estado y los tres enganches que el compositor tiene que conectar:
+ * `alEscribir`, `alTeclear` y qué dibujar.
+ */
+export function useMenciones({ texto, setTexto, workspace, sesion, inputRef }) {
+  const [mencionables, setMencionables] = useState([]);
+  const [mencion, setMencion] = useState(null);
+  const [indice, setIndice] = useState(0);
+
+  useEffect(() => {
+    let vivo = true;
+    if (!workspace) return undefined;
+    import('../services/api').then(({ api }) => {
+      api.getMencionables(workspace, sesion || undefined)
+        .then(({ data }) => { if (vivo) setMencionables(data.mencionables || []); })
+        .catch(() => {});
+    });
+    return () => { vivo = false; };
+  }, [workspace, sesion]);
+
+  const sugerencias = mencion ? filtrarAgentes(mencionables, mencion.consulta) : [];
+
+  const alEscribir = useCallback((e) => {
+    const valor = e.target.value;
+    setTexto(valor);
+    const detectada = detectarMencion(valor, e.target.selectionStart ?? valor.length);
+    setMencion(detectada);
+    setIndice(0);
+  }, [setTexto]);
+
+  const elegir = useCallback((quien) => {
+    if (!mencion) return;
+    const { texto: nuevo, cursor } = aplicarMencion(texto, mencion, quien.handle);
+    setTexto(nuevo);
+    setMencion(null);
+    // El cursor queda después de la mención: si volviera al final o al principio, seguir
+    // escribiendo sería reacomodar el texto a mano.
+    requestAnimationFrame(() => {
+      const campo = inputRef?.current;
+      if (campo?.setSelectionRange) {
+        campo.focus();
+        campo.setSelectionRange(cursor, cursor);
+      }
+    });
+  }, [mencion, texto, setTexto, inputRef]);
+
+  /** Devuelve true si se comió la tecla: ahí el compositor NO debe enviar. */
+  const alTeclear = useCallback((e) => {
+    if (!mencion || !sugerencias.length) return false;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault(); setIndice((i) => (i + 1) % sugerencias.length); return true;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setIndice((i) => (i - 1 + sugerencias.length) % sugerencias.length);
+      return true;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault(); elegir(sugerencias[indice]); return true;
+    }
+    if (e.key === 'Escape') { e.preventDefault(); setMencion(null); return true; }
+    return false;
+  }, [mencion, sugerencias, indice, elegir]);
+
+  return { mencion, sugerencias, indice, alEscribir, alTeclear, elegir };
 }

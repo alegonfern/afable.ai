@@ -1002,7 +1002,7 @@ export default function ChatPage() {
             </Box>
           )}
           <TextField inputRef={inputRef} multiline maxRows={6} fullWidth
-            placeholder="Escribe un mensaje... (Enter para enviar)"
+            placeholder="Escriba un mensaje, o @ para llamar a un agente"
             value={input} onChange={handleInputChange}
             onKeyDown={handleKeyDown} disabled={loading}
             variant="standard" InputProps={{ disableUnderline: true }}

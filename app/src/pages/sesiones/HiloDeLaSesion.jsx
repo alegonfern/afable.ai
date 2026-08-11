@@ -4,6 +4,7 @@ import { SendHorizontal } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { AfableMark } from '../../components/Logo';
+import MencionAgentes, { useMenciones } from '../../components/MencionAgentes';
 import { useApp } from '../../context/AppContext';
 
 /**
@@ -20,7 +21,7 @@ import { useApp } from '../../context/AppContext';
  * (`le_hablan_a_la_ia`); aca solo se avisa, para que nadie escriba esperando respuesta y
  * se quede mirando la pantalla.
  */
-export default function HiloDeLaSesion({ conversationId, workspaceSlug }) {
+export default function HiloDeLaSesion({ conversationId, workspaceSlug, sesionSlug }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const { currentUser } = useApp();
@@ -30,6 +31,14 @@ export default function HiloDeLaSesion({ conversationId, workspaceSlug }) {
   const [texto, setTexto] = useState('');
   const [enviando, setEnviando] = useState(false);
   const finRef = useRef(null);
+  const campoRef = useRef(null);
+
+  // El `@` acá sirve para las dos cosas: llamar a un agente y avisarle a un compañero.
+  // Es el lugar donde mencionar a una PERSONA tiene sentido — y era justo donde no
+  // funcionaba, porque el selector vivía suelto dentro de ChatPage.
+  const menciones = useMenciones({
+    texto, setTexto, workspace: workspaceSlug, sesion: sesionSlug, inputRef: campoRef,
+  });
 
   const textMuted = d ? 'rgba(255,255,255,0.66)' : 'rgba(0,0,0,0.62)';
   const borde = theme.palette.divider;
@@ -149,19 +158,31 @@ export default function HiloDeLaSesion({ conversationId, workspaceSlug }) {
       </Stack>
 
       <Box sx={{
+        position: 'relative',
         display: 'flex', alignItems: 'flex-end', gap: 1, mt: 1.5,
         border: `1px solid ${borde}`, borderRadius: '10px', px: 1.5, py: 1,
         '&:focus-within': { borderColor: 'rgba(88, 106, 208, 0.5)' },
       }}>
+        {menciones.mencion && (
+          <MencionAgentes
+            agentes={menciones.sugerencias}
+            indice={menciones.indice}
+            onElegir={menciones.elegir}
+          />
+        )}
         <Box
           component="textarea"
+          ref={campoRef}
           value={texto}
-          onChange={(e) => setTexto(e.target.value)}
+          onChange={menciones.alEscribir}
           onKeyDown={(e) => {
+            if (menciones.alTeclear(e)) return;
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); }
           }}
           onClick={(e) => e.stopPropagation()}
-          placeholder={hayEquipo ? 'Responder — escriba @ para llamar al agente' : 'Responder...'}
+          placeholder={hayEquipo
+            ? 'Responder — escriba @ para llamar a un agente o a un compañero'
+            : 'Responder...'}
           rows={1}
           sx={{
             flex: 1, border: 'none', outline: 'none', resize: 'none', bgcolor: 'transparent',

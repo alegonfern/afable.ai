@@ -339,7 +339,7 @@ export function DocumentoAlLado({ docId, workspace, onCerrar, refresco = 0 }) {
               <TextField
                 fullWidth multiline variant="standard"
                 value={texto} onChange={(e) => setTexto(e.target.value)}
-                placeholder="Escribe acá…"
+                placeholder="Escriba acá…"
                 InputProps={{ disableUnderline: true }}
                 sx={{ '& textarea': { fontSize: '0.86rem', lineHeight: 1.7 } }}
               />

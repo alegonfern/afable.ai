@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Alert, Box, CircularProgress, IconButton, MenuItem,
@@ -7,6 +7,7 @@ import {
 import { Bot, CheckCircle2, MessageSquare, Search, Send, Sparkles } from 'lucide-react';
 import { api } from '../../services/api';
 import HiloDeLaSesion from './HiloDeLaSesion';
+import MencionAgentes, { useMenciones } from '../../components/MencionAgentes';
 
 /**
  * La Conversación de una Sesión: el compositor arriba y debajo lo que pasó.
@@ -31,6 +32,14 @@ export default function SesionConversacion({ sesion, slug, onSaludo }) {
   const [feed, setFeed] = useState(null);
   const [error, setError] = useState('');
   const [mensaje, setMensaje] = useState('');
+  const campoRef = useRef(null);
+
+  // El `@` también acá: es el primer campo de la Sesión, donde uno arranca un hilo. Sin
+  // el selector, la forma de llamar a un agente o a un compañero queda en secreto.
+  const menciones = useMenciones({
+    texto: mensaje, setTexto: setMensaje,
+    workspace: slug, sesion: sesion.slug, inputRef: campoRef,
+  });
   const [busqueda, setBusqueda] = useState('');
   // Qué hilo está desplegado. Uno a la vez: con varios abiertos el feed deja de servir
   // para lo que sirve, que es ver de un vistazo qué pasó.
@@ -110,13 +119,23 @@ export default function SesionConversacion({ sesion, slug, onSaludo }) {
     <Box sx={{ px: { xs: 2.5, sm: 4 }, pt: 1, pb: 6, maxWidth: 900, width: '100%', mx: 'auto' }}>
       {/* El compositor, arriba */}
       <Box sx={{
+        position: 'relative',
         p: 1.75, mb: 2, borderRadius: '12px',
         bgcolor: bgSuave, border: `1px solid ${borde}`,
       }}>
+        {menciones.mencion && (
+          <MencionAgentes
+            agentes={menciones.sugerencias}
+            indice={menciones.indice}
+            onElegir={menciones.elegir}
+          />
+        )}
         <TextField
+          inputRef={campoRef}
           value={mensaje}
-          onChange={(e) => setMensaje(e.target.value)}
+          onChange={menciones.alEscribir}
           onKeyDown={(e) => {
+            if (menciones.alTeclear(e)) return;
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); }
           }}
           placeholder="Empezar algo en esta Sesión…"
@@ -253,7 +272,10 @@ export default function SesionConversacion({ sesion, slug, onSaludo }) {
                   )}
 
                   {abierto === i.id && i.tipo === 'conversacion' && (
-                    <HiloDeLaSesion conversationId={i.id} workspaceSlug={slug} />
+                    <HiloDeLaSesion
+                      conversationId={i.id} workspaceSlug={slug}
+                      sesionSlug={sesion.slug}
+                    />
                   )}
                 </Box>
               </Stack>
