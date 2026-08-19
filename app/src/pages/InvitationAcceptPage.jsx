@@ -48,7 +48,11 @@ export default function InvitationAcceptPage() {
       setAceptando(true);
       const { data } = await api.acceptInvitation(token);
       await recargar();
-      seleccionar(data.workspace.slug);
+      // `empresa`, no `workspace`: la Empresa es el nivel de arriba y es su slug el
+      // que viaja en las URLs de la API. Leer la clave vieja rompia la pantalla
+      // DESPUES de que el backend ya habia creado la membresia: se veia un error
+      // pero la persona ya estaba adentro.
+      seleccionar(data.empresa.slug);
       toast.success(`Ya es parte de ${data.empresa.name}.`);
       navigate('/app/admin/personas', { replace: true });
     } catch (e) {
