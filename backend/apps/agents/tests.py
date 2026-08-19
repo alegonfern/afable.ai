@@ -770,3 +770,90 @@ class DisparadoresTests(TestCase):
         )
         resp = client.post(f'/api/v1/agents/webhooks/{auto.webhook_token}/', {'a': 1}, format='json')
         self.assertEqual(resp.status_code, 404)
+
+
+class CacheDePromptTests(TestCase):
+    """Que la caché de prompts no se rompa sin que nadie se dé cuenta.
+
+    La caché es coincidencia de PREFIJO: descuenta el 90% de lo que se repite, pero
+    solo si el comienzo del prompt es idéntico byte a byte. Todo lo que cambie por
+    persona tiene que ir DESPUÉS del corte. Si alguien vuelve a meter el nombre del
+    usuario arriba, la caché sigue "funcionando" y el descuento desaparece sin un solo
+    error en los registros. Estas pruebas son la alarma de eso.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='marta@afable.test', email='marta@afable.test', password='afable123',
+            first_name='Marta',
+        )
+        self.user.role = 'Gerenta de Finanzas'
+        self.user.save(update_fields=['role'])
+        self.org = Organization.objects.create(owner=self.user, name='Cocinas SpA')
+        from apps.workspaces.models import ROLE_ADMIN
+        self.org.agregar_miembro(self.user, ROLE_ADMIN)
+
+    def test_el_nombre_de_la_persona_no_va_en_el_prompt_compartido(self):
+        from apps.agents.views import _build_onboarding_context
+
+        ctx = _build_onboarding_context(self.user, None, consulta='¿cuánto vendimos?')
+        self.assertNotIn('Marta', ctx['system_prompt'])
+        self.assertNotIn('Gerenta de Finanzas', ctx['system_prompt'])
+        self.assertIn('Marta', ctx['system_persona'])
+
+    def test_dos_personas_de_la_misma_empresa_comparten_el_prompt(self):
+        """Es el punto entero: con el prefijo compartido hay UNA entrada de caché para
+        la empresa, no una por persona."""
+        from apps.agents.views import _build_onboarding_context
+
+        otro = User.objects.create_user(
+            username='pedro@afable.test', email='pedro@afable.test', password='afable123',
+            first_name='Pedro',
+        )
+        otro.role = 'Jefe de Bodega'
+        otro.save(update_fields=['role'])
+        self.org.agregar_miembro(otro, 'member')
+
+        uno = _build_onboarding_context(self.user, None, consulta='x')
+        dos = _build_onboarding_context(otro, None, consulta='x')
+        self.assertEqual(uno['system_prompt'], dos['system_prompt'])
+        self.assertNotEqual(uno['system_persona'], dos['system_persona'])
+
+    def test_el_bloque_de_herramientas_pide_cache(self):
+        from services.agent_service import _tools_cacheadas
+
+        tools = [{'name': 'a'}, {'name': 'b'}, {'name': 'c'}]
+        marcadas = _tools_cacheadas(tools)
+        # El corte va en la ÚLTIMA: marca el final del bloque, y con eso se cachea todo
+        # lo anterior. Marcar una del medio dejaría el resto fuera.
+        self.assertNotIn('cache_control', marcadas[0])
+        self.assertEqual(marcadas[-1]['cache_control'], {'type': 'ephemeral', 'ttl': '1h'})
+        self.assertEqual(len(marcadas), 3)
+        self.assertEqual(tools[-1], {'name': 'c'})  # no muta la lista original
+
+    def test_sin_herramientas_no_revienta(self):
+        from services.agent_service import _tools_cacheadas
+        self.assertEqual(_tools_cacheadas([]), [])
+
+    def test_el_sistema_va_en_dos_bloques_y_solo_el_estable_se_cachea(self):
+        from services.agent_service import _sistema_anthropic
+
+        bloques = _sistema_anthropic('lo compartido', 'Marta, Gerenta de Finanzas.')
+        self.assertEqual(len(bloques), 2)
+        self.assertEqual(bloques[0]['cache_control'], {'type': 'ephemeral', 'ttl': '1h'})
+        self.assertNotIn('cache_control', bloques[1])
+        self.assertEqual(bloques[1]['text'], 'Marta, Gerenta de Finanzas.')
+
+    def test_sin_parte_de_persona_va_un_solo_bloque(self):
+        from services.agent_service import _sistema_anthropic
+
+        self.assertEqual(len(_sistema_anthropic('lo compartido', '')), 1)
+        self.assertEqual(len(_sistema_anthropic('lo compartido', '   ')), 1)
+
+    def test_las_herramientas_de_archivos_no_estan_descritas_dos_veces(self):
+        """Estaban en el esquema Y escritas a mano en el prompt de sistema: el modelo
+        leía las mismas instrucciones dos veces y se pagaban dos veces por llamada."""
+        from apps.agents.views import _build_onboarding_context
+
+        ctx = _build_onboarding_context(self.user, None, consulta='x')
+        self.assertNotIn('HERRAMIENTAS DE ARCHIVOS', ctx['system_prompt'])

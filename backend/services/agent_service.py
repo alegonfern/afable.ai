@@ -2,6 +2,7 @@ import json
 import logging
 import re
 import time
+from uuid import uuid4
 import requests
 import anthropic
 from django.conf import settings
@@ -14,6 +15,46 @@ _MODEL_DOWN_MSG = ("El modelo de IA tuvo un problema temporal y no respondió. "
 
 from . import consumo
 from .odoo_client import OdooClient, OdooConnectionError
+
+# Caché de prompts de Anthropic con TTL de 1 hora. La de 5 minutos alcanza para las
+# vueltas de UNA pregunta, pero la de una hora la comparte el equipo entero durante la
+# jornada: escribir cuesta el doble una vez, y desde la segunda pregunta de cualquier
+# persona ya se lee a un décimo. Con dos preguntas por hora en la empresa, la de una
+# hora ya conviene.
+_CACHE_1H = {"type": "ephemeral", "ttl": "1h"}
+
+
+def _sistema_anthropic(system_prompt: str, system_persona: str = ''):
+    """El prompt de sistema en dos bloques: el compartido y el de la persona.
+
+    La caché es coincidencia de PREFIJO, así que todo lo que cambie por persona tiene
+    que ir después del corte, en su propio bloque sin cachear. Metido en el mismo
+    bloque, el prefijo cambiaba por persona y en un equipo de cinco había cinco
+    entradas de caché en vez de una compartida.
+    """
+    bloques = [{"type": "text", "text": system_prompt, "cache_control": _CACHE_1H}]
+    if (system_persona or '').strip():
+        bloques.append({"type": "text", "text": system_persona})
+    return bloques
+
+
+def _tools_cacheadas(tools):
+    """Marca el final del bloque de herramientas como límite de caché.
+
+    Son ~4.400 tokens que hoy viajan idénticos en cada vuelta del bucle y se cobran
+    completos cada vez. Marcando la última, todo el bloque se lee de caché desde la
+    segunda llamada.
+    """
+    if not tools:
+        return tools
+    return tools[:-1] + [{**tools[-1], "cache_control": _CACHE_1H}]
+
+
+def _unir_sistema(system_prompt: str, system_persona: str = '') -> str:
+    """Para los proveedores sin caché explícita: un solo texto, la persona al final."""
+    if not (system_persona or '').strip():
+        return system_prompt
+    return f"{system_prompt}\n{system_persona}"
 from .odoo_tools import ODOO_TOOLS, execute_tool
 
 _anthropic_client = None
@@ -96,7 +137,7 @@ def chunk_text(text: str, size: int = 28):
 
 
 def chat_direct(history: list[dict], system_prompt: str = "", model: str = None,
-                organization=None, motivo: str = 'chat') -> str:
+                organization=None, motivo: str = 'chat', system_persona: str = '') -> str:
     """Devuelve el texto TAL CUAL lo dio el modelo, sin limpiar.
 
     A proposito: quien llama desde el chat necesita el `__ACTION__{...}` intacto para
@@ -107,25 +148,31 @@ def chat_direct(history: list[dict], system_prompt: str = "", model: str = None,
     """
     provider, resolved = resolve_model(model)
     if provider == 'anthropic':
-        return _chat_anthropic_simple(history, system_prompt, resolved, organization, motivo)
+        return _chat_anthropic_simple(history, system_prompt, resolved, organization, motivo,
+                                      system_persona)
     if provider == 'deepseek':
-        return _chat_deepseek_simple(history, system_prompt, resolved, organization, motivo)
-    return _chat_ollama(history, system_prompt, resolved, organization, motivo)
+        return _chat_deepseek_simple(history, _unir_sistema(system_prompt, system_persona),
+                                     resolved, organization, motivo)
+    return _chat_ollama(history, _unir_sistema(system_prompt, system_persona), resolved,
+                        organization, motivo)
 
 
 def stream_direct(history: list[dict], system_prompt: str = "", model: str = None,
-                  organization=None, motivo: str = 'chat'):
+                  organization=None, motivo: str = 'chat', system_persona: str = ''):
     """Generator que entrega el texto en trozos. Ollama transmite token a token; Anthropic
     y DeepSeek no soportan streaming en este endpoint, así que se pide la respuesta completa
     y se trocea igual (misma técnica que usa el modo con sistemas conectados) para mantener
     el efecto typing."""
     provider, resolved = resolve_model(model)
     if provider == 'anthropic':
-        yield from chunk_text(_chat_anthropic_simple(history, system_prompt, resolved, organization, motivo))
+        yield from chunk_text(_chat_anthropic_simple(
+            history, system_prompt, resolved, organization, motivo, system_persona))
     elif provider == 'deepseek':
-        yield from chunk_text(_chat_deepseek_simple(history, system_prompt, resolved, organization, motivo))
+        yield from chunk_text(_chat_deepseek_simple(
+            history, _unir_sistema(system_prompt, system_persona), resolved, organization, motivo))
     else:
-        yield from _stream_ollama(history, system_prompt, resolved, organization, motivo)
+        yield from _stream_ollama(history, _unir_sistema(system_prompt, system_persona),
+                                  resolved, organization, motivo)
 
 
 def _stream_ollama(history: list[dict], system_prompt: str, model: str,
@@ -153,7 +200,8 @@ def _stream_ollama(history: list[dict], system_prompt: str, model: str,
                     # El último trozo del stream es el que trae las cuentas de la
                     # llamada completa; los anteriores vienen sin ellas.
                     consumo.registrar('ollama', model, data,
-                                      organization=organization, motivo=motivo)
+                                      organization=organization, motivo=motivo,
+                                      turno=uuid4().hex)
                     break
     except Exception:
         logger.exception("stream_direct falló")
@@ -198,7 +246,8 @@ def _chat_ollama(history: list[dict], system_prompt: str = "", model: str = None
         resp = _post_chat(base_url, {"model": model, "messages": messages, "stream": False},
                           headers, timeout=120)
         datos = resp.json()
-        consumo.registrar('ollama', model, datos, organization=organization, motivo=motivo)
+        consumo.registrar('ollama', model, datos, organization=organization, motivo=motivo,
+                          turno=uuid4().hex)
         return datos['message']['content']
     except requests.exceptions.ConnectionError:
         return "No se pudo conectar con el modelo. Si usas Ollama local, asegúrate de que esté corriendo; si usas Ollama Cloud, revisa OLLAMA_API_KEY y la conexión."
@@ -210,16 +259,18 @@ def _chat_ollama(history: list[dict], system_prompt: str = "", model: str = None
 # ── Anthropic ─────────────────────────────────────────────────────────
 
 def _chat_anthropic_simple(history: list[dict], system_prompt: str = "", model: str = None,
-                           organization=None, motivo: str = 'chat') -> str:
+                           organization=None, motivo: str = 'chat',
+                           system_persona: str = '') -> str:
     messages = _build_api_messages(history)
     modelo = model or "claude-sonnet-4-6"
     response = _get_anthropic_client().messages.create(
         model=modelo,
         max_tokens=4096,
-        system=system_prompt,
+        system=_sistema_anthropic(system_prompt, system_persona),
         messages=messages,
     )
-    consumo.registrar('anthropic', modelo, response, organization=organization, motivo=motivo)
+    consumo.registrar('anthropic', modelo, response, organization=organization, motivo=motivo,
+                      turno=uuid4().hex)
     return _extract_text(response)
 
 
@@ -242,7 +293,8 @@ def _chat_deepseek_simple(history: list[dict], system_prompt: str = "", model: s
         )
         resp.raise_for_status()
         datos = resp.json()
-        consumo.registrar('deepseek', model, datos, organization=organization, motivo=motivo)
+        consumo.registrar('deepseek', model, datos, organization=organization, motivo=motivo,
+                          turno=uuid4().hex)
         return datos['choices'][0]['message']['content']
     except Exception:
         logger.exception("_chat_deepseek_simple falló")
@@ -252,6 +304,7 @@ def _chat_deepseek_simple(history: list[dict], system_prompt: str = "", model: s
 def _run_anthropic_agent(history: list[dict], system_prompt: str, odoo_client: OdooClient,
                          organization=None) -> str:
     messages = _build_api_messages(history)
+    turno = uuid4().hex
 
     for _ in range(10):
         response = _get_anthropic_client().messages.create(
@@ -263,7 +316,7 @@ def _run_anthropic_agent(history: list[dict], system_prompt: str, odoo_client: O
             messages=messages,
         )
         consumo.registrar('anthropic', "claude-opus-4-8", response,
-                          organization=organization, motivo='agente')
+                          organization=organization, motivo='agente', turno=turno)
 
         if response.stop_reason == "end_turn":
             return _extract_text(response)
@@ -442,7 +495,7 @@ def _provider_for_model(model: str) -> str:
     return 'ollama'
 
 
-def run_agent_live_events(history: list[dict], organization, system_prompt: str, model: str = None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None):
+def run_agent_live_events(history: list[dict], organization, system_prompt: str, model: str = None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None, system_persona: str = ''):
     """
     Generador del agente con datos en vivo. Va emitiendo dicts de progreso
     {'status': '...'} mientras consulta los sistemas conectados vía tool-use, y al
@@ -452,14 +505,14 @@ def run_agent_live_events(history: list[dict], organization, system_prompt: str,
     """
     provider = _provider_for_model(model) if model else getattr(settings, 'AI_PROVIDER', 'ollama')
     if provider == 'anthropic':
-        yield from _run_anthropic_agent_live_events(history, system_prompt, organization, model, allowed_ids, allowed_doc_ids, agente, sesion)
+        yield from _run_anthropic_agent_live_events(history, system_prompt, organization, model, allowed_ids, allowed_doc_ids, agente, sesion, system_persona)
     elif provider == 'deepseek':
-        yield from _run_deepseek_agent_events(history, system_prompt, organization, model, allowed_ids, allowed_doc_ids, agente, sesion)
+        yield from _run_deepseek_agent_events(history, _unir_sistema(system_prompt, system_persona), organization, model, allowed_ids, allowed_doc_ids, agente, sesion)
     else:
-        yield from _run_ollama_agent_events(history, system_prompt, organization, model, allowed_ids, allowed_doc_ids, agente, sesion)
+        yield from _run_ollama_agent_events(history, _unir_sistema(system_prompt, system_persona), organization, model, allowed_ids, allowed_doc_ids, agente, sesion)
 
 
-def run_agent_live(history: list[dict], organization, system_prompt: str, model: str = None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None, tocados: list = None) -> str:
+def run_agent_live(history: list[dict], organization, system_prompt: str, model: str = None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None, tocados: list = None, system_persona: str = '') -> str:
     """Versión no-streaming: drena el generador y devuelve solo el texto final.
 
     `tocados`, si viene, se llena con los documentos que el agente dejó escritos. Es una
@@ -469,7 +522,7 @@ def run_agent_live(history: list[dict], organization, system_prompt: str, model:
     final = ''
     for event in run_agent_live_events(
         history, organization, system_prompt, model, allowed_ids, allowed_doc_ids, agente,
-        sesion,
+        sesion, system_persona,
     ):
         if 'final' in event:
             final = event['final']
@@ -486,6 +539,7 @@ def _run_ollama_agent_events(history, system_prompt, organization, model=None, a
     provenance: list = []
     artifacts: dict = {}
     seen_calls: set = set()
+    turno = uuid4().hex
 
     messages = [{"role": "system", "content": system_prompt}]
     for msg in history:
@@ -498,7 +552,7 @@ def _run_ollama_agent_events(history, system_prompt, organization, model=None, a
                                          "tools": tools, "stream": False}, headers)
             datos = resp.json()
             consumo.registrar('ollama', model, datos,
-                              organization=organization, motivo='agente')
+                              organization=organization, motivo='agente', turno=turno)
             msg = datos.get('message', {})
             tool_calls = msg.get('tool_calls') or []
 
@@ -565,6 +619,7 @@ def _run_deepseek_agent_events(history, system_prompt, organization, model=None,
     provenance: list = []
     artifacts: dict = {}
     seen_calls: set = set()
+    turno = uuid4().hex
 
     messages = [{"role": "system", "content": system_prompt}]
     for msg in history:
@@ -593,7 +648,7 @@ def _run_deepseek_agent_events(history, system_prompt, organization, model=None,
 
             datos = resp.json()
             consumo.registrar('deepseek', model, datos,
-                              organization=organization, motivo='agente')
+                              organization=organization, motivo='agente', turno=turno)
             msg = datos['choices'][0]['message']
             tool_calls = msg.get('tool_calls') or []
 
@@ -650,10 +705,14 @@ def _run_deepseek_agent_events(history, system_prompt, organization, model=None,
         yield {'final': f"Error al consultar los sistemas: {str(e)}", 'documentos': list((artifacts or {}).get('documentos') or [])}
 
 
-def _run_anthropic_agent_live_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None):
+def _run_anthropic_agent_live_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None, system_persona: str = ''):
     from services import agent_tools
 
-    tools = agent_tools.tools_for_anthropic(organization, allowed_ids, sesion)
+    tools = _tools_cacheadas(agent_tools.tools_for_anthropic(organization, allowed_ids, sesion))
+    sistema = _sistema_anthropic(system_prompt, system_persona)
+    # Un turno para toda la pregunta: las filas de las vueltas quedan unidas y se puede
+    # contar cuántas dio de verdad.
+    turno = uuid4().hex
     provenance: list = []
     artifacts: dict = {}
     messages = _build_api_messages(history)
@@ -665,14 +724,14 @@ def _run_anthropic_agent_live_events(history, system_prompt, organization, model
             response = client.messages.create(
                 model=modelo,
                 max_tokens=4096,
-                system=system_prompt,
+                system=sistema,
                 tools=tools,
                 messages=messages,
             )
             # Dentro del bucle y no al final: si la pregunta da ocho vueltas, el costo
             # son las ocho llamadas, no la última.
             consumo.registrar('anthropic', modelo, response,
-                              organization=organization, motivo='agente')
+                              organization=organization, motivo='agente', turno=turno)
             if response.stop_reason != "tool_use":
                 yield _evento_final(_extract_text(response), provenance, artifacts)
                 return

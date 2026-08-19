@@ -539,19 +539,10 @@ fuente — el sistema la añade automáticamente con la tabla y la hora reales.
             'allowed_doc_ids': espacio_docs,
             'docs_en_prompt': docs_en_prompt,
             'agent_model': agent_model,
-            'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
-{perm_ctx}{agent_block}
+            'system_persona': f"{role_ctx}{perm_ctx}",
+            'system_prompt': f"""Eres Afable, el asistente empresarial de {org.name}.
+{agent_block}
 {org_ctx}{bloque_sistemas}
-HERRAMIENTAS DE ARCHIVOS — puedes leer y también ESCRIBIR documentos:
-- buscar_en_fuentes: busca por significado en los documentos y archivos de la empresa.
-- read_company_document(id): el contenido completo de un documento.
-- crear_documento(titulo, contenido): crea un documento de texto NUEVO y lo guarda. Úsala
-  cuando el usuario pida redactar o preparar algo que quiera conservar.
-- editar_documento(id, viejo, nuevo, mensaje): cambia un fragmento EXACTO por otro sin tocar
-  el resto. Lee el documento primero y copia el fragmento tal como está.
-- reescribir_documento(id, contenido, mensaje): reemplaza todo el texto. Solo cuando el
-  documento se reescribe de punta a punta.
-
 {bloque_tareas}
 Cada cambio que hagas queda guardado como una versión FIRMADA con tu nombre, y el equipo
 puede ver qué cambiaste y volver atrás. Por eso: nunca cambies algo que el usuario no pidió
@@ -571,8 +562,9 @@ Responde siempre en español, conciso. Usa markdown para respuestas largas.{ACTI
             'mode': 'no_integration',
             'docs_en_prompt': docs_en_prompt,
             'agent_model': agent_model,
-            'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
-{perm_ctx}{agent_block}
+            'system_persona': f"{role_ctx}{perm_ctx}",
+            'system_prompt': f"""Eres Afable, el asistente empresarial de {org.name}.
+{agent_block}
 {org_ctx}Trabajas con lo que ves arriba: el contexto de la empresa y sus documentos.
 NO tienes ningún sistema (ERP, CRM o base de datos) conectado para consultar en vivo,
 así que no puedes responder con cifras de ventas, stock ni facturación al día. Si te
@@ -589,8 +581,9 @@ Responde siempre en español, sé conciso y orientado a la acción.{ACTIONS_PROM
         'mode': 'full',
         'docs_en_prompt': docs_en_prompt,
         'agent_model': agent_model,
-        'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
-{perm_ctx}{agent_block}
+        'system_persona': f"{role_ctx}{perm_ctx}",
+        'system_prompt': f"""Eres Afable, el asistente empresarial de {org.name}.
+{agent_block}
 {org_ctx}Tienes acceso al contexto de datos escaneado de {scan.system_name}:
 {ai_ctx}
 
@@ -1041,6 +1034,7 @@ class DirectChatView(APIView):
                 # Se llena con lo que el agente deje escrito, para que el chat pueda
                 # ofrecer abrirlo sin mandar a la persona a otra pantalla.
                 tocados=artefactos,
+                system_persona=context.get('system_persona', ''),
                 # Para firmar las versiones que escriba: el historial de un documento
                 # dice qué agente lo tocó, no solo que "lo tocó la IA".
                 agente=agent,
@@ -1051,7 +1045,8 @@ class DirectChatView(APIView):
             )
         else:
             response_text = chat_direct(full_history, system_prompt, model,
-                                        organization=context.get('org'), motivo='chat')
+                                        organization=context.get('org'), motivo='chat',
+                                        system_persona=context.get('system_persona', ''))
 
         limpia = _strip_action(response_text)
         docs = context.get('docs_en_prompt')
@@ -1123,10 +1118,12 @@ class DirectChatView(APIView):
                 historia, context['org'], context['system_prompt'], modelo,
                 context.get('allowed_ids'), context.get('allowed_doc_ids'),
                 tocados=artefactos, agente=agente, sesion=conversation.sesion,
+                system_persona=context.get('system_persona', ''),
             )
         else:
             texto = chat_direct(historia, context['system_prompt'], modelo,
-                                organization=context.get('org'), motivo='chat')
+                                organization=context.get('org'), motivo='chat',
+                                system_persona=context.get('system_persona', ''))
 
         limpia = _strip_action(texto)
         docs = context.get('docs_en_prompt')
@@ -1274,6 +1271,7 @@ class DirectChatStreamView(APIView):
                 for event in run_agent_live_events(
                     full_history, org, system_prompt, model, allowed_ids, allowed_doc_ids,
                     agente=agent, sesion=conversation.sesion,
+                    system_persona=context.get('system_persona', ''),
                 ):
                     if 'status' in event:
                         yield f"data: {json.dumps({'status': event['status']})}\n\n"
@@ -1286,7 +1284,8 @@ class DirectChatStreamView(APIView):
                     yield f"data: {json.dumps({'chunk': piece})}\n\n"
             else:
                 for chunk in stream_direct(full_history, system_prompt, model,
-                                           organization=context.get('org'), motivo='chat'):
+                                           organization=context.get('org'), motivo='chat',
+                                           system_persona=context.get('system_persona', '')):
                     accumulated.append(chunk)
                     # Don't stream the action marker to the client
                     if '__ACTION__' not in chunk:

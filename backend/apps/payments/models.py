@@ -21,6 +21,7 @@ identificador que la pasarela nos dio para volver a cobrarle. El número vive en
 pasarela, que para eso está certificada.
 """
 
+from decimal import Decimal
 from uuid import uuid4
 
 from django.conf import settings
@@ -263,6 +264,13 @@ class TarifaModelo(models.Model):
     proveedor = models.CharField(max_length=20)
     precio_entrada_usd_millon = models.DecimalField(max_digits=10, decimal_places=4)
     precio_salida_usd_millon = models.DecimalField(max_digits=10, decimal_places=4)
+    # Los multiplicadores de caché son POR PROVEEDOR, no una constante: en Anthropic
+    # leer de caché vale 0,1 de la entrada y en DeepSeek 0,032. Y escribir por una hora
+    # cuesta el doble que por cinco minutos, así que van separados. Los valores por
+    # omisión son los de Anthropic, que es el proveedor del chat.
+    factor_cache_lectura = models.DecimalField(max_digits=6, decimal_places=4, default=Decimal('0.1'))
+    factor_cache_escritura = models.DecimalField(max_digits=6, decimal_places=4, default=Decimal('1.25'))
+    factor_cache_escritura_1h = models.DecimalField(max_digits=6, decimal_places=4, default=Decimal('2'))
     vigente_desde = models.DateTimeField()
     notas = models.CharField(max_length=200, blank=True)
 
@@ -321,10 +329,17 @@ class ConsumoTokens(models.Model):
     # Sirve para responder "¿en qué se me fue el cupo?", que es la primera pregunta que
     # hace alguien cuando ve el número.
     motivo = models.CharField(max_length=40, blank=True)
+    # Une las filas de UNA MISMA pregunta del usuario. Sin esto se puede sumar el gasto
+    # pero no se puede contestar cuántas vueltas dio una pregunta, que es la cifra que
+    # dice si el bucle de herramientas se está yendo de las manos.
+    turno = models.CharField(max_length=32, blank=True, db_index=True)
     tokens_entrada = models.IntegerField(default=0)
     tokens_salida = models.IntegerField(default=0)
     tokens_cache_lectura = models.IntegerField(default=0)
     tokens_cache_escritura = models.IntegerField(default=0)
+    # La parte del total escrito que se guardó por una hora. Se anota aparte porque
+    # cuesta el doble que la de cinco minutos.
+    tokens_cache_escritura_1h = models.IntegerField(default=0)
     creditos = models.BigIntegerField(default=0)
     sin_tarifa = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
