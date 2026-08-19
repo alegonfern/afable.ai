@@ -305,14 +305,19 @@ def _run_anthropic_agent(history: list[dict], system_prompt: str, odoo_client: O
                          organization=None) -> str:
     messages = _build_api_messages(history)
     turno = uuid4().hex
+    # El camino más caro del código: Opus con razonamiento adaptativo y hasta diez
+    # vueltas. `ODOO_TOOLS` es una constante del módulo y el prompt no lleva nada por
+    # persona, así que es el prefijo más estable que hay para cachear.
+    tools = _tools_cacheadas(ODOO_TOOLS)
+    sistema = _sistema_anthropic(system_prompt)
 
     for _ in range(10):
         response = _get_anthropic_client().messages.create(
             model="claude-opus-4-8",
             max_tokens=8096,
             thinking={"type": "adaptive"},
-            system=system_prompt,
-            tools=ODOO_TOOLS,
+            system=sistema,
+            tools=tools,
             messages=messages,
         )
         consumo.registrar('anthropic', "claude-opus-4-8", response,
