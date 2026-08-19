@@ -46,14 +46,18 @@ def _extract_text_plain(data: bytes) -> str:
     return data.decode('utf-8', errors='replace')
 
 
-def process_document(file_field, content_type: str) -> dict:
+def process_document(file_field, content_type: str, organization=None) -> dict:
     """Devuelve {'extracted_text', 'summary', 'error'}. Nunca lanza excepción:
-    un archivo que no se puede procesar igual se guarda, solo sin texto/resumen."""
+    un archivo que no se puede procesar igual se guarda, solo sin texto/resumen.
+
+    `organization` es para anotar el consumo del resumen contra la empresa dueña del
+    archivo. Es opcional para no romper a quien no la tenga a mano, pero sin ella ese
+    gasto queda sin dueño."""
     file_field.seek(0)
     data = file_field.read()
 
     if content_type in _IMAGE_TYPES:
-        return _process_image(data, content_type)
+        return _process_image(data, content_type, organization)
 
     try:
         if content_type in _PDF_TYPES:
@@ -75,14 +79,15 @@ def process_document(file_field, content_type: str) -> dict:
     if not text:
         return {'extracted_text': '', 'summary': '', 'error': 'El archivo no tiene texto extraíble.'}
 
-    summary = _summarize_text(text)
+    summary = _summarize_text(text, organization)
     return {'extracted_text': text, 'summary': summary, 'error': ''}
 
 
-def _process_image(data: bytes, content_type: str) -> dict:
+def _process_image(data: bytes, content_type: str, organization=None) -> dict:
     """Para imágenes no hay 'texto' propio: se le pide a Claude una descripción
     (sirve de OCR + resumen a la vez) y se usa como extracted_text Y summary."""
     import base64
+    from . import consumo
     from .agent_service import _get_anthropic_client
 
     try:
@@ -103,6 +108,8 @@ def _process_image(data: bytes, content_type: str) -> dict:
                 ],
             }],
         )
+        consumo.registrar('anthropic', "claude-sonnet-4-6", response,
+                          organization=organization, motivo='descripcion')
         text = "\n".join(b.text for b in response.content if getattr(b, 'type', None) == 'text').strip()
         if not text:
             return {'extracted_text': '', 'summary': '', 'error': 'No se pudo describir la imagen.'}
@@ -112,7 +119,8 @@ def _process_image(data: bytes, content_type: str) -> dict:
         return {'extracted_text': '', 'summary': '', 'error': 'No se pudo describir la imagen (revisa ANTHROPIC_API_KEY).'}
 
 
-def _summarize_text(text: str) -> str:
+def _summarize_text(text: str, organization=None) -> str:
+    from . import consumo
     from .agent_service import _get_anthropic_client
 
     try:
@@ -129,6 +137,8 @@ def _summarize_text(text: str) -> str:
                 ),
             }],
         )
+        consumo.registrar('anthropic', "claude-sonnet-4-6", response,
+                          organization=organization, motivo='resumen')
         return "\n".join(b.text for b in response.content if getattr(b, 'type', None) == 'text').strip()
     except Exception:
         logger.exception('Fallo generando resumen de documento')

@@ -113,7 +113,7 @@ class ArchivoListCreateView(APIView):
 
         from services.document_processing import process_document
 
-        resultado = process_document(doc.file, doc.content_type)
+        resultado = process_document(doc.file, doc.content_type, doc.organization)
         doc.extracted_text = resultado['extracted_text']
         doc.summary = resultado['summary']
         doc.processing_error = resultado['error']

@@ -133,7 +133,9 @@ class LeadChatView(APIView):
                             status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            raw_reply = chat_direct(history, SYSTEM_PROMPT)
+            # Sin empresa a propósito: lo usa un visitante de la landing. El gasto es
+            # real igual y queda anotado con motivo 'lead', sin dueño a quien cobrarle.
+            raw_reply = chat_direct(history, SYSTEM_PROMPT, motivo='lead')
         except Exception:
             logger.exception('LeadChatView: fallo en chat_direct')
             return Response({'detail': 'No se pudo generar la respuesta.'},

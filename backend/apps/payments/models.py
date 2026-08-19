@@ -23,6 +23,7 @@ pasarela, que para eso está certificada.
 
 from uuid import uuid4
 
+from django.conf import settings
 from django.db import models
 
 PROVEEDOR_FLOW = 'flow'
@@ -67,6 +68,13 @@ class Plan(models.Model):
     max_agents = models.IntegerField(default=0)
     max_integrations = models.IntegerField(default=0)
     queries_per_month = models.IntegerField(default=0)
+    # El plan se vende por asientos más consumo: `max_usuarios` son los asientos que
+    # incluye y `tokens_por_mes` el cupo de créditos del período (1 crédito =
+    # US$0,000001 de costo del proveedor, ver services/consumo.py). `queries_per_month`
+    # queda porque lo muestra la pantalla de facturación, pero no se aplica en ninguna
+    # parte y nunca se comparó contra un costo: el límite real es el de créditos.
+    max_usuarios = models.IntegerField(default=0)
+    tokens_por_mes = models.BigIntegerField(default=0)
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -236,3 +244,144 @@ class Payment(models.Model):
         # `AFA-` y no `VEL-`: el prefijo viejo era de Velery, y este número queda
         # escrito en la cartola del cliente.
         return f'AFA-{uuid4().hex[:12].upper()}'
+
+
+class TarifaModelo(models.Model):
+    """El precio del proveedor para un modelo, en US$ por millón de tokens.
+
+    Existe para que un cambio de precio sea editar dos números con fecha y no salir a
+    buscar constantes por el código. Y para que agregar un modelo sea una fila: el peso
+    de un modelo dentro del plan **es** su precio por millón, así que con estos dos
+    números queda definido cuánto rinde el cupo del cliente en ese modelo.
+
+    No se borra ni se edita una tarifa vieja: se crea otra con `vigente_desde`
+    posterior. El consumo que ya se anotó tiene que seguir explicándose con el precio
+    que estaba corriendo ese día.
+    """
+
+    modelo = models.CharField(max_length=120)
+    proveedor = models.CharField(max_length=20)
+    precio_entrada_usd_millon = models.DecimalField(max_digits=10, decimal_places=4)
+    precio_salida_usd_millon = models.DecimalField(max_digits=10, decimal_places=4)
+    vigente_desde = models.DateTimeField()
+    notas = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        db_table = 'tarifas_modelo'
+        verbose_name = 'Tarifa de modelo'
+        verbose_name_plural = 'Tarifas de modelo'
+        ordering = ['modelo', '-vigente_desde']
+        indexes = [models.Index(fields=['modelo', '-vigente_desde'])]
+
+    def __str__(self):
+        return (f'{self.modelo}: US${self.precio_entrada_usd_millon}/'
+                f'{self.precio_salida_usd_millon} por millón')
+
+    @classmethod
+    def vigente_para(cls, modelo, momento=None):
+        """La tarifa que corre hoy para ese modelo, o None si nadie la cargó."""
+        from django.utils import timezone
+
+        return (
+            cls.objects
+            .filter(modelo=(modelo or '').strip().lower(),
+                    vigente_desde__lte=momento or timezone.now())
+            .order_by('-vigente_desde')
+            .first()
+        )
+
+
+class ConsumoTokens(models.Model):
+    """Una fila por llamada a la API de un modelo. La escribe `services/consumo.py`.
+
+    Por llamada y no por mensaje: una pregunta con herramientas conectadas puede dar
+    ocho vueltas al modelo, y el costo es la suma de las ocho. Agrupar por mensaje
+    escondería el crecimiento que se quiere medir.
+
+    `organization` es opcional porque el chat de la landing lo usa un visitante que
+    todavía no es empresa. Ese gasto existe igual y tiene que quedar anotado, aunque no
+    se le cobre a nadie.
+
+    `sin_tarifa` marca las llamadas de un modelo al que nadie le cargó precio. Se anotan
+    con 0 créditos, y la marca es para que aparezcan como una cifra que falta en vez de
+    como consumo que no ocurrió.
+    """
+
+    organization = models.ForeignKey(
+        'organizations.Organization', on_delete=models.CASCADE,
+        related_name='consumos', null=True, blank=True,
+    )
+    usuario = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        related_name='consumos', null=True, blank=True,
+    )
+    proveedor = models.CharField(max_length=20)
+    modelo = models.CharField(max_length=120)
+    # De dónde salió la llamada: 'chat', 'agente', 'resumen', 'automatizacion', 'lead'.
+    # Sirve para responder "¿en qué se me fue el cupo?", que es la primera pregunta que
+    # hace alguien cuando ve el número.
+    motivo = models.CharField(max_length=40, blank=True)
+    tokens_entrada = models.IntegerField(default=0)
+    tokens_salida = models.IntegerField(default=0)
+    tokens_cache_lectura = models.IntegerField(default=0)
+    tokens_cache_escritura = models.IntegerField(default=0)
+    creditos = models.BigIntegerField(default=0)
+    sin_tarifa = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'consumo_tokens'
+        verbose_name = 'Consumo de tokens'
+        verbose_name_plural = 'Consumos de tokens'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['organization', '-created_at']),
+            models.Index(fields=['modelo']),
+        ]
+
+    def __str__(self):
+        return f'{self.modelo} · {self.creditos} créditos'
+
+
+class SaldoAdicional(models.Model):
+    """Créditos comprados aparte del plan. No expiran.
+
+    Se consumen **después** del cupo incluido, no antes: si expiraran o se gastaran
+    primero, el cliente que compró un paquete estaría pagando dos veces el mismo mes.
+    Cada compra es su propia fila para que el historial quede a la vista; el disponible
+    es la suma.
+    """
+
+    organization = models.ForeignKey(
+        'organizations.Organization', on_delete=models.CASCADE, related_name='saldos_adicionales',
+    )
+    creditos_comprados = models.BigIntegerField()
+    creditos_usados = models.BigIntegerField(default=0)
+    payment = models.ForeignKey(
+        Payment, on_delete=models.SET_NULL, related_name='saldos', null=True, blank=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'saldos_adicionales'
+        verbose_name = 'Saldo adicional'
+        verbose_name_plural = 'Saldos adicionales'
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f'{self.organization.name}: {self.disponible} créditos disponibles'
+
+    @property
+    def disponible(self):
+        return max(self.creditos_comprados - self.creditos_usados, 0)
+
+    @classmethod
+    def disponible_de(cls, organization):
+        from django.db.models import F, Sum
+
+        total = (
+            cls.objects
+            .filter(organization=organization)
+            .aggregate(t=Sum(F('creditos_comprados') - F('creditos_usados')))['t']
+        )
+        return max(total or 0, 0)

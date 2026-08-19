@@ -66,7 +66,7 @@ def registrar_version_de_binario(doc, *, autor=None, agente=None, mensaje=''):
 
     try:
         doc.file.seek(0)
-        resultado = process_document(doc.file, doc.content_type)
+        resultado = process_document(doc.file, doc.content_type, doc.organization)
         doc.extracted_text = resultado.get('text', '') or doc.extracted_text
         doc.save(update_fields=['extracted_text'])
     except Exception:

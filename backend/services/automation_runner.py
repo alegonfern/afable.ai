@@ -44,7 +44,8 @@ def _run_prompt(user, organization, prompt: str, agent=None) -> str:
             allowed_doc_ids=ctx.get('allowed_doc_ids'), agente=agent,
         )
     else:
-        salida = chat_direct([{'role': 'user', 'content': prompt}], system_prompt)
+        salida = chat_direct([{'role': 'user', 'content': prompt}], system_prompt,
+                             organization=organization, motivo='automatizacion')
     return _limpiar_para_leer(salida)
 
 

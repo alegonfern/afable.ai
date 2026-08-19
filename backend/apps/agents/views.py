@@ -1050,7 +1050,8 @@ class DirectChatView(APIView):
                 sesion=conversation.sesion,
             )
         else:
-            response_text = chat_direct(full_history, system_prompt, model)
+            response_text = chat_direct(full_history, system_prompt, model,
+                                        organization=context.get('org'), motivo='chat')
 
         limpia = _strip_action(response_text)
         docs = context.get('docs_en_prompt')
@@ -1124,7 +1125,8 @@ class DirectChatView(APIView):
                 tocados=artefactos, agente=agente, sesion=conversation.sesion,
             )
         else:
-            texto = chat_direct(historia, context['system_prompt'], modelo)
+            texto = chat_direct(historia, context['system_prompt'], modelo,
+                                organization=context.get('org'), motivo='chat')
 
         limpia = _strip_action(texto)
         docs = context.get('docs_en_prompt')
@@ -1161,7 +1163,13 @@ class ChatAttachmentView(APIView):
         if not f:
             return Response({'detail': 'El campo file es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        result = process_document(f, f.content_type or '')
+        # La empresa sale de la PERTENENCIA, igual que en `_build_onboarding_context`:
+        # el resumen lo paga la empresa de quien sube el archivo, no su dueño.
+        from apps.workspaces.models import Membership
+        membresia = Membership.objects.filter(user=request.user).select_related('organization').first()
+
+        result = process_document(f, f.content_type or '',
+                                  membresia.organization if membresia else None)
         return Response({
             'filename': f.name,
             'extracted_text': result['extracted_text'],
@@ -1277,7 +1285,8 @@ class DirectChatStreamView(APIView):
                 for piece in _chunk_text(clean_stream):
                     yield f"data: {json.dumps({'chunk': piece})}\n\n"
             else:
-                for chunk in stream_direct(full_history, system_prompt, model):
+                for chunk in stream_direct(full_history, system_prompt, model,
+                                           organization=context.get('org'), motivo='chat'):
                     accumulated.append(chunk)
                     # Don't stream the action marker to the client
                     if '__ACTION__' not in chunk:

@@ -22,6 +22,11 @@ PLANES = [
         'max_agents': 3,
         'max_integrations': 10,
         'queries_per_month': 5_000,
+        'max_usuarios': 3,
+        # 25 millones de créditos = US$25 de costo del proveedor en el peor caso, sobre
+        # US$99 de precio: 75% de margen. Sale de la fórmula (3 asientos × US$18 + 25
+        # millones × US$1,80 el millón = 99).
+        'tokens_por_mes': 25_000_000,
     },
     {
         'id': 'afable_growth_monthly',
@@ -31,6 +36,10 @@ PLANES = [
         'max_agents': 15,
         'max_integrations': 50,
         'queries_per_month': 50_000,
+        'max_usuarios': 5,
+        # 5 × US$18 + 150 millones × US$1,39 = 299. Queda 23% más barato por crédito que
+        # Starter, y el descuento lo financian los dos asientos extra, no el margen.
+        'tokens_por_mes': 150_000_000,
     },
     {
         # Sin precio y sin pasarela: se conversa. `es_a_medida` es lo que hace que la
@@ -43,6 +52,10 @@ PLANES = [
         'max_agents': 0,
         'max_integrations': 0,
         'queries_per_month': 0,
+        # A medida: los asientos y el cupo se pactan y se cargan a mano, con piso en el
+        # precio de Growth.
+        'max_usuarios': 0,
+        'tokens_por_mes': 0,
     },
 ]
 

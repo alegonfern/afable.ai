@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 _MODEL_DOWN_MSG = ("El modelo de IA tuvo un problema temporal y no respondió. "
                    "Vuelve a intentarlo en unos segundos.")
 
+from . import consumo
 from .odoo_client import OdooClient, OdooConnectionError
 from .odoo_tools import ODOO_TOOLS, execute_tool
 
@@ -94,7 +95,8 @@ def chunk_text(text: str, size: int = 28):
         yield buf
 
 
-def chat_direct(history: list[dict], system_prompt: str = "", model: str = None) -> str:
+def chat_direct(history: list[dict], system_prompt: str = "", model: str = None,
+                organization=None, motivo: str = 'chat') -> str:
     """Devuelve el texto TAL CUAL lo dio el modelo, sin limpiar.
 
     A proposito: quien llama desde el chat necesita el `__ACTION__{...}` intacto para
@@ -105,27 +107,29 @@ def chat_direct(history: list[dict], system_prompt: str = "", model: str = None)
     """
     provider, resolved = resolve_model(model)
     if provider == 'anthropic':
-        return _chat_anthropic_simple(history, system_prompt, resolved)
+        return _chat_anthropic_simple(history, system_prompt, resolved, organization, motivo)
     if provider == 'deepseek':
-        return _chat_deepseek_simple(history, system_prompt, resolved)
-    return _chat_ollama(history, system_prompt, resolved)
+        return _chat_deepseek_simple(history, system_prompt, resolved, organization, motivo)
+    return _chat_ollama(history, system_prompt, resolved, organization, motivo)
 
 
-def stream_direct(history: list[dict], system_prompt: str = "", model: str = None):
+def stream_direct(history: list[dict], system_prompt: str = "", model: str = None,
+                  organization=None, motivo: str = 'chat'):
     """Generator que entrega el texto en trozos. Ollama transmite token a token; Anthropic
     y DeepSeek no soportan streaming en este endpoint, así que se pide la respuesta completa
     y se trocea igual (misma técnica que usa el modo con sistemas conectados) para mantener
     el efecto typing."""
     provider, resolved = resolve_model(model)
     if provider == 'anthropic':
-        yield from chunk_text(_chat_anthropic_simple(history, system_prompt, resolved))
+        yield from chunk_text(_chat_anthropic_simple(history, system_prompt, resolved, organization, motivo))
     elif provider == 'deepseek':
-        yield from chunk_text(_chat_deepseek_simple(history, system_prompt, resolved))
+        yield from chunk_text(_chat_deepseek_simple(history, system_prompt, resolved, organization, motivo))
     else:
-        yield from _stream_ollama(history, system_prompt, resolved)
+        yield from _stream_ollama(history, system_prompt, resolved, organization, motivo)
 
 
-def _stream_ollama(history: list[dict], system_prompt: str, model: str):
+def _stream_ollama(history: list[dict], system_prompt: str, model: str,
+                   organization=None, motivo: str = 'chat'):
     base_url, model, headers = _ollama_config(model)
 
     messages = []
@@ -146,6 +150,10 @@ def _stream_ollama(history: list[dict], system_prompt: str, model: str):
                 if chunk:
                     yield chunk
                 if data.get('done'):
+                    # El último trozo del stream es el que trae las cuentas de la
+                    # llamada completa; los anteriores vienen sin ellas.
+                    consumo.registrar('ollama', model, data,
+                                      organization=organization, motivo=motivo)
                     break
     except Exception:
         logger.exception("stream_direct falló")
@@ -162,7 +170,7 @@ Sector: {organization.sector or 'No especificado'}
 """
 
     if _is_ollama(provider):
-        return _chat_ollama(history, system_prompt)
+        return _chat_ollama(history, system_prompt, organization=organization, motivo='agente')
 
     odoo_client = OdooClient(
         url=organization.odoo_url,
@@ -170,12 +178,13 @@ Sector: {organization.sector or 'No especificado'}
         username=organization.odoo_username,
         api_key=organization.odoo_api_key,
     )
-    return _run_anthropic_agent(history, system_prompt, odoo_client)
+    return _run_anthropic_agent(history, system_prompt, odoo_client, organization)
 
 
 # ── Ollama ────────────────────────────────────────────────────────────
 
-def _chat_ollama(history: list[dict], system_prompt: str = "", model: str = None) -> str:
+def _chat_ollama(history: list[dict], system_prompt: str = "", model: str = None,
+                 organization=None, motivo: str = 'chat') -> str:
     base_url, model, headers = _ollama_config(model)
 
     messages = []
@@ -188,7 +197,9 @@ def _chat_ollama(history: list[dict], system_prompt: str = "", model: str = None
     try:
         resp = _post_chat(base_url, {"model": model, "messages": messages, "stream": False},
                           headers, timeout=120)
-        return resp.json()['message']['content']
+        datos = resp.json()
+        consumo.registrar('ollama', model, datos, organization=organization, motivo=motivo)
+        return datos['message']['content']
     except requests.exceptions.ConnectionError:
         return "No se pudo conectar con el modelo. Si usas Ollama local, asegúrate de que esté corriendo; si usas Ollama Cloud, revisa OLLAMA_API_KEY y la conexión."
     except Exception:
@@ -198,18 +209,22 @@ def _chat_ollama(history: list[dict], system_prompt: str = "", model: str = None
 
 # ── Anthropic ─────────────────────────────────────────────────────────
 
-def _chat_anthropic_simple(history: list[dict], system_prompt: str = "", model: str = None) -> str:
+def _chat_anthropic_simple(history: list[dict], system_prompt: str = "", model: str = None,
+                           organization=None, motivo: str = 'chat') -> str:
     messages = _build_api_messages(history)
+    modelo = model or "claude-sonnet-4-6"
     response = _get_anthropic_client().messages.create(
-        model=model or "claude-sonnet-4-6",
+        model=modelo,
         max_tokens=4096,
         system=system_prompt,
         messages=messages,
     )
+    consumo.registrar('anthropic', modelo, response, organization=organization, motivo=motivo)
     return _extract_text(response)
 
 
-def _chat_deepseek_simple(history: list[dict], system_prompt: str = "", model: str = None) -> str:
+def _chat_deepseek_simple(history: list[dict], system_prompt: str = "", model: str = None,
+                          organization=None, motivo: str = 'chat') -> str:
     model = model or getattr(settings, 'DEEPSEEK_MODEL', 'deepseek-chat')
     messages = []
     if system_prompt:
@@ -226,13 +241,16 @@ def _chat_deepseek_simple(history: list[dict], system_prompt: str = "", model: s
             headers=headers, timeout=120,
         )
         resp.raise_for_status()
-        return resp.json()['choices'][0]['message']['content']
+        datos = resp.json()
+        consumo.registrar('deepseek', model, datos, organization=organization, motivo=motivo)
+        return datos['choices'][0]['message']['content']
     except Exception:
         logger.exception("_chat_deepseek_simple falló")
         return _MODEL_DOWN_MSG
 
 
-def _run_anthropic_agent(history: list[dict], system_prompt: str, odoo_client: OdooClient) -> str:
+def _run_anthropic_agent(history: list[dict], system_prompt: str, odoo_client: OdooClient,
+                         organization=None) -> str:
     messages = _build_api_messages(history)
 
     for _ in range(10):
@@ -244,6 +262,8 @@ def _run_anthropic_agent(history: list[dict], system_prompt: str, odoo_client: O
             tools=ODOO_TOOLS,
             messages=messages,
         )
+        consumo.registrar('anthropic', "claude-opus-4-8", response,
+                          organization=organization, motivo='agente')
 
         if response.stop_reason == "end_turn":
             return _extract_text(response)
@@ -476,7 +496,10 @@ def _run_ollama_agent_events(history, system_prompt, organization, model=None, a
         for _ in range(_MAX_ITERS):
             resp = _post_chat(base_url, {"model": model, "messages": messages,
                                          "tools": tools, "stream": False}, headers)
-            msg = resp.json().get('message', {})
+            datos = resp.json()
+            consumo.registrar('ollama', model, datos,
+                              organization=organization, motivo='agente')
+            msg = datos.get('message', {})
             tool_calls = msg.get('tool_calls') or []
 
             if not tool_calls:
@@ -568,7 +591,10 @@ def _run_deepseek_agent_events(history, system_prompt, organization, model=None,
                 yield {'final': f"DeepSeek respondió con un error: {detail}", 'documentos': list((artifacts or {}).get('documentos') or [])}
                 return
 
-            msg = resp.json()['choices'][0]['message']
+            datos = resp.json()
+            consumo.registrar('deepseek', model, datos,
+                              organization=organization, motivo='agente')
+            msg = datos['choices'][0]['message']
             tool_calls = msg.get('tool_calls') or []
 
             if not tool_calls:
@@ -632,16 +658,21 @@ def _run_anthropic_agent_live_events(history, system_prompt, organization, model
     artifacts: dict = {}
     messages = _build_api_messages(history)
     client = _get_anthropic_client()
+    modelo = model or "claude-sonnet-4-6"
 
     try:
         for _ in range(_MAX_ITERS):
             response = client.messages.create(
-                model=model or "claude-sonnet-4-6",
+                model=modelo,
                 max_tokens=4096,
                 system=system_prompt,
                 tools=tools,
                 messages=messages,
             )
+            # Dentro del bucle y no al final: si la pregunta da ocho vueltas, el costo
+            # son las ocho llamadas, no la última.
+            consumo.registrar('anthropic', modelo, response,
+                              organization=organization, motivo='agente')
             if response.stop_reason != "tool_use":
                 yield _evento_final(_extract_text(response), provenance, artifacts)
                 return
