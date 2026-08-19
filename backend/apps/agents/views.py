@@ -1390,9 +1390,10 @@ def modelos_disponibles():
     add(default_model, 'cloud' if provider == 'ollama_cloud' else 'local')
 
     # Anthropic y DeepSeek — solo aparecen en el selector si hay API key configurada.
+    # Solo el modelo del techo: ofrecer Opus o Sonnet cuando el backend los va a
+    # servir con Haiku es un selector que miente.
     if getattr(settings, 'ANTHROPIC_API_KEY', ''):
-        add('claude-opus-4-8', 'anthropic')
-        add('claude-sonnet-5', 'anthropic')
+        add(getattr(settings, 'ANTHROPIC_MODEL', ''), 'anthropic')
     if getattr(settings, 'DEEPSEEK_API_KEY', ''):
         add(getattr(settings, 'DEEPSEEK_MODEL', 'deepseek-v4-flash'), 'deepseek')
 

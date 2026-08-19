@@ -182,6 +182,16 @@ PAYPAL_WEBHOOK_ID = config('PAYPAL_WEBHOOK_ID', default='')
 
 # AI provider: 'anthropic' | 'ollama' (local) | 'ollama_cloud' (Ollama Cloud)
 AI_PROVIDER    = config('AI_PROVIDER', default='ollama')
+
+# El ÚNICO modelo de Claude que se usa. Es un TECHO, no un valor por omisión:
+# cualquier pedido de otro modelo de Claude —el selector de la app, el modelo que un
+# agente tenga guardado, o un id escrito a mano en el código— se sirve con este. Existe
+# para que el gasto no dependa de que nadie elija Opus por curiosidad.
+#
+# Haiku 4.5 es el más barato del catálogo: US$1 el millón de entrada y US$5 de salida,
+# contra 3 y 15 de Sonnet y 5 y 25 de Opus. Y desde que el prompt se cachea, la salida
+# es el 77% del costo de una pregunta, así que la diferencia se paga casi entera ahí.
+ANTHROPIC_MODEL = config('ANTHROPIC_MODEL', default='claude-haiku-4-5-20251001')
 OLLAMA_BASE_URL = config('OLLAMA_BASE_URL', default='http://localhost:11434')
 OLLAMA_MODEL   = config('OLLAMA_MODEL', default='qwen2.5:7b')
 

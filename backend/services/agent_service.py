@@ -21,6 +21,21 @@ from .odoo_client import OdooClient, OdooConnectionError
 # jornada: escribir cuesta el doble una vez, y desde la segunda pregunta de cualquier
 # persona ya se lee a un décimo. Con dos preguntas por hora en la empresa, la de una
 # hora ya conviene.
+#
+# ⚠️ HAY UN MÍNIMO Y DEPENDE DEL MODELO. Medido contra la API el 2026-08-19:
+# **Haiku 4.5 no cachea nada por debajo de ~4.096 tokens de prefijo** (probado: 2.771
+# no cachea, 4.611 sí), mientras que Sonnet cachea el mismo prefijo de 2.771 sin
+# problema. Por debajo del mínimo la API no da error ni aviso: acepta el
+# `cache_control`, cobra la entrada completa y devuelve 0 en `cache_read_input_tokens`.
+#
+# Consecuencia práctica: con `ANTHROPIC_MODEL` en Haiku, una empresa con pocos sistemas
+# y pocos documentos conectados NO va a cachear, porque su prefijo no llega. Medido en
+# una empresa real: herramientas + sistema = 2.874 tokens, o sea 1.222 por debajo. La
+# caché empieza a pagar sola cuando la empresa conecta más y el prefijo crece; se ve en
+# `ConsumoTokens.tokens_cache_lectura`, que deja de ser 0.
+#
+# Aun sin caché, Haiku conviene: 714 preguntas al mes contra las 582 de Sonnet CON
+# caché, porque su salida cuesta un quinto y la salida no la descuenta ninguna caché.
 _CACHE_1H = {"type": "ephemeral", "ttl": "1h"}
 
 
@@ -65,6 +80,23 @@ def _get_anthropic_client() -> anthropic.Anthropic:
     if _anthropic_client is None:
         _anthropic_client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
     return _anthropic_client
+
+
+def modelo_anthropic(model: str = None) -> str:
+    """El modelo de Claude que se va a usar de verdad: `settings.ANTHROPIC_MODEL`.
+
+    Es un TECHO y no un valor por omisión, y por eso ignora lo que le pidan: si un
+    agente tiene Opus guardado o alguien lo elige en el selector, igual se sirve con el
+    del techo. Un default se salta con solo pasar otro modelo, y entonces el gasto
+    depende de que nadie elija el caro.
+
+    Queda anotado en el registro cuando degrada, para que no sea invisible.
+    """
+    techo = (getattr(settings, 'ANTHROPIC_MODEL', '') or '').strip() or 'claude-haiku-4-5-20251001'
+    pedido = (model or '').strip()
+    if pedido and pedido != techo:
+        logger.info('Modelo %s servido con %s (techo ANTHROPIC_MODEL)', pedido, techo)
+    return techo
 
 
 def _is_ollama(provider: str) -> bool:
@@ -117,7 +149,7 @@ def resolve_model(model: str = None) -> tuple[str, str]:
     para que el chat directo y el chat con sistemas conectados queden consistentes."""
     provider = _provider_for_model(model) if model else getattr(settings, 'AI_PROVIDER', 'ollama')
     if provider == 'anthropic':
-        return provider, model or 'claude-sonnet-4-6'
+        return provider, modelo_anthropic(model)
     if provider == 'deepseek':
         return provider, model or getattr(settings, 'DEEPSEEK_MODEL', 'deepseek-chat')
     _, resolved, _ = _ollama_config(model)
@@ -262,7 +294,7 @@ def _chat_anthropic_simple(history: list[dict], system_prompt: str = "", model: 
                            organization=None, motivo: str = 'chat',
                            system_persona: str = '') -> str:
     messages = _build_api_messages(history)
-    modelo = model or "claude-sonnet-4-6"
+    modelo = modelo_anthropic(model)
     response = _get_anthropic_client().messages.create(
         model=modelo,
         max_tokens=4096,
@@ -305,22 +337,24 @@ def _run_anthropic_agent(history: list[dict], system_prompt: str, odoo_client: O
                          organization=None) -> str:
     messages = _build_api_messages(history)
     turno = uuid4().hex
-    # El camino más caro del código: Opus con razonamiento adaptativo y hasta diez
-    # vueltas. `ODOO_TOOLS` es una constante del módulo y el prompt no lleva nada por
-    # persona, así que es el prefijo más estable que hay para cachear.
+    # Era el camino más caro del código: Opus con razonamiento adaptativo y hasta diez
+    # vueltas. Ahora pasa por el techo como todos. `ODOO_TOOLS` es una constante del
+    # módulo y el prompt no lleva nada por persona, así que es el prefijo más estable
+    # que hay para cachear.
     tools = _tools_cacheadas(ODOO_TOOLS)
     sistema = _sistema_anthropic(system_prompt)
+    modelo = modelo_anthropic()
 
     for _ in range(10):
         response = _get_anthropic_client().messages.create(
-            model="claude-opus-4-8",
+            model=modelo,
             max_tokens=8096,
             thinking={"type": "adaptive"},
             system=sistema,
             tools=tools,
             messages=messages,
         )
-        consumo.registrar('anthropic', "claude-opus-4-8", response,
+        consumo.registrar('anthropic', modelo, response,
                           organization=organization, motivo='agente', turno=turno)
 
         if response.stop_reason == "end_turn":
@@ -722,7 +756,7 @@ def _run_anthropic_agent_live_events(history, system_prompt, organization, model
     artifacts: dict = {}
     messages = _build_api_messages(history)
     client = _get_anthropic_client()
-    modelo = model or "claude-sonnet-4-6"
+    modelo = modelo_anthropic(model)
 
     try:
         for _ in range(_MAX_ITERS):
