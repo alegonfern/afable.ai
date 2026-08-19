@@ -192,6 +192,10 @@ export default function LandingPage() {
       a: 'Son dos preguntas y se responden por separado. Qué PUEDE HACER cada persona lo dice su rol en la empresa: Miembro usa, Editor carga y conecta, Administrador manda. SOBRE QUÉ lo dice el Workspace: los abiertos los ve toda la empresa y a los restringidos entra solo quien agregues. Los agentes heredan lo mismo, así que nadie puede usar un agente para leer lo que él no puede leer.',
     },
     {
+      q: '¿No me sirve compartir la cuenta de IA que ya pago?',
+      a: 'Compartir una cuenta es entregar el historial completo. La otra persona ve todo lo que preguntaste antes, del trabajo y de lo tuyo, y queda usando la IA con tu nombre. En Afable cada uno entra con su propia cuenta y con el rol que le diste: el que llega tiene el contexto de la empresa desde el primer día sin ver tus conversaciones, y al que se va lo quitas y pierde el acceso en ese momento. Lo que la empresa sabe está cargado en Afable, no en la cuenta de una persona.',
+    },
+    {
       q: '¿Dónde queda el trabajo del equipo?',
       a: 'En Sesiones. Una Sesion es el trabajo en curso —un cliente, un cierre de mes, una busqueda— con sus conversaciones, sus tareas y sus archivos en el mismo lugar. Lo que uno pregunta ahí lo ve el resto, y una tarea puede quedar asignada a una persona o a un agente, que la ejecuta y deja el resultado a la vista.',
     },
