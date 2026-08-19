@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import {
   Drawer as MuiDrawer,
@@ -14,13 +14,13 @@ import {
   Menu,
   MenuItem,
   Divider,
+  InputBase,
 } from '@mui/material';
 import {
-  MessageSquare, LayoutDashboard, FileText,
-  Settings, Search, ChevronLeft, Plus, ChevronDown,
-  ChevronRight, Zap, Bot, History,
-  User, Building2, HelpCircle, LogOut, Compass,
-  Timer, ListChecks, Layers, Users,
+  MessageSquare, LayoutDashboard, Settings, Search, ChevronLeft, Plus, ChevronDown,
+  ChevronRight, Zap, Bot, History, Boxes,
+  User, Building2, HelpCircle, LogOut, Timer, Layers, Users,
+  Plug, FolderOpen, BookOpen, CheckSquare, CreditCard,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { authService } from '../../../services/auth';
@@ -28,6 +28,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { DRAWER_WIDTH, MINI_DRAWER_WIDTH } from '../../../config';
 import { useApp } from '../../../context/AppContext';
 import { api } from '../../../services/api';
+import MenuDeFila, { DialogoCompartir } from './MenuDeFila';
+import { Isotipo, Logo } from '../../../components/Logo';
 
 const openedMixin = (theme) => ({
   width: DRAWER_WIDTH,
@@ -71,6 +73,10 @@ export default function Drawer({ open, handleDrawerToggle }) {
 
   const [conversations, setConversations] = useState([]);
   const [chatOpen, setChatOpen] = useState(true);
+  // Las Sesiones del Workspace activo: es la seccion que las vuelve alcanzables. Sin
+  // esto, una Sesion existe pero no hay por donde llegar a ella.
+  const [sesiones, setSesiones] = useState([]);
+  const [sesionesOpen, setSesionesOpen] = useState(true);
   const [userMenuAnchor, setUserMenuAnchor] = useState(null);
   const [modo, setModoState] = useState(() => localStorage.getItem('afable_modo') || 'trabajo');
 
@@ -90,6 +96,119 @@ export default function Drawer({ open, handleDrawerToggle }) {
     api.getConversations().then(r => setConversations(r.data.slice(0, 10))).catch(() => {});
   }, []);
 
+  const wsSlug = localStorage.getItem('afable_workspace_slug');
+  // El Workspace elegido acota las Sesiones de la barra, igual que en Archivos.
+  const espacioSlug = localStorage.getItem(`afable_espacio_slug:${wsSlug}`);
+  const cargarSesiones = useCallback(() => {
+    if (!wsSlug) return;
+    // ⭐ La barra NO filtra por el Workspace elegido, a diferencia de Archivos o la
+    // galería de agentes. Es la NAVEGACIÓN: esconder acá no acota una búsqueda, hace
+    // creer que el trabajo se perdió — y quien no tiene claro que arriba hay un filtro
+    // no relaciona una cosa con la otra. Cada Sesión dice a qué Workspace pertenece,
+    // que informa sin ocultar.
+    api.getSesiones(wsSlug)
+      .then(r => setSesiones(r.data.results || []))
+      .catch(() => setSesiones([]));
+  }, [wsSlug]);
+
+  useEffect(() => { cargarSesiones(); }, [cargarSesiones]);
+
+  // La etiqueta del Workspace solo aparece si la lista mezcla varios. Con uno solo diría
+  // lo mismo en todas las filas, y una etiqueta que nunca cambia se deja de leer.
+  const variosWorkspaces = new Set(
+    sesiones.map((s) => s.workspace).filter(Boolean),
+  ).size > 1;
+  // Al crear, archivar o borrar una Sesion la barra tiene que reflejarlo sin recargar.
+  useEffect(() => {
+    const alCambiar = () => cargarSesiones();
+    window.addEventListener('afable-sesiones', alCambiar);
+    return () => window.removeEventListener('afable-sesiones', alCambiar);
+  }, [cargarSesiones]);
+
+  // El nombre se escribe EN la barra, no en un `window.prompt`: un prompt del
+  // navegador se ve como un error del sistema, no como una parte de la app.
+  const [nombreNueva, setNombreNueva] = useState(null);   // null = no se está creando
+  // La fila sobre la que está el mouse: los tres puntos solo se muestran ahí. Un icono
+  // fijo en cada línea hace la lista más difícil de leer que la lista sola.
+  const [encima, setEncima] = useState(null);
+  const [compartiendo, setCompartiendo] = useState(null);   // la conversación a compartir
+
+  const accionDeConversacion = async (conv, clave) => {
+    try {
+      if (clave === 'eliminar') {
+        await api.deleteConversation(conv.id);
+        setConversations((cs) => cs.filter((c) => c.id !== conv.id));
+        toast.success('Conversación eliminada.');
+        if (location.pathname.startsWith('/app/chat')) navigate('/app/chat');
+      }
+      if (clave === 'compartir') setCompartiendo(conv);
+    } catch {
+      toast.error('No se pudo completar la acción.');
+    }
+  };
+
+  const compartir = async (sesionSlug) => {
+    const conv = compartiendo;
+    setCompartiendo(null);
+    try {
+      await api.updateConversation(conv.id, {
+        workspace: wsSlug, sesion: sesionSlug,
+      });
+      const { data } = await api.getConversations();
+      setConversations(data.slice(0, 10));
+      toast.success(
+        sesionSlug ? 'La conversación ahora la ve el equipo de la Sesión.'
+                   : 'Volvió a su historial privado.',
+      );
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'No se pudo compartir.');
+    }
+  };
+
+  const accionDeSesion = async (sesion, clave) => {
+    try {
+      if (clave === 'copiar') {
+        await navigator.clipboard.writeText(`${window.location.origin}/app/sesiones/${sesion.slug}`);
+        toast.success('Enlace copiado.');
+        return;
+      }
+      if (clave === 'archivar') {
+        await api.updateSesion(sesion.slug, { workspace: wsSlug, archivada: !sesion.archivada });
+        toast.success(sesion.archivada ? 'Sesión desarchivada.' : 'Sesión archivada.');
+      }
+      if (clave === 'eliminar') {
+        await api.deleteSesion(sesion.slug, wsSlug);
+        toast.success('Sesión eliminada.');
+        if (location.pathname === `/app/sesiones/${sesion.slug}`) navigate('/app');
+      }
+      await cargarSesiones();
+    } catch (e) {
+      toast.error(
+        e.response?.status === 403
+          ? 'Solo un administrador de la Empresa puede eliminar una Sesión.'
+          : 'No se pudo completar la acción.',
+      );
+    }
+  };
+
+  const crearSesion = async () => {
+    const nombre = (nombreNueva || '').trim();
+    if (!wsSlug || !nombre) return;
+    try {
+      // Nace donde se está trabajando: si hay un Workspace elegido arriba, ahí — si no,
+      // la Sesión se crearía en otro lado y desaparecería de la barra.
+      const { data } = await api.createSesion({
+        workspace: wsSlug, name: nombre,
+        ...(espacioSlug ? { espacio: espacioSlug } : {}),
+      });
+      setNombreNueva(null);
+      await cargarSesiones();
+      navigate(`/app/sesiones/${data.slug}`);
+    } catch {
+      toast.error('No se pudo crear la Sesión.');
+    }
+  };
+
 
   // Contraste: los items en reposo estaban al 45% y los iconos al 28% sobre un
   // fondo casi negro — legible a duras penas y cansador. Se sube el piso sin
@@ -101,8 +220,19 @@ export default function Drawer({ open, handleDrawerToggle }) {
   const keyHintBg    = d ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)';
   const keyHintColor = d ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.3)';
 
-  const isActive = (path) =>
-    path === '/app' ? location.pathname === '/app' : location.pathname.startsWith(path);
+  // Compara tambien el `?tab=`: las pestañas del hub de Espacios son items
+  // distintos del menu y apuntan todas a /app/contexto. Sin esto se encendian las
+  // cuatro juntas.
+  const isActive = (path) => {
+    if (path === '/app') return location.pathname === '/app';
+    const [ruta, query] = path.split('?');
+    if (!location.pathname.startsWith(ruta)) return false;
+    if (!query) return true;
+    const pedida = new URLSearchParams(query).get('tab');
+    const actual = new URLSearchParams(location.search).get('tab');
+    // Sin ?tab= en la URL, el hub abre en su primera pestaña.
+    return actual ? actual === pedida : pedida === 'espacios';
+  };
 
   const itemSx = (active) => ({
     display: 'flex', alignItems: 'center', gap: 1.25,
@@ -124,14 +254,15 @@ export default function Drawer({ open, handleDrawerToggle }) {
   // ── Los tres modos ──────────────────────────────────────────────────────────
   // Conmutador arriba a la izquierda: solo el modo activo muestra su etiqueta, los
   // otros dos son icono pelado. La barra cambia completa segun el modo.
-  //   Trabajo  — el dia a dia: chat, conversaciones, agentes.
-  //   Espacios — conocimiento y permisos, mas lo que los administra.
-  //   Admin    — la empresa: personas, ajustes, plan.
+  //   Trabajo  — el dia a dia: chat, agentes, disparadores, tablero.
+  //   Espacios — de donde sale lo que el agente sabe: espacios, conexiones,
+  //              documentos y el contexto de la empresa.
+  //   Admin    — la empresa: personas, agentes, ajustes, plan.
   // Los items de cuenta (perfil, ayuda, cerrar sesion) viven en la ficha del
   // usuario, abajo, igual en los tres modos.
   const MODOS = [
     { key: 'trabajo',  label: 'Trabajo',  icon: <MessageSquare size={14} /> },
-    { key: 'espacios', label: 'Espacios', icon: <Layers size={14} /> },
+    { key: 'espacios', label: 'Workspaces', icon: <Layers size={14} /> },
     { key: 'admin',    label: 'Admin',    icon: <Settings size={14} /> },
   ];
 
@@ -139,28 +270,39 @@ export default function Drawer({ open, handleDrawerToggle }) {
     trabajo: {
       seccion: null,
       items: [
-        { path: '/app/home',       label: 'Explorar', icon: <Compass size={15} /> },
-        { path: '/app/agentes',    label: 'Agentes', icon: <Bot size={15} /> },
-        { path: '/app/tablero',    label: 'Tablero', icon: <LayoutDashboard size={15} /> },
-        { path: '/app/documentos', label: 'Notas',   icon: <FileText size={15} /> },
+        { path: '/app/agentes',          label: 'Agentes',      icon: <Bot size={15} /> },
+        // Las Tareas estaban SOLO adentro de su Sesion, cuatro niveles abajo: "que tengo
+        // pendiente" no se podia contestar sin abrir Sesion por Sesion. Sube al menu del
+        // dia a dia, que es cuando se hace esa pregunta.
+        { path: '/app/tareas',           label: 'Tareas',       icon: <CheckSquare size={15} /> },
+        // Los Disparadores estaban en el modo Espacios, donde no son un espacio.
+        // Automatizar lo que uno quiere OBTENER de Afable es trabajo del dia a dia.
+        { path: '/app/automatizaciones', label: 'Disparadores', icon: <Timer size={15} /> },
+        { path: '/app/tablero',          label: 'Tablero',      icon: <LayoutDashboard size={15} /> },
       ],
     },
     espacios: {
-      seccion: 'Administración',
+      seccion: 'Conocimiento',
+      // Las cuatro pestañas del hub suben al menu. Estaban un nivel mas abajo,
+      // dentro de una pantalla titulada "Espacios": quien buscaba donde conectar
+      // su Odoo tenia que adivinar que estaba ahi.
       items: [
-        { path: '/app/contexto',         label: 'Espacios',     icon: <Layers size={15} /> },
-        { path: '/app/automatizaciones', label: 'Disparadores', icon: <Timer size={15} /> },
-        { path: '/app/rutina',           label: 'Mi rutina',    icon: <ListChecks size={15} /> },
+        { path: '/app/contexto?tab=espacios',     label: 'Workspaces', icon: <Layers size={15} /> },
+        { path: '/app/contexto?tab=integraciones', label: 'Conexiones', icon: <Plug size={15} /> },
+        { path: '/app/archivos',                  label: 'Archivos',    icon: <FolderOpen size={15} /> },
+        { path: '/app/contexto?tab=mi-contexto',  label: 'Contexto de la empresa', icon: <BookOpen size={15} /> },
       ],
     },
     admin: {
-      seccion: 'Workspace',
+      seccion: 'Empresa',
       items: [
         { path: '/app/admin/personas',  label: 'Personas',      icon: <Users size={14} /> },
         { path: '/app/admin/agentes',   label: 'Agentes',       icon: <Bot size={14} /> },
-        { path: '/app/admin/workspace', label: 'Ajustes',       icon: <Building2 size={14} /> },
+        { path: '/app/admin/workspace', label: 'Su empresa',    icon: <Building2 size={14} /> },
         { path: '/app/configuracion',   label: 'Configuración', icon: <Settings size={14} /> },
-        { path: '/app/precios',         label: 'Plan',          icon: <Zap size={14} /> },
+        // Decia "Plan" y llevaba a la vitrina de precios, que no dice con que se esta
+        // pagando ni que se cobro. La pantalla real es Facturacion.
+        { path: '/app/admin/facturacion', label: 'Facturación', icon: <CreditCard size={14} /> },
       ],
     },
   };
@@ -171,7 +313,9 @@ export default function Drawer({ open, handleDrawerToggle }) {
     const dueño = enChat
       ? ['trabajo']
       : Object.entries(ITEMS_POR_MODO).find(([, { items }]) =>
-          items.some((i) => location.pathname.startsWith(i.path)),
+          // `i.path` puede traer ?tab=: para saber de que modo es la pantalla basta
+          // la ruta, sin la query.
+          items.some((i) => location.pathname.startsWith(i.path.split('?')[0])),
         );
     if (dueño && dueño[0] !== modo) setModo(dueño[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -189,6 +333,23 @@ export default function Drawer({ open, handleDrawerToggle }) {
 
   const drawer = (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+
+      {/* ── La marca ─────────────────────────────────────────────────────────
+          Arriba a la izquierda, donde se busca sin pensar y donde lleva de vuelta
+          al inicio. Estaba solo en login, registro y la landing: adentro de la app
+          no aparecía en ninguna parte, así que el producto no se nombraba a sí
+          mismo. Plegada la barra queda solo el isotipo. */}
+      <Box
+        onClick={() => navigate('/app')}
+        sx={{
+          display: 'flex', alignItems: 'center', flexShrink: 0, cursor: 'pointer',
+          justifyContent: open ? 'flex-start' : 'center',
+          px: open ? 1.5 : 0.5, pt: 1.5, pb: 0.5,
+          '&:hover': { opacity: 0.85 }, transition: 'opacity 0.12s',
+        }}
+      >
+        {open ? <Logo size={22} /> : <Isotipo size={22} />}
+      </Box>
 
       {/* ── Conmutador de modos ──────────────────────────────────────────────
           Tres iconos arriba a la izquierda; el activo lleva su etiqueta en una
@@ -334,18 +495,178 @@ export default function Drawer({ open, handleDrawerToggle }) {
                       <Box
                         key={conv.id}
                         onClick={() => navigate('/app/chat', { state: { conversationId: conv.id } })}
+                        onMouseEnter={() => setEncima(`conv-${conv.id}`)}
+                        onMouseLeave={() => setEncima(null)}
                         sx={{
+                          display: 'flex', alignItems: 'center', gap: 0.5,
                           px: 1, py: 0.35, borderRadius: '4px', cursor: 'pointer',
                           color: textDisabled, '&:hover': { bgcolor: bgHover, color: textMuted },
                           transition: 'all 0.1s',
                         }}
                       >
-                        <Typography sx={{ fontSize: '0.8rem', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
-                          {(conv.title || 'Conversación').slice(0, 30)}
+                        <Typography sx={{ fontSize: '0.8rem', lineHeight: 1.4, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {(conv.title || 'Conversación').slice(0, 28)}
                         </Typography>
+                        {/* Un hilo compartido se distingue de un vistazo: si no, no hay
+                            forma de saber qué ve el equipo y qué no. */}
+                        {conv.sesion_nombre && (
+                          <Typography
+                            title={`Compartida en ${conv.sesion_nombre}`}
+                            sx={{ fontSize: '0.7rem', flexShrink: 0, color: '#9BA6E3' }}
+                          >
+                            ●
+                          </Typography>
+                        )}
+                        <MenuDeFila
+                          visible={encima === `conv-${conv.id}`}
+                          titulo={conv.title || 'Conversación'}
+                          acciones={[
+                            {
+                              clave: 'compartir',
+                              label: conv.sesion_nombre ? 'Cambiar de Sesión…' : 'Compartir con el equipo…',
+                            },
+                            {
+                              clave: 'eliminar', label: 'Eliminar', color: '#e5484d',
+                              confirmar: true,
+                              aviso: 'Se borran los mensajes de esta conversación. No se puede deshacer.',
+                            },
+                          ]}
+                          onElegir={(clave) => accionDeConversacion(conv, clave)}
+                        />
                       </Box>
                     ))}
                   </Box>
+                </Box>
+              </Collapse>
+            )}
+          </Box>
+        )}
+
+        {/* Sesiones: donde trabaja el equipo. Solo en Trabajo, como el chat. */}
+        {enTrabajo && (
+          <Box sx={{ mb: 0.5 }}>
+            <Tooltip title={!open ? 'Sesiones' : ''} placement="right" arrow>
+              <Box sx={itemSx(isActive('/app/sesiones'))} onClick={() => setSesionesOpen(p => !p)}>
+                <Boxes size={15} color={iconColor(isActive('/app/sesiones'))} style={{ flexShrink: 0 }} />
+                {open && (
+                  <>
+                    <Typography sx={{ fontSize: '0.9rem', color: 'inherit', flex: 1 }}>
+                      Sesiones
+                    </Typography>
+                    <Box
+                      onClick={(e) => { e.stopPropagation(); setSesionesOpen(true); setNombreNueva(''); }}
+                      title="Nueva Sesión"
+                      sx={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        width: 18, height: 18, borderRadius: '4px', flexShrink: 0,
+                        color: textDisabled, '&:hover': { bgcolor: bgHover, color: textActive },
+                      }}
+                    >
+                      <Plus size={12} />
+                    </Box>
+                    {sesiones.length > 0 && (
+                      <Box sx={{ display: 'flex', p: 0.25, borderRadius: '4px', flexShrink: 0 }}>
+                        {sesionesOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                      </Box>
+                    )}
+                  </>
+                )}
+              </Box>
+            </Tooltip>
+
+            {open && (
+              <Collapse in={sesionesOpen}>
+                <Box sx={{ pl: 3.5, pr: 0.75, mt: 0.25 }}>
+                  {nombreNueva !== null && (
+                    <InputBase
+                      autoFocus
+                      value={nombreNueva}
+                      onChange={(e) => setNombreNueva(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') crearSesion();
+                        if (e.key === 'Escape') setNombreNueva(null);
+                      }}
+                      onBlur={() => { if (!nombreNueva.trim()) setNombreNueva(null); }}
+                      placeholder="Nombre de la Sesión"
+                      sx={{
+                        px: 1, py: 0.35, mb: 0.25, width: '100%', fontSize: '0.8rem',
+                        borderRadius: '4px', bgcolor: bgHover, color: textActive,
+                      }}
+                    />
+                  )}
+                  {sesiones.length === 0 && nombreNueva === null ? (
+                    <Typography sx={{ fontSize: '0.78rem', color: textDisabled, px: 1, py: 0.4 }}>
+                      Ninguna todavía.
+                    </Typography>
+                  ) : sesiones.map(s => {
+                    const activa = location.pathname === `/app/sesiones/${s.slug}`;
+                    return (
+                      <Box
+                        key={s.id}
+                        onClick={() => navigate(`/app/sesiones/${s.slug}`)}
+                        onMouseEnter={() => setEncima(`ses-${s.id}`)}
+                        onMouseLeave={() => setEncima(null)}
+                        sx={{
+                          display: 'flex', alignItems: 'center', gap: 0.75,
+                          px: 1, py: 0.35, borderRadius: '4px', cursor: 'pointer',
+                          color: activa ? '#586AD0' : textDisabled,
+                          '&:hover': { bgcolor: bgHover, color: activa ? '#586AD0' : textMuted },
+                          transition: 'all 0.1s',
+                        }}
+                      >
+                        <Typography sx={{ fontSize: '0.8rem', flexShrink: 0 }}>{s.icon || '💠'}</Typography>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography sx={{
+                            fontSize: '0.8rem', lineHeight: 1.4,
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                            fontWeight: activa ? 600 : 400,
+                          }}>
+                            {s.name}
+                          </Typography>
+                          {/* De dónde viene. Es la alternativa a esconderla: quien eligió
+                              un Workspace arriba entiende por qué está acá una Sesión de
+                              otro, en vez de creer que se perdió la que buscaba. */}
+                          {variosWorkspaces && s.workspace_name && (
+                            <Typography sx={{
+                              fontSize: '0.66rem', lineHeight: 1.3, color: textDisabled,
+                              overflow: 'hidden', textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}>
+                              {s.workspace_name}
+                            </Typography>
+                          )}
+                        </Box>
+                        <MenuDeFila
+                          visible={encima === `ses-${s.id}`}
+                          titulo={s.name}
+                          acciones={[
+                            { clave: 'copiar', label: 'Copiar enlace' },
+                            {
+                              clave: 'archivar',
+                              label: s.archivada ? 'Desarchivar' : 'Archivar',
+                              aviso: 'Sale de la barra lateral. Su contenido queda intacto.',
+                            },
+                            {
+                              clave: 'eliminar', label: 'Eliminar', color: '#e5484d',
+                              confirmar: true,
+                              aviso: 'Se llevan las conversaciones, las tareas y los archivos de '
+                                   + 'esta Sesión. No se puede deshacer.',
+                            },
+                          ]}
+                          onElegir={(clave) => accionDeSesion(s, clave)}
+                        />
+                        {s.pendientes > 0 && (
+                          <Typography sx={{
+                            fontSize: '0.68rem', fontWeight: 700, flexShrink: 0,
+                            px: 0.5, borderRadius: '4px',
+                            bgcolor: 'rgba(240, 180, 41, 0.16)', color: '#f0b429',
+                          }}>
+                            {s.pendientes}
+                          </Typography>
+                        )}
+                      </Box>
+                    );
+                  })}
                 </Box>
               </Collapse>
             )}
@@ -404,6 +725,17 @@ export default function Drawer({ open, handleDrawerToggle }) {
           )}
         </Box>
       </Box>
+
+      {/* Compartir una conversación = moverla a una Sesión: deja el historial privado
+          y pasa a verla el equipo de esa Sesión. */}
+      <DialogoCompartir
+        abierto={Boolean(compartiendo)}
+        onCerrar={() => setCompartiendo(null)}
+        sesiones={sesiones}
+        sesionActual={compartiendo?.sesion_slug || ''}
+        conversacion={compartiendo}
+        onCompartir={compartir}
+      />
 
       {/* User menu */}
       <Menu

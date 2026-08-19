@@ -1,0 +1,532 @@
+"""Pruebas del constructor de agentes.
+
+Lo que cubren, en orden de importancia: que la politica del Workspace decida de
+verdad quien crea (era el permiso que el endpoint viejo no consultaba nunca), que
+la empresa NO se pueda elegir desde el cuerpo del pedido, y que no se pueda
+enganchar un sistema, una Habilidad o un Espacio que no le corresponde.
+"""
+
+from django.contrib.auth import get_user_model
+from django.test import TestCase
+from rest_framework.test import APIClient
+
+from apps.agents.models import Agent, AgentConfig, Skill
+from apps.organizations.models import Organization, SystemConnection
+from apps.workspaces.models import (
+    ROLE_ADMIN, ROLE_EDITOR, ROLE_MEMBER, Workspace, Workspace,
+)
+
+User = get_user_model()
+
+URL = '/api/v1/agents/constructor/'
+URL_OPCIONES = '/api/v1/agents/constructor/opciones/'
+
+
+class BaseConstructor(TestCase):
+    """Una empresa con su Workspace, tres personas y otra empresa ajena."""
+
+    def setUp(self):
+        self.client = APIClient()
+
+        self.admin = User.objects.create_user(
+            username='admin@afable.test', email='admin@afable.test', password='afable123',
+        )
+        self.editor = User.objects.create_user(
+            username='editor@afable.test', email='editor@afable.test', password='afable123',
+        )
+        self.miembro = User.objects.create_user(
+            username='miembro@afable.test', email='miembro@afable.test', password='afable123',
+        )
+
+        self.org = Organization.objects.create(owner=self.admin, name='Cocinas SpA')
+        self.ws = Workspace.objects.create(organization=self.org, name='General')
+        self.org.agregar_miembro(self.admin, ROLE_ADMIN)
+        self.org.agregar_miembro(self.editor, ROLE_EDITOR)
+        self.org.agregar_miembro(self.miembro, ROLE_MEMBER)
+
+        self.odoo = SystemConnection.objects.create(
+            organization=self.org, name='Odoo Ventas', connector_type='odoo',
+        )
+        self.habilidad = Skill.objects.create(
+            organization=self.org, name='Tono corporativo', instructions='Trate de usted.',
+        )
+        self.espacio = Workspace.objects.create(organization=self.org, name='Finanzas')
+
+        # Empresa ajena, con sus propias cosas: nada de esto puede engancharse.
+        self.ajeno = User.objects.create_user(
+            username='ajeno@afable.test', email='ajeno@afable.test', password='afable123',
+        )
+        self.org_ajena = Organization.objects.create(owner=self.ajeno, name='Muebles Ltda')
+        self.ws_ajeno = Workspace.objects.create(organization=self.org_ajena, name='General')
+        self.org_ajena.agregar_miembro(self.ajeno, ROLE_ADMIN)
+        self.sistema_ajeno = SystemConnection.objects.create(
+            organization=self.org_ajena, name='SAP Ajeno', connector_type='mssql',
+        )
+        self.habilidad_ajena = Skill.objects.create(
+            organization=self.org_ajena, name='Tono ajeno', instructions='...',
+        )
+        self.espacio_ajeno = Workspace.objects.create(organization=self.org_ajena, name='Ajeno')
+
+    def crear(self, quien, **extra):
+        self.client.force_authenticate(user=quien)
+        cuerpo = {'workspace': self.org.slug, 'name': 'Analista de Cobranzas'}
+        cuerpo.update(extra)
+        return self.client.post(URL, cuerpo, format='json')
+
+
+class PermisoParaCrearTests(BaseConstructor):
+    """`Organization.agent_creation_policy` cruzado con el rol. El default es 'editores'."""
+
+    def test_un_administrador_crea(self):
+        r = self.crear(self.admin)
+        self.assertEqual(r.status_code, 201)
+
+    def test_un_editor_crea_con_la_politica_por_defecto(self):
+        r = self.crear(self.editor)
+        self.assertEqual(r.status_code, 201)
+
+    def test_un_miembro_no_crea_con_la_politica_por_defecto(self):
+        r = self.crear(self.miembro)
+        self.assertEqual(r.status_code, 403)
+        self.assertFalse(Agent.objects.filter(name='Analista de Cobranzas').exists())
+
+    def test_con_la_politica_abierta_un_miembro_crea(self):
+        self.org.agent_creation_policy = 'todos'
+        self.org.save(update_fields=['agent_creation_policy'])
+        r = self.crear(self.miembro)
+        self.assertEqual(r.status_code, 201)
+
+    def test_con_la_politica_cerrada_solo_el_administrador_crea(self):
+        self.org.agent_creation_policy = 'admins'
+        self.org.save(update_fields=['agent_creation_policy'])
+        self.assertEqual(self.crear(self.editor).status_code, 403)
+        self.assertEqual(self.crear(self.admin).status_code, 201)
+
+    def test_quien_no_es_miembro_no_ve_que_el_workspace_existe(self):
+        """404 y no 403: no tiene por que enterarse de que hay un Workspace ahi."""
+        r = self.crear(self.ajeno)
+        self.assertEqual(r.status_code, 404)
+
+    def test_sin_workspace_no_se_adivina(self):
+        self.client.force_authenticate(user=self.admin)
+        r = self.client.post(URL, {'name': 'Suelto'}, format='json')
+        self.assertEqual(r.status_code, 400)
+
+
+class CreacionTests(BaseConstructor):
+
+    def test_el_agente_queda_en_la_empresa_del_workspace(self):
+        r = self.crear(self.admin)
+        agente = Agent.objects.get(pk=r.data['id'])
+        self.assertEqual(agente.organization_id, self.org.id)
+        self.assertEqual(agente.created_by_id, self.admin.id)
+
+    def test_la_empresa_no_se_elige_desde_el_cuerpo(self):
+        """El agujero del endpoint viejo: apuntar a otra empresa mandando su id."""
+        r = self.crear(self.admin, organization=self.org_ajena.id)
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(Agent.objects.get(pk=r.data['id']).organization_id, self.org.id)
+
+    def test_el_handle_se_arma_solo(self):
+        r = self.crear(self.admin, name='Analista de Cobranzas')
+        self.assertEqual(r.data['handle'], 'analista-de-cobranzas')
+
+    def test_nace_pendiente_en_admin(self):
+        """Sin esto no aparece en Admin › Agentes y nadie le entrega el contexto."""
+        r = self.crear(self.admin)
+        self.assertTrue(AgentConfig.objects.filter(agent_id=r.data['id']).exists())
+
+    def test_sin_nombre_no_se_crea(self):
+        r = self.crear(self.admin, name='   ')
+        self.assertEqual(r.status_code, 400)
+
+    def test_no_se_repite_el_nombre_en_la_misma_empresa(self):
+        self.crear(self.admin)
+        r = self.crear(self.admin)
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(Agent.objects.filter(organization=self.org).count(), 1)
+
+    def test_el_mismo_nombre_en_otra_empresa_si_se_puede(self):
+        self.crear(self.admin)
+        self.client.force_authenticate(user=self.ajeno)
+        r = self.client.post(
+            URL, {'workspace': self.org_ajena.slug, 'name': 'Analista de Cobranzas'}, format='json',
+        )
+        self.assertEqual(r.status_code, 201)
+
+    def test_las_instrucciones_largas_se_recortan(self):
+        """Pegar un libro entero entraria en CADA respuesta del agente."""
+        r = self.crear(self.admin, instructions='x' * 50_000)
+        self.assertEqual(len(Agent.objects.get(pk=r.data['id']).instructions), 20_000)
+
+
+class EngancheTests(BaseConstructor):
+
+    def test_engancha_sistemas_habilidades_y_espacios(self):
+        r = self.crear(
+            self.admin,
+            system_ids=[self.odoo.id],
+            skill_ids=[self.habilidad.id],
+            space_ids=[self.espacio.id],
+        )
+        agente = Agent.objects.get(pk=r.data['id'])
+        self.assertEqual(list(agente.systems.values_list('id', flat=True)), [self.odoo.id])
+        self.assertEqual(list(agente.skills.values_list('id', flat=True)), [self.habilidad.id])
+        self.assertEqual(list(agente.workspaces.values_list('id', flat=True)), [self.espacio.id])
+
+    def test_no_engancha_nada_de_otra_empresa(self):
+        r = self.crear(
+            self.admin,
+            system_ids=[self.sistema_ajeno.id],
+            skill_ids=[self.habilidad_ajena.id],
+            space_ids=[self.espacio_ajeno.id],
+        )
+        agente = Agent.objects.get(pk=r.data['id'])
+        self.assertEqual(agente.systems.count(), 0)
+        self.assertEqual(agente.skills.count(), 0)
+        self.assertEqual(agente.workspaces.count(), 0)
+
+    def test_un_espacio_restringido_ajeno_no_se_alcanza(self):
+        """Meter un agente propio en un Espacio restringido seria alcanzar sus datos."""
+        from apps.workspaces.models import VISIBILITY_RESTRICTED
+
+        reservado = Workspace.objects.create(organization=self.org, name='Directorio', visibility=VISIBILITY_RESTRICTED,
+        )
+        r = self.crear(self.editor, space_ids=[reservado.id])
+        self.assertEqual(Agent.objects.get(pk=r.data['id']).workspaces.count(), 0)
+
+    def test_una_lista_con_basura_no_rompe(self):
+        r = self.crear(self.admin, system_ids=['abc', None, self.odoo.id])
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(
+            list(Agent.objects.get(pk=r.data['id']).systems.values_list('id', flat=True)),
+            [self.odoo.id],
+        )
+
+
+class EdicionTests(BaseConstructor):
+
+    def setUp(self):
+        super().setUp()
+        r = self.crear(self.admin, system_ids=[self.odoo.id], skill_ids=[self.habilidad.id])
+        self.agente = Agent.objects.get(pk=r.data['id'])
+        self.url = f'{URL}{self.agente.pk}/'
+
+    def patch(self, quien, **datos):
+        self.client.force_authenticate(user=quien)
+        return self.client.patch(self.url, {'workspace': self.org.slug, **datos}, format='json')
+
+    def test_se_lee_el_agente_para_llenar_el_formulario(self):
+        self.client.force_authenticate(user=self.admin)
+        r = self.client.get(self.url, {'workspace': self.org.slug})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data['system_ids'], [self.odoo.id])
+        self.assertEqual(r.data['skill_ids'], [self.habilidad.id])
+
+    def test_se_edita_el_nombre_y_las_instrucciones(self):
+        r = self.patch(self.admin, name='Cobranzas', instructions='Nueva regla.')
+        self.assertEqual(r.status_code, 200)
+        self.agente.refresh_from_db()
+        self.assertEqual(self.agente.name, 'Cobranzas')
+        self.assertEqual(self.agente.instructions, 'Nueva regla.')
+
+    def test_renombrar_no_cambia_el_handle(self):
+        """Es con lo que se lo menciona: cambiarlo rompe los hilos que ya lo nombran."""
+        antes = self.agente.handle
+        self.patch(self.admin, name='Otro Nombre Del Todo')
+        self.agente.refresh_from_db()
+        self.assertEqual(self.agente.handle, antes)
+
+    def test_un_patch_parcial_no_borra_lo_que_no_nombro(self):
+        self.patch(self.admin, name='Cobranzas')
+        self.agente.refresh_from_db()
+        self.assertEqual(list(self.agente.systems.values_list('id', flat=True)), [self.odoo.id])
+
+    def test_una_lista_vacia_si_vacia_la_coleccion(self):
+        self.patch(self.admin, system_ids=[])
+        self.assertEqual(self.agente.systems.count(), 0)
+
+    def test_un_miembro_no_edita_con_la_politica_por_defecto(self):
+        r = self.patch(self.miembro, name='Secuestrado')
+        self.assertEqual(r.status_code, 403)
+        self.agente.refresh_from_db()
+        self.assertNotEqual(self.agente.name, 'Secuestrado')
+
+    def test_no_se_edita_un_agente_de_otra_empresa(self):
+        ajeno = Agent.objects.create(organization=self.org_ajena, name='Ajeno')
+        self.client.force_authenticate(user=self.admin)
+        r = self.client.patch(
+            f'{URL}{ajeno.pk}/', {'workspace': self.org.slug, 'name': 'Robado'}, format='json',
+        )
+        self.assertEqual(r.status_code, 404)
+
+    def test_no_se_le_pone_el_nombre_de_otro_agente(self):
+        Agent.objects.create(organization=self.org, name='Ya Existe')
+        r = self.patch(self.admin, name='Ya Existe')
+        self.assertEqual(r.status_code, 400)
+
+    def test_puede_quedarse_con_su_propio_nombre(self):
+        """La comprobacion de nombre repetido no puede chocar contra si mismo."""
+        r = self.patch(self.admin, name=self.agente.name, instructions='Otra cosa.')
+        self.assertEqual(r.status_code, 200)
+
+
+class OpcionesTests(BaseConstructor):
+
+    def test_trae_todo_lo_que_el_formulario_necesita(self):
+        self.client.force_authenticate(user=self.admin)
+        r = self.client.get(URL_OPCIONES, {'workspace': self.org.slug})
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.data['puede_crear'])
+        self.assertEqual([s['id'] for s in r.data['sistemas']], [self.odoo.id])
+        self.assertEqual([h['id'] for h in r.data['habilidades']], [self.habilidad.id])
+        self.assertIn(self.espacio.id, [e['id'] for e in r.data['espacios']])
+        self.assertIn('models', r.data['modelos'])
+
+    def test_no_ofrece_nada_de_otra_empresa(self):
+        self.client.force_authenticate(user=self.admin)
+        r = self.client.get(URL_OPCIONES, {'workspace': self.org.slug})
+        self.assertNotIn(self.sistema_ajeno.id, [s['id'] for s in r.data['sistemas']])
+        self.assertNotIn(self.habilidad_ajena.id, [h['id'] for h in r.data['habilidades']])
+        self.assertNotIn(self.espacio_ajeno.id, [e['id'] for e in r.data['espacios']])
+
+    def test_un_miembro_ve_las_opciones_pero_no_puede_crear(self):
+        """La pantalla necesita poder decir por que no, no un 403 pelado."""
+        self.client.force_authenticate(user=self.miembro)
+        r = self.client.get(URL_OPCIONES, {'workspace': self.org.slug})
+        self.assertEqual(r.status_code, 200)
+        self.assertFalse(r.data['puede_crear'])
+
+
+class EndpointViejoTests(BaseConstructor):
+    """`POST /agents/` resolvia el permiso por dueño y no miraba la politica."""
+
+    def test_ahora_respeta_la_politica_del_workspace(self):
+        self.client.force_authenticate(user=self.miembro)
+        r = self.client.post(
+            '/api/v1/agents/',
+            {'organization': self.org.id, 'name': 'Por la puerta de atras'},
+            format='json',
+        )
+        self.assertEqual(r.status_code, 403)
+
+    def test_no_se_crea_en_una_empresa_de_la_que_no_se_es_miembro(self):
+        self.client.force_authenticate(user=self.admin)
+        r = self.client.post(
+            '/api/v1/agents/',
+            {'organization': self.org_ajena.id, 'name': 'Invasor'},
+            format='json',
+        )
+        self.assertEqual(r.status_code, 404)
+        self.assertFalse(Agent.objects.filter(name='Invasor').exists())
+
+    def test_un_editor_sigue_creando(self):
+        self.client.force_authenticate(user=self.editor)
+        r = self.client.post(
+            '/api/v1/agents/', {'organization': self.org.id, 'name': 'Legado'}, format='json',
+        )
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(Agent.objects.get(name='Legado').created_by_id, self.editor.id)
+
+
+class ModelosOfrecidosTests(TestCase):
+    """El selector no puede ofrecer un modelo que no sabe conversar."""
+
+    def test_no_ofrece_el_modelo_de_embeddings(self):
+        """Vive en el mismo Ollama y sale en /api/tags, pero solo vectoriza texto."""
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from apps.agents.views import modelos_disponibles
+
+        respuesta = mock.Mock(status_code=200)
+        respuesta.json.return_value = {'models': [
+            {'name': 'qwen2.5:7b'}, {'name': 'embeddinggemma:latest'},
+        ]}
+        with override_settings(EMBEDDINGS_MODEL='embeddinggemma'):
+            with mock.patch('requests.get', return_value=respuesta):
+                ids = [m['id'] for m in modelos_disponibles()['models']]
+        self.assertIn('qwen2.5:7b', ids)
+        self.assertNotIn('embeddinggemma:latest', ids)
+        self.assertNotIn('embeddinggemma', ids)
+
+
+class QuienVeElLapizTests(BaseConstructor):
+    """`editable` en la galería tiene que coincidir con lo que el constructor permite.
+
+    Si no, hay agentes que se pueden editar por API y no tienen por dónde abrirse.
+    """
+
+    def setUp(self):
+        super().setUp()
+        # Un agente sembrado: sin autor, como los que crea `seed_agentes_base`.
+        self.sembrado = Agent.objects.create(organization=self.org, name='Afable')
+        self.crear(self.editor, name='Del Editor')
+
+    def galeria(self, quien):
+        self.client.force_authenticate(user=quien)
+        r = self.client.get('/api/v1/agents/gallery/', {'workspace': self.org.slug})
+        return {a['name']: a['editable'] for a in r.data['results']}
+
+    def test_un_administrador_edita_cualquiera(self):
+        editables = self.galeria(self.admin)
+        self.assertTrue(editables['Afable'])
+        self.assertTrue(editables['Del Editor'])
+
+    def test_un_editor_solo_edita_los_suyos(self):
+        editables = self.galeria(self.editor)
+        self.assertTrue(editables['Del Editor'])
+        self.assertFalse(editables['Afable'])
+
+    def test_un_miembro_no_edita_ninguno(self):
+        self.assertFalse(any(self.galeria(self.miembro).values()))
+
+    def test_la_pestana_de_editables_le_muestra_todos_al_administrador(self):
+        self.client.force_authenticate(user=self.admin)
+        r = self.client.get(
+            '/api/v1/agents/gallery/', {'workspace': self.org.slug, 'tab': 'editables'},
+        )
+        nombres = [a['name'] for a in r.data['results']]
+        self.assertIn('Afable', nombres)
+        self.assertIn('Del Editor', nombres)
+
+    def test_la_pestana_de_editables_le_muestra_los_suyos_al_editor(self):
+        self.client.force_authenticate(user=self.editor)
+        r = self.client.get(
+            '/api/v1/agents/gallery/', {'workspace': self.org.slug, 'tab': 'editables'},
+        )
+        nombres = [a['name'] for a in r.data['results']]
+        self.assertEqual(nombres, ['Del Editor'])
+
+
+class ConfigDeEmpresaEnElConstructorTests(BaseConstructor):
+    """Los tres campos de `AgentConfig` se atienden en la ficha del agente.
+
+    Antes vivían en una pantalla aparte (Admin › Agentes › configurar), así que había
+    dos lugares para configurar el mismo agente. Siguen siendo decisión de la empresa:
+    solo un administrador los toca.
+    """
+
+    def test_un_administrador_los_guarda_al_crear(self):
+        r = self.crear(self.admin, datos='Facturas de Odoo.', reglas='Nunca invente montos.')
+        config = AgentConfig.objects.get(agent_id=r.data['id'])
+        self.assertEqual(config.datos, 'Facturas de Odoo.')
+        self.assertEqual(config.reglas, 'Nunca invente montos.')
+        self.assertTrue(config.esta_configurado)
+
+    def test_un_editor_no_los_guarda(self):
+        """No falla el pedido: se ignoran, y el formulario tampoco se los muestra."""
+        r = self.crear(self.editor, datos='Todo lo que quiera ver.')
+        self.assertEqual(r.status_code, 201)
+        config = AgentConfig.objects.get(agent_id=r.data['id'])
+        self.assertEqual(config.datos, '')
+        self.assertFalse(config.esta_configurado)
+
+    def test_un_administrador_los_edita(self):
+        r = self.crear(self.admin)
+        self.client.force_authenticate(user=self.admin)
+        self.client.patch(
+            f'{URL}{r.data["id"]}/',
+            {'workspace': self.org.slug, 'info_util': 'El año comercial cierra en marzo.'},
+            format='json',
+        )
+        config = AgentConfig.objects.get(agent_id=r.data['id'])
+        self.assertEqual(config.info_util, 'El año comercial cierra en marzo.')
+
+    def test_vaciarlos_devuelve_el_agente_a_pendiente(self):
+        """Es información de la empresa, no una casilla que se marca."""
+        r = self.crear(self.admin, datos='Algo')
+        self.assertTrue(AgentConfig.objects.get(agent_id=r.data['id']).esta_configurado)
+
+        self.client.force_authenticate(user=self.admin)
+        self.client.patch(
+            f'{URL}{r.data["id"]}/', {'workspace': self.org.slug, 'datos': ''}, format='json',
+        )
+        self.assertFalse(AgentConfig.objects.get(agent_id=r.data['id']).esta_configurado)
+
+    def test_la_ficha_los_devuelve_para_llenar_el_formulario(self):
+        r = self.crear(self.admin, reglas='Sin IVA.')
+        self.client.force_authenticate(user=self.admin)
+        ficha = self.client.get(f'{URL}{r.data["id"]}/', {'workspace': self.org.slug})
+        self.assertEqual(ficha.data['reglas'], 'Sin IVA.')
+        self.assertTrue(ficha.data['configurado'])
+
+    def test_un_patch_que_no_los_nombra_no_los_borra(self):
+        r = self.crear(self.admin, datos='Facturas de Odoo.')
+        self.client.force_authenticate(user=self.admin)
+        self.client.patch(
+            f'{URL}{r.data["id"]}/', {'workspace': self.org.slug, 'name': 'Otro nombre'},
+            format='json',
+        )
+        self.assertEqual(AgentConfig.objects.get(agent_id=r.data['id']).datos, 'Facturas de Odoo.')
+
+    def test_las_opciones_dicen_quien_puede_configurarlos(self):
+        for quien, esperado in ((self.admin, True), (self.editor, False)):
+            self.client.force_authenticate(user=quien)
+            r = self.client.get(URL_OPCIONES, {'workspace': self.org.slug})
+            self.assertEqual(r.data['puede_configurar_empresa'], esperado)
+
+
+class QuienEsElAgenteEnTodosLosModosTests(BaseConstructor):
+    """Las Instrucciones del agente tienen que llegar al prompt SIEMPRE.
+
+    Estaban armadas dentro del bloque de "sistemas conectados", así que una empresa
+    sin ERP/SQL enchufado tenía agentes cuyas Instrucciones —el campo que más define a
+    un agente— no llegaban nunca. El constructor escribía en el vacío, y es el caso de
+    cualquier pyme que hoy solo tiene documentos o una carpeta de Drive.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from apps.agents.models import Skill
+
+        # La empresa de la clase base viene con un Odoo conectado, que es justo el caso
+        # que SI funcionaba. Acá se prueba el otro: una empresa sin nada consultable.
+        SystemConnection.objects.filter(organization=self.org).delete()
+
+        self.agente = Agent.objects.create(
+            organization=self.org, name='Cobranzas',
+            instructions='Responde siempre en tres lineas.',
+        )
+        AgentConfig.objects.create(
+            agent=self.agente, datos='Solo las facturas del SII.',
+        )
+        habilidad = Skill.objects.create(
+            organization=self.org, name='Tono', instructions='Trate de usted.',
+        )
+        habilidad.agents.add(self.agente)
+
+    def prompt(self):
+        from apps.agents.views import _build_onboarding_context
+
+        contexto = _build_onboarding_context(self.admin, self.agente, consulta='hola')
+        return contexto['mode'], contexto['system_prompt']
+
+    def test_sin_sistemas_conectados_el_agente_sigue_siendo_el_agente(self):
+        modo, prompt = self.prompt()
+        # El agente corre con herramientas aunque no haya ERP conectado: sin eso no
+        # podría ni buscar en los documentos ni escribir uno.
+        self.assertEqual(modo, 'con_herramientas')
+        self.assertIn('tres lineas', prompt)
+        self.assertIn('facturas del SII', prompt)
+        self.assertIn('Trate de usted', prompt)
+
+    def test_con_sistemas_conectados_tambien(self):
+        """El caso que ya funcionaba: no se puede romper al arreglar el otro."""
+        SystemConnection.objects.create(
+            organization=self.org, name='Odoo', connector_type='odoo', is_active=True,
+        )
+        modo, prompt = self.prompt()
+        self.assertEqual(modo, 'con_herramientas')
+        self.assertIn('tres lineas', prompt)
+        self.assertIn('facturas del SII', prompt)
+
+    def test_el_modelo_del_agente_viaja_en_todos_los_modos(self):
+        """Sin esto, elegir un modelo en la ficha no cambiaba nada sin ERP conectado."""
+        from apps.agents.views import _build_onboarding_context
+
+        self.agente.model = 'claude-sonnet-5'
+        self.agente.save(update_fields=['model'])
+        contexto = _build_onboarding_context(self.admin, self.agente, consulta='hola')
+        self.assertEqual(contexto.get('agent_model'), 'claude-sonnet-5')

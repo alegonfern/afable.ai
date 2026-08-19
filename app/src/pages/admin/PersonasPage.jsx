@@ -52,7 +52,7 @@ export default function PersonasPage() {
       setMiembros(resMiembros.data);
       setInvitaciones(resInvitaciones ? resInvitaciones.data : []);
     } catch {
-      toast.error('No se pudieron cargar las personas del Workspace.');
+      toast.error('No se pudieron cargar las personas de la Empresa.');
     } finally {
       setCargando(false);
     }
@@ -94,7 +94,7 @@ export default function PersonasPage() {
     setMenu({ anchor: null, membresia: null });
     try {
       await api.removeMember(slug, membresia.id);
-      toast.success(`${membresia.user.full_name} salió del Workspace.`);
+      toast.success(`${membresia.user.full_name} salió de la Empresa.`);
       cargar();
     } catch (e) {
       toast.error(e.response?.data?.detail || 'No se pudo sacar a esa persona.');
@@ -224,7 +224,7 @@ export default function PersonasPage() {
         Personas
       </Typography>
       <Typography sx={{ color: textMuted, fontSize: '0.9375rem', mt: 0.75 }}>
-        Administre los miembros del Workspace y sus roles.
+        Administre las personas de la Empresa y sus roles.
       </Typography>
 
       {/* Fila de acción: buscador a la izquierda, acción primaria a la derecha */}

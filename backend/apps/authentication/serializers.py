@@ -25,13 +25,30 @@ class LoginSerializer(serializers.Serializer):
 
 
 class RegisterSerializer(serializers.ModelSerializer):
+    """Lo mínimo para entrar, más el nombre de la empresa.
+
+    ⭐ **El nombre de la empresa se pregunta acá y no después.** Sin él, toda empresa nacía
+    llamándose "Empresa de Pedro": el primer nombre que ve quien se registra —y el que ven
+    después sus colegas— es uno inventado por nosotros. En un producto que se vende como
+    "IA para equipos", empezar con el nombre del equipo mal puesto no es un detalle.
+
+    Es opcional: quien no lo escriba entra igual y lo cambia en Administración. Poner una
+    pared en el registro cuesta más de lo que vale el dato.
+    """
+
     password = serializers.CharField(write_only=True, min_length=8)
+    empresa = serializers.CharField(
+        write_only=True, required=False, allow_blank=True, max_length=200,
+    )
 
     class Meta:
         model = User
-        fields = ['email', 'password', 'first_name', 'last_name']
+        fields = ['email', 'password', 'first_name', 'last_name', 'empresa']
 
     def create(self, validated_data):
+        # `empresa` no es del modelo User: se saca antes de crearlo y la vista la usa para
+        # nombrar la Organization.
+        validated_data.pop('empresa', None)
         return User.objects.create_user(
             username=validated_data['email'],
             email=validated_data['email'],

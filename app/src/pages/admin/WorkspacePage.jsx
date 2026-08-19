@@ -2,12 +2,13 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Box, Button, CircularProgress, Dialog, DialogContent, DialogTitle,
-  IconButton, MenuItem, TextField, Typography, useTheme,
+  IconButton, MenuItem, Stack, TextField, Typography, useTheme,
 } from '@mui/material';
-import { Building2, Plus, Users, X } from 'lucide-react';
+import { Building2, Plus, Upload, Users, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { api } from '../../services/api';
 import { useWorkspace } from '../../context/WorkspaceContext';
+import { MarcaWorkspace } from '../../components/SelectorWorkspace';
 
 const POLITICAS = [
   { value: 'todos', label: 'Todos los miembros' },
@@ -18,16 +19,15 @@ const POLITICAS = [
 const DISPLAY = `'Sora', 'Inter', sans-serif`;
 
 /**
- * Workspace: el entorno de la empresa. **Uno por empresa, 1 a 1.**
+ * Los ajustes de LA EMPRESA: su nombre, rubro, RUT, logo y quién puede crear agentes.
  *
- * Reemplaza a la pantalla "Mis Empresas", que administraba el modelo Organization y
- * trataba las empresas como una lista. Aca no se coleccionan Workspace: son los
- * ajustes de SU empresa. Lo que se crea y se recorre dentro de ella son los
- * Espacios (conocimiento y permisos) y las Salas.
+ * Se llamaba "Workspace" de cuando ese era el nombre de la empresa. Desde los tres
+ * niveles (Empresa → Workspace → Sesión), el Workspace es otra cosa —un área adentro de
+ * la empresa— y esta pantalla no lo administra: los Workspaces se crean y se configuran
+ * en Conocimiento › Workspaces.
  *
- * Lo que se edita aca el backend lo refleja en la Organization enlazada, mientras el
- * chat, las conexiones y los documentos sigan colgando de ella
- * (ver Workspace.mirror_to_organization).
+ * El archivo conserva su nombre para no mover una ruta que ya anda; lo que se lee en
+ * pantalla es lo que tiene que ser correcto.
  */
 export default function WorkspacePage() {
   const theme = useTheme();
@@ -61,20 +61,47 @@ export default function WorkspacePage() {
 
   const guardar = useCallback(async () => {
     if (!form.name.trim()) {
-      toast.error('El Workspace necesita un nombre.');
+      toast.error('La Empresa necesita un nombre.');
       return;
     }
     try {
       setGuardando(true);
       await api.updateWorkspace(slug, form);
       await recargar();
-      toast.success('Workspace actualizado.');
+      toast.success('Empresa actualizado.');
     } catch (e) {
       toast.error(e.response?.data?.detail || 'No se pudo guardar.');
     } finally {
       setGuardando(false);
     }
   }, [form, slug, recargar]);
+
+  /**
+   * Sube (o quita) el logo. Va por su propio pedido y no con el botón "Guardar".
+   *
+   * Dos razones: viaja como `multipart` y el resto del formulario es JSON, y sobre todo,
+   * elegir una imagen en un explorador de archivos ya se siente como haber decidido —
+   * pedir además un Guardar para que aparezca se lee como que no funcionó.
+   */
+  const subirLogo = useCallback(async (archivo) => {
+    if (archivo === undefined) return;
+    try {
+      setGuardando(true);
+      if (archivo) {
+        const fd = new FormData();
+        fd.append('logo', archivo);
+        await api.updateWorkspace(slug, fd);
+      } else {
+        await api.updateWorkspace(slug, { logo: null });
+      }
+      await recargar();
+      toast.success(archivo ? 'Logo actualizado.' : 'Logo quitado.');
+    } catch (e) {
+      toast.error(e.response?.data?.logo?.[0] || 'No se pudo subir el logo.');
+    } finally {
+      setGuardando(false);
+    }
+  }, [slug, recargar]);
 
   const campoSx = {
     '& .MuiOutlinedInput-root': {
@@ -100,16 +127,17 @@ export default function WorkspacePage() {
     <Box sx={{ maxWidth: 1000, mx: 'auto', px: { xs: 2.5, md: 5 }, py: { xs: 4, md: 6 }, width: '100%' }}>
       <Building2 size={24} color={textMuted} strokeWidth={1.75} />
       <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.875rem', fontWeight: 600, mt: 1.5, letterSpacing: '-0.01em' }}>
-        Workspace
+        Su empresa
       </Typography>
       <Typography sx={{ color: textMuted, fontSize: '0.9375rem', mt: 0.75 }}>
-        El entorno de su empresa: sus datos, sus miembros y quién puede crear agentes.
+        Cómo se llama, a qué se dedica y quién puede crear agentes. Es lo que el agente
+        lee antes de contestar, y lo que se imprime en sus comprobantes.
       </Typography>
 
       {!workspace ? (
         <Box sx={{ mt: 4 }}>
           <Typography sx={{ color: textMuted, fontSize: '0.875rem' }}>
-            Todavía no tiene un Workspace. Cree el de su empresa para empezar.
+            Todavía no tiene una empresa creada. Cree la suya para empezar.
           </Typography>
           <Button
             onClick={() => setModalAbierto(true)}
@@ -117,17 +145,54 @@ export default function WorkspacePage() {
             variant="contained"
             sx={{ mt: 2, borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}
           >
-            Crear el Workspace
+            Crear la empresa
           </Button>
         </Box>
       ) : (
         <>
           {!esAdmin && (
             <Typography sx={{ color: textMuted, fontSize: '0.875rem', mt: 3 }}>
-              Su rol en este Workspace es {workspace.my_role}: puede ver estos datos, pero solo un
+              Su rol en esta empresa es {workspace.my_role}: puede ver estos datos, pero solo un
               administrador los edita.
             </Typography>
           )}
+
+          {/* El logo, arriba de los datos: es lo primero que se ve de la empresa en la
+              barra lateral, así que también es lo primero acá. */}
+          <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 3.5 }}>
+            <MarcaWorkspace workspace={workspace} size={56} radio="12px" />
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography sx={{ fontSize: '0.875rem', fontWeight: 600 }}>
+                Logo de la empresa
+              </Typography>
+              <Typography sx={{ fontSize: '0.8125rem', color: textMuted, mt: 0.25 }}>
+                Es cómo se reconoce su empresa en la barra lateral. Sin logo se usa la
+                inicial del nombre.
+              </Typography>
+              {esAdmin && (
+                <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+                  <Button
+                    component="label" size="small" startIcon={<Upload size={14} />}
+                    sx={{ textTransform: 'none', fontWeight: 600 }}
+                  >
+                    {workspace.logo_url ? 'Cambiar' : 'Subir un logo'}
+                    <input
+                      hidden type="file" accept="image/*"
+                      onChange={(e) => subirLogo(e.target.files?.[0])}
+                    />
+                  </Button>
+                  {workspace.logo_url && (
+                    <Button
+                      size="small" onClick={() => subirLogo(null)}
+                      sx={{ textTransform: 'none', fontWeight: 600, color: textMuted }}
+                    >
+                      Quitar
+                    </Button>
+                  )}
+                </Stack>
+              )}
+            </Box>
+          </Stack>
 
           <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, mt: 3.5 }}>
             <TextField
@@ -235,6 +300,8 @@ export default function WorkspacePage() {
             </Button>
           </Box>
 
+          <QuienPuedeQue textMuted={textMuted} borde={borde} bgSuave={bgSuave} />
+
           {esAdmin && (
             <Button
               onClick={guardar}
@@ -261,6 +328,77 @@ export default function WorkspacePage() {
   );
 }
 
+/**
+ * Qué puede hacer cada rol. Se muestra y no se configura, a propósito.
+ *
+ * La alternativa era un desplegable por cada cosa que se puede crear, y una pantalla con
+ * seis selectores de permisos es algo que nadie termina de configurar ni de entender
+ * después. El rol ya contesta la pregunta: lo único que faltaba era poder LEERLO.
+ *
+ * El único permiso que sí se elige es el de agentes, arriba, porque ahí la respuesta
+ * cambia de una empresa a otra: hay equipos donde conviene que cualquiera arme el suyo.
+ */
+function QuienPuedeQue({ textMuted, borde, bgSuave }) {
+  const FILAS = [
+    ['Preguntarle a un agente y trabajar en Sesiones', true, true, true],
+    ['Subir archivos y crear Workspaces', false, true, true],
+    ['Conectar sistemas (Odoo, bases de datos, Drive)', false, true, true],
+    ['Dejar Disparadores andando solos', false, true, true],
+    ['Invitar personas y cambiar roles', false, false, true],
+    ['El plan y los medios de pago', false, false, true],
+  ];
+  const Celda = ({ si }) => (
+    <Box sx={{ textAlign: 'center', color: si ? '#586AD0' : textMuted, opacity: si ? 1 : 0.35 }}>
+      {si ? '●' : '—'}
+    </Box>
+  );
+
+  return (
+    <Box sx={{ mt: 4 }}>
+      <Typography sx={{
+        fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em',
+        textTransform: 'uppercase', color: '#586AD0', mb: 1.5,
+      }}>
+        Quién puede qué
+      </Typography>
+
+      <Box sx={{ border: `1px solid ${borde}`, borderRadius: '10px', overflow: 'hidden' }}>
+        <Box sx={{
+          display: 'grid', gridTemplateColumns: '1fr 92px 92px 92px', gap: 1,
+          px: 2, py: 1.25, bgcolor: bgSuave,
+          fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.04em',
+          textTransform: 'uppercase', color: textMuted,
+        }}>
+          <span />
+          <Box sx={{ textAlign: 'center' }}>Miembro</Box>
+          <Box sx={{ textAlign: 'center' }}>Editor</Box>
+          <Box sx={{ textAlign: 'center' }}>Admin</Box>
+        </Box>
+
+        {FILAS.map(([que, m, e, a], i) => (
+          <Box
+            key={que}
+            sx={{
+              display: 'grid', gridTemplateColumns: '1fr 92px 92px 92px', gap: 1,
+              px: 2, py: 1.25, alignItems: 'center',
+              borderTop: i ? `1px solid ${borde}` : 'none',
+              fontSize: '0.875rem',
+            }}
+          >
+            <span>{que}</span>
+            <Celda si={m} /><Celda si={e} /><Celda si={a} />
+          </Box>
+        ))}
+      </Box>
+
+      <Typography sx={{ fontSize: '0.8125rem', color: textMuted, mt: 1 }}>
+        El rol de cada persona se cambia en Personas.
+      </Typography>
+    </Box>
+  );
+}
+
+
 function ModalNuevoWorkspace({ abierto, cerrar, sectores, alCrear }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
@@ -282,11 +420,11 @@ function ModalNuevoWorkspace({ abierto, cerrar, sectores, alCrear }) {
     try {
       setCreando(true);
       const { data } = await api.createWorkspace({ name: nombre.trim(), sector });
-      toast.success(`Workspace ${data.name} creado.`);
+      toast.success(`Empresa ${data.name} creado.`);
       cerrar();
       alCrear(data);
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'No se pudo crear el Workspace.');
+      toast.error(e.response?.data?.detail || 'No se pudo crear la Empresa.');
     } finally {
       setCreando(false);
     }
@@ -300,7 +438,7 @@ function ModalNuevoWorkspace({ abierto, cerrar, sectores, alCrear }) {
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}
       >
-        Nuevo Workspace
+        Nueva empresa
         <IconButton size="small" onClick={cerrar} sx={{ color: textMuted }}>
           <X size={16} />
         </IconButton>
@@ -337,7 +475,7 @@ function ModalNuevoWorkspace({ abierto, cerrar, sectores, alCrear }) {
           fullWidth variant="contained"
           sx={{ mt: 3, mb: 1, borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}
         >
-          {creando ? 'Creando…' : 'Crear Workspace'}
+          {creando ? 'Creando…' : 'Crear Empresa'}
         </Button>
       </DialogContent>
     </Dialog>

@@ -19,8 +19,12 @@ class AgentSerializer(serializers.ModelSerializer):
         model = Agent
         fields = ['id', 'organization', 'name', 'handle', 'description', 'instructions',
                   'area', 'systems', 'model', 'tools_summary',
-                  'recommended_frequency', 'is_active', 'created_at']
-        read_only_fields = ['id', 'created_at']
+                  'recommended_frequency', 'icon', 'accent', 'is_active', 'created_at']
+        # `handle` lo genera `Agent.save()` desde el nombre y no se recalcula al
+        # renombrar: es la identidad con la que se lo menciona en las conversaciones.
+        # Estaba escribible y ademas salia como REQUERIDO, asi que un POST sin handle
+        # fallaba con 400 — parte de por que este endpoint no lo llamaba nadie.
+        read_only_fields = ['id', 'handle', 'created_at']
 
 
 class MessageSerializer(serializers.ModelSerializer):
@@ -28,12 +32,24 @@ class MessageSerializer(serializers.ModelSerializer):
     # contestado varios agentes y al recargar hay que poder distinguirlos.
     agent_name = serializers.CharField(source='agent.name', read_only=True, default=None)
     agent_handle = serializers.CharField(source='agent.handle', read_only=True, default=None)
+    # Quien lo escribio. En un hilo de equipo, sin esto todas las preguntas parecen de la
+    # misma persona.
+    autor = serializers.SerializerMethodField()
 
     class Meta:
         model = Message
         fields = ['id', 'role', 'content', 'agent', 'agent_name', 'agent_handle',
-                  'model_used', 'created_at']
+                  'autor', 'fuentes', 'artefactos', 'model_used', 'created_at']
         read_only_fields = ['id', 'created_at']
+
+    def get_autor(self, obj):
+        if obj.user is None:
+            return None
+        return {
+            'id': obj.user.id,
+            'nombre': obj.user.get_full_name() or obj.user.email.split('@')[0],
+            'email': obj.user.email,
+        }
 
 
 class ConversationSerializer(serializers.ModelSerializer):
@@ -52,10 +68,15 @@ class ConversationSerializer(serializers.ModelSerializer):
 class ConversationListSerializer(serializers.ModelSerializer):
     last_message = serializers.SerializerMethodField()
     agent_name = serializers.CharField(source='agent.name', read_only=True)
+    # La Sesión en la que vive el hilo, si está compartido. La barra lateral la usa para
+    # distinguir de un vistazo lo personal de lo que ve el equipo.
+    sesion_nombre = serializers.CharField(source='sesion.name', read_only=True, default=None)
+    sesion_slug = serializers.CharField(source='sesion.slug', read_only=True, default=None)
 
     class Meta:
         model = Conversation
-        fields = ['id', 'agent', 'agent_name', 'title', 'last_message', 'created_at', 'updated_at']
+        fields = ['id', 'agent', 'agent_name', 'title', 'last_message',
+                  'sesion', 'sesion_nombre', 'sesion_slug', 'created_at', 'updated_at']
 
     def get_last_message(self, obj):
         msg = obj.messages.last()
@@ -96,6 +117,26 @@ class SkillWriteSerializer(serializers.ModelSerializer):
             )
         return value
 
+    def validate_name(self, value):
+        """El nombre no se repite dentro de la misma empresa.
+
+        La base ya lo impedía (`unico_nombre_de_habilidad_por_empresa`), pero sin esta
+        validación la restricción saltaba como IntegrityError y la persona veía un error
+        del sistema en vez de "ya tiene una Habilidad con ese nombre". Un choque de
+        nombres es un caso normal, no una falla.
+        """
+        nombre = value.strip()
+        organizacion = self.context.get('organization')
+        if not nombre or organizacion is None:
+            return nombre
+
+        repetidas = Skill.objects.filter(organization=organizacion, name__iexact=nombre)
+        if self.instance is not None:
+            repetidas = repetidas.exclude(pk=self.instance.pk)
+        if repetidas.exists():
+            raise serializers.ValidationError('Ya tiene una Habilidad con ese nombre.')
+        return nombre
+
 
 class DocumentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -119,14 +160,18 @@ class AutomationSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(ruta) if request else ruta
 
     connection_name = serializers.CharField(source='connection.name', read_only=True)
+    sesion_name = serializers.CharField(source='sesion.name', read_only=True)
+    agent_name = serializers.CharField(source='agent.name', read_only=True)
 
     class Meta:
         model = Automation
         fields = ['id', 'organization', 'name', 'prompt', 'interval_minutes', 'notify_email',
                   'schedule_config', 'webhook_url', 'disparador',
+                  'sesion', 'sesion_name', 'crear_tarea', 'agent', 'agent_name',
                   'is_active', 'trigger_type', 'connection', 'connection_name', 'event_type',
                   'event_config', 'last_run_at', 'last_result', 'last_error', 'run_count', 'created_at']
         read_only_fields = ['id', 'connection_name', 'webhook_url', 'disparador',
+                            'sesion_name', 'agent_name',
                             'last_run_at', 'last_result', 'last_error',
                             'run_count', 'created_at']
 
@@ -146,6 +191,25 @@ class AutomationSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({'event_config': 'Indica la tabla (o modelo Odoo) a vigilar.'})
         elif not get('prompt').strip():
             raise serializers.ValidationError({'prompt': 'El prompt es obligatorio en las programadas.'})
+
+        # Un encargo cuyo resultado no va a ninguna parte no es un encargo. Antes el
+        # correo era obligatorio y esto no podía pasar; desde que se puede publicar en una
+        # Sesión, se puede quedar sin ninguno de los dos.
+        if not get('notify_email').strip() and not get('sesion', None):
+            raise serializers.ValidationError({
+                'notify_email': 'Di a dónde llega el resultado: un correo, una Sesión, o los dos.',
+            })
+
+        # La Sesión tiene que ser del Workspace de esta empresa. Sin esto, alguien podría
+        # hacer publicar a un agente en la Sesión de otra empresa mandando un id.
+        sesion = get('sesion', None)
+        if sesion is not None:
+            org = get('organization', None)
+            org_id = getattr(org, 'pk', org)
+            if sesion.workspace.organization_id != org_id:
+                raise serializers.ValidationError({
+                    'sesion': 'Esa Sesión no es de esta empresa.',
+                })
         return data
 
 

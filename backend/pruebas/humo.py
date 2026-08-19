@@ -1,0 +1,133 @@
+"""Ejecuta las acciones de escritura de la app y reporta las que revientan.
+
+No busca 4xx (esos son respuestas legitimas: falta un campo, no tiene permiso). Busca
+**500**: el camino que nadie recorrio desde la cirugia y que revienta al primer intento.
+"""
+import json, urllib.request, urllib.error
+
+BASE = 'http://localhost:8001/api/v1'
+
+def pedir(metodo, ruta, token, cuerpo=None):
+    datos = json.dumps(cuerpo).encode() if cuerpo is not None else None
+    req = urllib.request.Request(f'{BASE}{ruta}', data=datos, method=metodo)
+    req.add_header('Content-Type', 'application/json')
+    if token:
+        req.add_header('Authorization', f'Bearer {token}')
+    try:
+        with urllib.request.urlopen(req) as r:
+            return r.status, r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
+    except Exception as e:
+        return 0, str(e)[:200]
+
+tok = json.loads(pedir('POST', '/auth/login/', '', 
+      {'email': 'alegonfern@gmail.com', 'password': 'afable123'})[1])['access']
+EMP = 'workspace-de-alexis'
+
+acciones = [
+    ('crear Workspace',      'POST',   f'/workspaces/{EMP}/espacios/', {'name': 'Humo', 'visibility': 'abierto'}),
+    ('invitar persona',      'POST',   f'/workspaces/{EMP}/invitations/', {'email': 'humo@afable.test', 'role': 'miembro'}),
+    ('editar empresa',       'PATCH',  f'/workspaces/{EMP}/', {'description': 'prueba de humo'}),
+    ('crear Sesion',         'POST',   '/sesiones/', {'workspace': EMP, 'name': 'Humo'}),
+    ('crear agente',         'POST',   '/agents/constructor/', {'workspace': EMP, 'name': 'Humo', 'instructions': 'Prueba.'}),
+    ('crear habilidad',      'POST',   '/agents/habilidades/', {'name': 'Humo', 'instructions': 'Prueba.'}),
+    ('crear disparador',     'POST',   '/agents/automations/', {'name': 'Humo', 'prompt': 'x', 'interval_minutes': 1440, 'notify_email': 'a@b.cl'}),
+    ('crear carpeta',        'POST',   f'/archivos/carpetas/?workspace={EMP}', {'nombre': 'Humo', 'workspace': EMP}),
+    ('explorador',           'GET',    f'/archivos/?workspace={EMP}', None),
+    ('compartir archivo',    'POST',   f'/archivos/compartir/?workspace={EMP}', {'workspace': EMP}),
+    ('facturacion: estado',  'GET',    f'/workspaces/{EMP}/facturacion/', None),
+    ('suscribir',            'POST',   f'/workspaces/{EMP}/facturacion/suscribir/', {'plan_id': 'afable_starter_monthly'}),
+    ('primeros pasos',       'POST',   f'/workspaces/{EMP}/primeros-pasos/', {'mostrar': True}),
+    ('mensaje a soporte',    'POST',   '/soporte/', {'texto': 'prueba de humo'}),
+    ('chat directo',         'POST',   '/agents/direct-chat/', {'message': 'hola', 'workspace': EMP}),
+    ('tareas del workspace', 'GET',    f'/tareas/?workspace={EMP}', None),
+    ('galeria de agentes',   'GET',    f'/agents/gallery/?workspace={EMP}', None),
+    ('feed de la Sesion',    'GET',    f'/sesiones/cliente-rever/feed/?workspace={EMP}', None),
+    ('tareas de la Sesion',  'POST',   f'/sesiones/cliente-rever/tareas/', {'workspace': EMP, 'title': 'Humo'}),
+    ('conexiones',           'GET',    '/organizations/connections/', None),
+    ('contexto de empresa',  'GET',    '/organizations/dashboard/', None),
+    ('modelos',              'GET',    '/agents/models/', None),
+    ('conversaciones',       'GET',    '/agents/conversations/', None),
+]
+
+# ── Segunda tanda: EDITAR y BORRAR ──────────────────────────────────────────
+# Son los que menos se prueban y los que mas rompe una cirugia de modelos: crear algo
+# suele estar cubierto, pero editarlo o borrarlo recorre codigo que nadie mira.
+def crear(ruta, cuerpo):
+    """Crea algo y devuelve su id, para despues editarlo y borrarlo."""
+    codigo, resp = pedir('POST', ruta, tok, cuerpo)
+    if codigo not in (200, 201):
+        return None
+    try:
+        return json.loads(resp).get('id')
+    except Exception:
+        return None
+
+id_ws = crear(f'/workspaces/{EMP}/espacios/', {'name': 'Humo edicion', 'visibility': 'abierto'})
+id_hab = crear('/agents/habilidades/', {'name': 'Humo edicion', 'instructions': 'x'})
+id_ses = crear('/sesiones/', {'workspace': EMP, 'name': 'Humo edicion'})
+id_carp = crear(f'/archivos/carpetas/?workspace={EMP}', {'nombre': 'Humo edicion', 'workspace': EMP})
+id_agente = crear('/agents/constructor/', {'workspace': EMP, 'name': 'Humo edicion', 'instructions': 'x'})
+
+acciones += [
+    ('editar Workspace',   'PATCH',  f'/workspaces/{EMP}/espacios/humo-edicion/', {'description': 'x'}),
+    ('editar habilidad',   'PATCH',  f'/agents/habilidades/{id_hab}/', {'description': 'x'}),
+    ('editar Sesion',      'PATCH',  f'/sesiones/humo-edicion/', {'workspace': EMP, 'name': 'Humo 2'}),
+    ('editar carpeta',     'PATCH',  f'/archivos/carpetas/{id_carp}/?workspace={EMP}', {'nombre': 'Humo 2'}),
+    ('editar agente',      'PATCH',  f'/agents/constructor/{id_agente}/', {'workspace': EMP, 'description': 'x'}),
+    ('borrar habilidad',   'DELETE', f'/agents/habilidades/{id_hab}/', None),
+    ('borrar carpeta',     'DELETE', f'/archivos/carpetas/{id_carp}/?workspace={EMP}', None),
+    ('borrar Sesion',      'DELETE', f'/sesiones/humo-edicion/?workspace={EMP}', None),
+    ('borrar Workspace',   'DELETE', f'/workspaces/{EMP}/espacios/humo-edicion/', None),
+    ('borrar agente',      'DELETE', f'/agents/{id_agente}/', None),
+]
+
+# ── Tercera tanda: archivos, versiones y permisos ───────────────────────────
+# Es la superficie con mas cirugia encima (carpetas, versiones, permisos por archivo) y
+# la que menos se recorre a mano: nadie abre el historial de un documento todos los dias.
+codigo, resp = pedir('GET', f'/archivos/?workspace={EMP}', tok)
+doc_id = None
+try:
+    docs = json.loads(resp).get('documentos') or []
+    doc_id = docs[0]['id'] if docs else None
+except Exception:
+    pass
+
+if doc_id:
+    acciones += [
+        ('ver documento',      'GET',   f'/archivos/documentos/{doc_id}/?workspace={EMP}', None),
+        ('contenido',          'GET',   f'/archivos/documentos/{doc_id}/contenido/?workspace={EMP}', None),
+        ('versiones',          'GET',   f'/archivos/documentos/{doc_id}/versiones/?workspace={EMP}', None),
+        ('permisos del doc',   'GET',   f'/archivos/compartir/?workspace={EMP}&documento={doc_id}', None),
+        ('restringir doc',     'POST',  f'/archivos/compartir/?workspace={EMP}',
+                                        {'workspace': EMP, 'documento': doc_id, 'restringido': True}),
+        ('abrir doc',          'POST',  f'/archivos/compartir/?workspace={EMP}',
+                                        {'workspace': EMP, 'documento': doc_id, 'restringido': False}),
+        ('renombrar doc',      'PATCH', f'/archivos/documentos/{doc_id}/?workspace={EMP}', {'title': 'Humo renombrado'}),
+    ]
+
+acciones += [
+    ('tareas de la empresa',  'GET',  f'/tareas/?workspace={EMP}&estado=abiertas', None),
+    ('planes publicos',       'GET',  '/payments/plans/', None),
+    ('medios de pago',        'GET',  f'/workspaces/{EMP}/facturacion/metodos/', None),
+    ('mis datos',             'GET',  '/user/me/', None),
+    ('mi contexto',           'GET',  '/user/me/context/', None),
+    ('personas',              'GET',  f'/workspaces/{EMP}/members/', None),
+    ('invitaciones',          'GET',  f'/workspaces/{EMP}/invitations/', None),
+    ('sectores',              'GET',  '/workspaces/sectores/', None),
+]
+
+print(f'{"":3} {"accion":24} {"codigo"}')
+malos = []
+for nombre, metodo, ruta, cuerpo in acciones:
+    codigo, cuerpo_resp = pedir(metodo, ruta, tok, cuerpo)
+    marca = '💥' if codigo in (0, 500) else ('  ' if codigo < 400 else '· ')
+    print(f'{marca} {nombre:24} {codigo}')
+    if codigo in (0, 500):
+        malos.append((nombre, ruta, cuerpo_resp[:160]))
+
+print()
+print('REVIENTAN:', len(malos))
+for n, r, c in malos:
+    print(f'  · {n} ({r})')

@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import {
   Box, Button, CircularProgress, Menu, MenuItem, TextField, Typography, useTheme,
 } from '@mui/material';
-import { Bot, ChevronDown, Plus, Search, Settings2, Star } from 'lucide-react';
+import { Bot, ChevronDown, Info, Pencil, Plus, Search, Settings2, Star } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { api } from '../../services/api';
+import FichaDelAgente from '../../components/FichaDelAgente';
 import { useWorkspace } from '../../context/WorkspaceContext';
 
 const PESTANAS = [
@@ -35,7 +36,37 @@ const ORDENES = [
  *                      "Chatear con…", sin Crear/Gestionar (que sacan de la
  *                      pantalla) y sin el margen superior de página.
  */
-export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorEspacio = false }) {
+/**
+ * La cara del agente: su emoji sobre su color.
+ *
+ * ⭐ Antes todas las tarjetas llevaban el MISMO robot gris, así que la galería se leía
+ * como una lista de texto y nadie distinguía al que revisa el IVA del que redacta
+ * propuestas. Un componente que no se reconoce no se usa — y los agentes son el centro
+ * de lo que Afable ofrece.
+ *
+ * El color nunca viene vacío (lo resuelve el backend desde el handle), así que ninguna
+ * tarjeta cae de vuelta al gris.
+ */
+function CaraDelAgente({ agente, size = 34 }) {
+  const cara = agente.cara || {};
+  const color = cara.accent || '#586AD0';
+  return (
+    <Box sx={{
+      width: size, height: size, borderRadius: `${Math.round(size / 3.6)}px`, flexShrink: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: `${Math.round(size * 0.5)}px`, lineHeight: 1,
+      bgcolor: cara.icon ? `${color}26` : color,
+      color: '#fff',
+      border: cara.icon ? `1px solid ${color}59` : 'none',
+    }}>
+      {cara.icon || (agente.handle || agente.name || '?').trim().charAt(0).toUpperCase()}
+    </Box>
+  );
+}
+
+export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorEspacio = true }) {
+  // Qué agente se está mirando en la ficha. Uno solo: es un panel, no una pila.
+  const [fichaDe, setFichaDe] = useState(null);
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const navigate = useNavigate();
@@ -60,7 +91,6 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
   const [hayMas, setHayMas] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [puedeCrear, setPuedeCrear] = useState(false);
-  const [menuCrear, setMenuCrear] = useState(null);
   const [menuGestionar, setMenuGestionar] = useState(null);
   const [menuOrden, setMenuOrden] = useState(null);
 
@@ -157,21 +187,45 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25 }}>
-        <Box sx={{
-          width: 34, height: 34, borderRadius: '9px', flexShrink: 0,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          bgcolor: 'rgba(88, 106, 208, 0.14)', color: '#9BA6E3',
-        }}>
-          <Bot size={18} />
-        </Box>
+        <CaraDelAgente agente={agente} />
         <Box sx={{ minWidth: 0, flex: 1 }}>
+          {/* El HANDLE como título: es cómo se lo invoca. Escondido, había que abrir el
+              constructor para saber que se escribe `@analisis` — la funcionalidad más
+              propia del producto quedaba a ciegas. El nombre largo va en la descripción. */}
           <Typography sx={{ fontSize: '0.9375rem', fontWeight: 600, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {agente.name}
+            {agente.handle ? `@${agente.handle}` : agente.name}
           </Typography>
           <Typography sx={{ fontSize: '0.8125rem', color: textMuted, lineHeight: 1.3 }}>
             {agente.author}
           </Typography>
         </Box>
+        {/* Qué hace, a qué alcanza y qué preguntarle. La tarjeta sola no alcanza para
+            ELEGIR: dice el nombre y una frase, y con eso nadie sabe si el agente está
+            viendo sus documentos o contestando de memoria. */}
+        <Box
+          onClick={(e) => { e.stopPropagation(); setFichaDe(agente.id); }}
+          title="Qué hace y a qué alcanza"
+          sx={{
+            display: 'flex', p: 0.5, borderRadius: '6px', flexShrink: 0, cursor: 'pointer',
+            color: textMuted, '&:hover': { bgcolor: bgSuave, color: theme.palette.text.primary },
+          }}
+        >
+          <Info size={15} />
+        </Box>
+        {/* El backend ya marcaba `editable` y ese permiso no llevaba a ninguna
+            parte: sin este lápiz, un agente propio no se podía volver a abrir. */}
+        {agente.editable && (
+          <Box
+            onClick={(e) => { e.stopPropagation(); navigate(`/app/agentes/${agente.id}/editar`); }}
+            title="Editar este agente"
+            sx={{
+              display: 'flex', p: 0.5, borderRadius: '6px', flexShrink: 0, cursor: 'pointer',
+              color: textMuted, '&:hover': { bgcolor: bgSuave, color: theme.palette.text.primary },
+            }}
+          >
+            <Pencil size={15} />
+          </Box>
+        )}
         <Box
           onClick={(e) => alternarFavorito(agente, e)}
           title={agente.is_favorite ? 'Quitar de favoritos' : 'Marcar como favorito'}
@@ -205,18 +259,12 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
         '&:hover': { bgcolor: bgSuave },
       }}
     >
-      <Box sx={{
-        width: 26, height: 26, borderRadius: '7px', flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        bgcolor: 'rgba(88, 106, 208, 0.14)', color: '#9BA6E3',
-      }}>
-        <Bot size={14} />
-      </Box>
+      <CaraDelAgente agente={agente} size={26} />
       <Typography sx={{
         fontSize: '0.875rem', fontWeight: 600, flexShrink: 0, maxWidth: 190,
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       }}>
-        {agente.name}
+        {agente.handle ? `@${agente.handle}` : agente.name}
       </Typography>
       <Typography sx={{
         fontSize: '0.8125rem', color: textMuted, flex: 1, minWidth: 0,
@@ -280,12 +328,12 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
         {!embebida && (
           <>
             <Button
-              onClick={(e) => setMenuCrear(e.currentTarget)}
-              startIcon={<Plus size={15} />} endIcon={<ChevronDown size={14} />}
+              onClick={() => navigate('/app/agentes/nuevo')}
+              startIcon={<Plus size={15} />}
               disabled={!puedeCrear}
               sx={botonSx}
             >
-              Crear
+              Crear agente
             </Button>
             <Button
               onClick={(e) => setMenuGestionar(e.currentTarget)}
@@ -393,18 +441,13 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
         {cargando && <CircularProgress size={22} sx={{ color: '#586AD0' }} />}
       </Box>
 
-      <Menu anchorEl={menuCrear} open={Boolean(menuCrear)} onClose={() => setMenuCrear(null)}>
-        <MenuItem onClick={() => { setMenuCrear(null); navigate('/app/agentes'); }} sx={{ fontSize: '0.9375rem' }}>
-          Agente nuevo
-        </MenuItem>
-        <MenuItem onClick={() => { setMenuCrear(null); navigate('/app/home'); }} sx={{ fontSize: '0.9375rem' }}>
-          Desde un agente existente
-        </MenuItem>
-      </Menu>
-
+      {/* "Crear" era un desplegable de dos opciones y la segunda ("Desde un agente
+          existente") llevaba a la galería de plantillas, que se retiró: ahora que el
+          constructor existe, crear desde cero cubre el caso. Con una sola opción, el
+          desplegable no aporta — el botón va directo. */}
       <Menu anchorEl={menuGestionar} open={Boolean(menuGestionar)} onClose={() => setMenuGestionar(null)}>
-        <MenuItem onClick={() => { setMenuGestionar(null); navigate('/app/agentes'); }} sx={{ fontSize: '0.9375rem' }}>
-          Ver todos los agentes
+        <MenuItem onClick={() => { setMenuGestionar(null); navigate('/app/admin/agentes'); }} sx={{ fontSize: '0.9375rem' }}>
+          Configurar agentes
         </MenuItem>
         <MenuItem onClick={() => { setMenuGestionar(null); navigate('/app/contexto'); }} sx={{ fontSize: '0.9375rem' }}>
           Espacios y conexiones
@@ -423,6 +466,12 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
           </MenuItem>
         ))}
       </Menu>
+
+      {/* La ficha del agente. Panel lateral y no una pantalla nueva: quien está eligiendo
+          a cuál preguntarle no debería perder la galería para averiguarlo. */}
+      <FichaDelAgente
+        agenteId={fichaDe} workspace={slug} onCerrar={() => setFichaDe(null)}
+      />
     </Box>
   );
 }

@@ -166,6 +166,14 @@ def _sync_connection(conn):
         from services.document_processing import process_document
         result = process_document(_BytesWrapper(dl.content), content_type)
 
+        # El texto que habia antes, para saber si hay que reindexar. Abrir o
+        # renombrar un documento de Google le mueve el `modifiedTime` sin cambiarle
+        # una letra, y vectorizar de nuevo un archivo identico es puro gasto de CPU
+        # en cada vuelta del corredor.
+        texto_anterior = CompanyDocument.objects.filter(
+            organization=org, external_id=f['id'],
+        ).values_list('extracted_text', flat=True).first()
+
         doc, _ = CompanyDocument.objects.update_or_create(
             organization=org, external_id=f['id'],
             defaults={
@@ -176,6 +184,10 @@ def _sync_connection(conn):
             },
         )
         doc.file.save(filename, ContentFile(dl.content), save=True)
+
+        if (result['extracted_text'] or '') != (texto_anterior or ''):
+            from services.indexing import indexar_documento_sin_ruido
+            indexar_documento_sin_ruido(doc)
 
     conn.schema_cache = {'files': new_known}
     conn.last_synced_at = timezone.now()

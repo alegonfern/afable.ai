@@ -3,24 +3,25 @@ import Cookies from 'js-cookie';
 import {
   Box, Typography, IconButton, TextField,
   Tooltip, Chip, CircularProgress, useTheme, Avatar, Skeleton,
-  Snackbar, Alert, Button, Menu, MenuItem, Collapse,
+  Button, Menu, MenuItem, Collapse,
 } from '@mui/material';
 import {
-  Send, Paperclip, AtSign, Bot, User, Sparkles,
+  Send, Paperclip, AtSign, User, Sparkles,
   Database, FileText, TrendingUp, BarChart2, Users,
   Copy, ThumbsUp, ChevronDown, AlertCircle, RefreshCw,
   ArrowUpRight, X, Plug, GitBranch, Pencil,
 } from 'lucide-react';
 import { useNavigate, useLocation, useOutletContext } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { AfableMark } from '../components/Logo';
 import { api } from '../services/api';
 import AgentesGaleria from './trabajo/AgentesGaleria';
 import SelectorAgente from './trabajo/SelectorAgente';
-import SelectorEspacio from '../components/SelectorEspacio';
 import MencionAgentes, { aplicarMencion, detectarMencion, filtrarAgentes }
   from '../components/MencionAgentes';
 import { useApp } from '../context/AppContext';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { DocumentoAlLado, TarjetaDeArtefacto } from '../components/DocumentoDelChat';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Cookies2 from 'js-cookie';
@@ -96,8 +97,44 @@ function ThinkingLoader({ step, label }) {
 }
 
 // ── Source badge ──────────────────────────────────────────────────────────────
-function SourceBadge({ content }) {
-  const match = content.match(/\[Fuente:\s*([^\]]+)\]/);
+/**
+ * En qué se apoyó la respuesta, y **se puede abrir de un clic**.
+ *
+ * Antes decía el nombre del documento en texto gris: quien quería comprobar la cifra
+ * tenía que ir a Archivos y buscarlo a mano. Para una empresa que va a DECIDIR con esa
+ * respuesta, poder verificarla en un clic es lo que separa un juguete de una herramienta.
+ *
+ * `fuentes` llega como dato (`[{id, titulo}]`) y se guarda en el mensaje, así que
+ * sobrevive a recargar. El texto plano se sigue leyendo como respaldo: los mensajes
+ * anteriores a este cambio no tienen `fuentes` y no por eso deben quedarse sin su cita.
+ */
+function SourceBadge({ content, fuentes, navigate }) {
+  const conId = (fuentes || []).filter((f) => f && f.id);
+  if (conId.length) {
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.75, flexWrap: 'wrap' }}>
+        <Database size={11} color="#555" />
+        {conId.map((f) => (
+          <Box
+            key={f.id}
+            onClick={() => navigate(`/app/archivos/${f.id}`)}
+            title="Abrir el documento"
+            sx={{
+              display: 'inline-flex', alignItems: 'center', gap: 0.4,
+              px: 0.75, py: 0.15, borderRadius: '5px', cursor: 'pointer',
+              fontSize: '0.7rem', color: '#9BA6E3',
+              border: '1px solid rgba(155, 166, 227, 0.3)',
+              '&:hover': { bgcolor: 'rgba(155, 166, 227, 0.12)' },
+            }}
+          >
+            {f.titulo}
+          </Box>
+        ))}
+      </Box>
+    );
+  }
+
+  const match = (content || '').match(/\[Fuente:\s*([^\]]+)\]/);
   if (!match) return null;
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.75 }}>
@@ -139,13 +176,16 @@ function AttachmentBadge({ content }) {
 }
 
 // ── Message bubble ────────────────────────────────────────────────────────────
-function MessageBubble({ msg, onReintentar, onRamificar, onEditar }) {
+function MessageBubble({ msg, onReintentar, onRamificar, onEditar, yoId, navigate, onAbrirDoc }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const [copied, setCopied] = useState(false);
   const [editando, setEditando] = useState(false);
   const [borrador, setBorrador] = useState('');
   const isUser = msg.role === 'user';
+  // Un mensaje sin autor es de antes de que los hilos fueran de a varios: se trata
+  // como propio, que es lo que era.
+  const esMio = !msg.autor || msg.autor.id === yoId;
 
   // Strip source citation from visible content
   const cleanContent = stripAttachment((msg.content || '').replace(/\n?\[Fuente:[^\]]+\]/g, '')).trim();
@@ -205,10 +245,20 @@ function MessageBubble({ msg, onReintentar, onRamificar, onEditar }) {
           </Tooltip>
         </Box>
       )}
-      <Box sx={{ maxWidth: '72%', bgcolor: '#586AD0', color: '#fff',
-        px: 2, py: 1.25, borderRadius: '14px 14px 4px 14px', fontSize: '0.88rem', lineHeight: 1.65 }}>
-        {stripAttachment(msg.content)}
-        <AttachmentBadge content={msg.content} />
+      <Box sx={{ maxWidth: '72%' }}>
+        {/* Quien pregunto. Solo cuando NO fui yo: en un hilo propio, firmar cada
+            mensaje con el nombre de uno mismo es ruido. */}
+        {msg.autor && !esMio && (
+          <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: '#9BA6E3', mb: 0.4, textAlign: 'right' }}>
+            {msg.autor.nombre}
+          </Typography>
+        )}
+        <Box sx={{ bgcolor: esMio ? '#586AD0' : (d ? '#33365e' : '#c7cdf0'),
+          color: esMio ? '#fff' : (d ? '#e8e8ea' : '#1a1a1a'),
+          px: 2, py: 1.25, borderRadius: '14px 14px 4px 14px', fontSize: '0.88rem', lineHeight: 1.65 }}>
+          {stripAttachment(msg.content)}
+          <AttachmentBadge content={msg.content} />
+        </Box>
       </Box>
       <Avatar sx={{ width: 28, height: 28, bgcolor: d ? '#2a2a2a' : '#e5e5e5', flexShrink: 0, mt: 0.25 }}>
         <User size={14} color={d ? '#aaa' : '#666'} />
@@ -221,7 +271,7 @@ function MessageBubble({ msg, onReintentar, onRamificar, onEditar }) {
       <Box sx={{ width: 28, height: 28, borderRadius: '8px', flexShrink: 0, mt: 0.25,
         background: 'linear-gradient(135deg, #586AD0 0%, #2F42A6 100%)',
         display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Bot size={14} color="#fff" />
+        <AfableMark size={14} color="#fff" />
       </Box>
       <Box sx={{ flex: 1, minWidth: 0 }}>
         {/* Quien contesto ESTE mensaje. En un hilo pueden haber contestado
@@ -250,11 +300,16 @@ function MessageBubble({ msg, onReintentar, onRamificar, onEditar }) {
               </Box>
             </Box>
           ) : <MarkdownContent content={cleanContent} /> }
+          {/* Lo que el agente dejó ESCRITO en esta respuesta. Va dentro de la burbuja y
+              no al pie con las fuentes: no es en qué se apoyó, es lo que hizo. */}
+          {!msg.streaming && onAbrirDoc && (
+            <TarjetaDeArtefacto artefactos={msg.artefactos} onAbrir={onAbrirDoc} />
+          )}
         </Box>
         {!msg.streaming && (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 0.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <SourceBadge content={msg.content || ''} />
+              <SourceBadge content={msg.content || ''} fuentes={msg.fuentes} navigate={navigate} />
               <ModelBadge model={msg.model || msg.model_used} />
             </Box>
             <Box sx={{ display: 'flex', gap: 0.5 }}>
@@ -447,8 +502,20 @@ export default function ChatPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { focusMode } = useOutletContext() || {};
-  const { aiModel } = useApp();
+  const { aiModel, currentUser } = useApp();
   const { slug, espacioSlug } = useWorkspace();
+  // Qué documento está abierto al lado. Uno solo: dos paneles competirían por el ancho y
+  // la conversación quedaría en una franja.
+  const [docAlLado, setDocAlLado] = useState(null);
+  // Sube cada vez que el agente deja algo escrito, para que el panel abierto se ponga al día.
+  const [refrescoDoc, setRefrescoDoc] = useState(0);
+  // La Sesion desde la que se abrio el hilo, si vino de una.
+  //
+  // Es una REFERENCIA y no estado a proposito: el mensaje inicial se manda en el mismo
+  // tick en que llega la Sesion, y `setState` no se aplica hasta el dibujado siguiente
+  // — con estado, el primer mensaje salia sin Sesion y la conversacion quedaba
+  // personal. Una ref se lee al instante.
+  const sesionDelHilo = useRef(null);
 
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -464,7 +531,6 @@ export default function ChatPage() {
   const [agentesMencionables, setAgentesMencionables] = useState([]);
   const [mencion, setMencion] = useState(null);      // { consulta, desde } o null
   const [mencionIdx, setMencionIdx] = useState(0);
-  const [savedDoc, setSavedDoc] = useState(null);         // {title} cuando el agente guardó un documento
 
   const [attachment, setAttachment] = useState(null);     // {name, extracted_text, error}
   const [attaching, setAttaching] = useState(false);
@@ -528,6 +594,10 @@ export default function ChatPage() {
     if (location.state?.agentId && !cid) {
       const { agentId, agentName } = location.state;
       setActiveAgent({ id: agentId, name: agentName });
+      // Una pregunta de ejemplo llega ESCRITA en el compositor, no mandada: quien la
+      // eligió todavía puede cambiarle una palabra antes de enviarla, que es lo que hace
+      // que el ejemplo enseñe en vez de solo demostrar.
+      if (location.state.pregunta) setInput(location.state.pregunta);
       api.getAgentConversations(agentId)
         .then(r => {
           const existing = (r.data || [])[0]; // ordenado por -updated_at
@@ -602,6 +672,8 @@ export default function ChatPage() {
           // quienes pertenecen al Espacio. Sin Espacio, el hilo es personal.
           workspace: slug || undefined,
           space: espacioSlug || undefined,
+          // La Sesion: el hilo queda colgado de ella y lo ve cualquiera que entre.
+          sesion: sesionDelHilo.current || undefined,
         }),
       });
 
@@ -653,6 +725,13 @@ export default function ChatPage() {
                   return {
                     ...m, ...(fallback ? { content: fallback } : {}), streaming: false,
                     ...(data.message_id ? { id: data.message_id } : {}),
+                    // Lo que el agente dejó escrito, para que la tarjeta aparezca al
+                    // terminar y no recién al recargar el hilo.
+                    artefactos: data.artefactos || [],
+                    // Y en qué se apoyó. El backend ya las mandaba y la pantalla las
+                    // tiraba: la cita que se abre de un clic solo aparecía al recargar,
+                    // o sea justo cuando ya nadie va a comprobar el dato.
+                    fuentes: data.fuentes || [],
                   };
                 }
                 if (m.id === uid && data.user_message_id) {
@@ -660,6 +739,7 @@ export default function ChatPage() {
                 }
                 return m;
               }));
+              if (data.artefactos?.length) setRefrescoDoc((n) => n + 1);
               if (data.action?.type === 'navigate') navigate(data.action.path);
               if (data.action?.type === 'save_document' && data.action?.success) {
                 setSavedDoc({ title: data.action.document_title });
@@ -741,6 +821,8 @@ export default function ChatPage() {
   const mensajeInicialEnviado = useRef(false);
   useEffect(() => {
     const inicial = location.state?.initialMessage;
+    const deSesion = location.state?.sesionSlug;
+    if (deSesion) sesionDelHilo.current = deSesion;
     if (inicial && !mensajeInicialEnviado.current) {
       mensajeInicialEnviado.current = true;
       navigate(location.pathname, { replace: true, state: {} });
@@ -752,11 +834,15 @@ export default function ChatPage() {
   // la lista cambia poco y no vale la pena volver a consultarla por cada tecla.
   useEffect(() => {
     let vivo = true;
-    api.getAgents()
-      .then(({ data }) => { if (vivo) setAgentesMencionables(Array.isArray(data) ? data : []); })
+    if (!slug) return undefined;
+    // La Sesión, si el hilo está en una: es lo que decide si hay personas a quien
+    // mencionar. En un hilo privado no hay nadie, y ofrecer nombres ahí prometería un
+    // aviso que no va a llegar.
+    api.getMencionables(slug, sesionDelHilo.current || undefined)
+      .then(({ data }) => { if (vivo) setAgentesMencionables(data.mencionables || []); })
       .catch(() => {});
     return () => { vivo = false; };
-  }, []);
+  }, [slug, convId]);
 
   const sugerencias = mencion ? filtrarAgentes(agentesMencionables, mencion.consulta) : [];
 
@@ -806,12 +892,13 @@ export default function ChatPage() {
   };
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', bgcolor: 'background.default', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minWidth: 0, bgcolor: 'background.default', overflow: 'hidden' }}>
 
       {activeAgent && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 3, py: 1,
           borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'rgba(88, 106, 208,0.05)' }}>
-          <Bot size={14} color="#9BA6E3" />
+          <AfableMark size={14} color="#9BA6E3" />
           <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>
             Hablando con el agente <strong style={{ color: '#9BA6E3' }}>{activeAgent.name}</strong>
           </Typography>
@@ -832,6 +919,9 @@ export default function ChatPage() {
               <MessageBubble
                 key={msg.id || idx}
                 msg={msg}
+                yoId={currentUser?.id}
+                navigate={navigate}
+                onAbrirDoc={setDocAlLado}
                 onReintentar={
                   msg.role === 'assistant' && idx === messages.length - 1 && !loading
                     ? reintentar
@@ -856,7 +946,7 @@ export default function ChatPage() {
                 <Box sx={{ width: 28, height: 28, borderRadius: '8px', flexShrink: 0,
                   background: 'linear-gradient(135deg, #586AD0 0%, #2F42A6 100%)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Bot size={14} color="#fff" />
+                  <AfableMark size={14} color="#fff" />
                 </Box>
                 <ThinkingLoader step={thinkStep} label={liveStatus} />
               </Box>
@@ -912,7 +1002,7 @@ export default function ChatPage() {
             </Box>
           )}
           <TextField inputRef={inputRef} multiline maxRows={6} fullWidth
-            placeholder="Escribe un mensaje... (Enter para enviar)"
+            placeholder="Escriba un mensaje, o @ para llamar a un agente"
             value={input} onChange={handleInputChange}
             onKeyDown={handleKeyDown} disabled={loading}
             variant="standard" InputProps={{ disableUnderline: true }}
@@ -931,7 +1021,6 @@ export default function ChatPage() {
               />
               {/* En que Espacio se esta trabajando: acota los agentes que se
                   ofrecen y donde queda guardada la conversacion. */}
-              <SelectorEspacio />
               <Box sx={{ width: '1px', height: 16, bgcolor: 'divider', mx: 0.25 }} />
               <input ref={fileInputRef} type="file" hidden onChange={handleFileChange}
                 accept=".pdf,.docx,.txt,.csv,.md,.xlsx,.xls,image/*" />
@@ -994,27 +1083,20 @@ export default function ChatPage() {
           </Collapse>
         </Box>
         <Typography sx={{ fontSize: '0.68rem', color: 'text.disabled', textAlign: 'center', mt: 1 }}>
-          Afable responde con datos reales de tus sistemas. Verifica información crítica con las fuentes.
+          Afable responde con datos reales de sus sistemas. Compruebe con la fuente lo que sea crítico.
         </Typography>
       </Box>
 
-      <Snackbar
-        open={!!savedDoc} autoHideDuration={6000} onClose={() => setSavedDoc(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
-          severity="success" onClose={() => setSavedDoc(null)}
-          sx={{ borderRadius: '10px', alignItems: 'center' }}
-          action={
-            <Button size="small" onClick={() => navigate('/app/documentos')}
-              sx={{ color: '#586AD0', fontWeight: 700, fontSize: '0.78rem' }}>
-              Ver documentos
-            </Button>
-          }
-        >
-          "{savedDoc?.title}" guardado en Documentos.
-        </Alert>
-      </Snackbar>
+    </Box>
+
+    {/* El documento al lado de la conversación. Se abre desde la tarjeta del mensaje:
+        revisar lo que el agente escribió no debería costar salir del chat. */}
+    {docAlLado && (
+      <DocumentoAlLado
+        docId={docAlLado} workspace={slug} refresco={refrescoDoc}
+        onCerrar={() => setDocAlLado(null)}
+      />
+    )}
     </Box>
   );
 }

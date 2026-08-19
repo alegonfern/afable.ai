@@ -27,7 +27,7 @@ export default function TerminosPage() {
         <li>Todo uso no autorizado debe ser informado a Afable en cuanto se detecte.</li>
       </ul>
 
-      <h2>3. Workspace</h2>
+      <h2>3. Empresa</h2>
       <p>
         Quien crea un Workspace lo administra y define sus miembros, roles y niveles de acceso.
         Cuando un usuario es incorporado al Workspace de otra empresa, dicha empresa administra ese

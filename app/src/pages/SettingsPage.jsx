@@ -79,7 +79,7 @@ export default function SettingsPage() {
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
       <PageHeader title="Configuración" backLabel="Inicio" back="/app" />
 
-      <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 560 }}>
+      <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 560, width: '100%', mx: 'auto' }}>
 
         {/* ── Apariencia ── */}
         <Section title="Apariencia">

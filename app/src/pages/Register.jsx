@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { Visibility, VisibilityOff, CheckCircle } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { api } from '../services/api';
+import { authService } from '../services/auth';
 import { Logo } from '../components/Logo';
 import './AuthPages.css';
 
@@ -20,21 +21,39 @@ export default function Register() {
     watch,
     formState: { errors },
   } = useForm({
-    defaultValues: { first_name: '', last_name: '', email: '', username: '', password: '' },
+    defaultValues: { first_name: '', last_name: '', email: '', empresa: '', password: '' },
   });
+
+  const next = new URLSearchParams(location.search).get('next');
+  // A dónde va después de registrarse. Respeta el ?next= de un link de invitación: quien
+  // llega invitado a un Workspace tiene que caer ahí y no en su propia empresa vacía.
+  const destino = next && next.startsWith('/') && !next.startsWith('//') ? next : '/app';
 
   const registerMutation = useMutation({
     mutationFn: api.register,
-    onSuccess: () => {
+    onSuccess: (response) => {
+      // ⭐ **Queda adentro, no en una pantalla de espera.** Antes decía "Revise su correo
+      // para activar la cuenta" — y NUNCA se mandaba ese correo: la cuenta nace activa y
+      // el registro ya devuelve las llaves de sesión, que la pantalla tiraba a la basura.
+      // O sea que la persona se quedaba esperando algo que no existía, justo en el momento
+      // en que más ganas tenía de entrar. Es el peor lugar donde perder a alguien.
+      const { access, refresh } = response.data || {};
+      if (access && refresh) {
+        authService.login(access, refresh, true);
+        window.dispatchEvent(new Event('auth-login'));
+        navigate(destino, { replace: true });
+        return;
+      }
+      // Sin llaves no se puede entrar solo, pero tampoco se inventa un correo: se manda a
+      // iniciar sesión, que es lo que de verdad funciona.
       setSuccess(true);
     },
     onError: (error) => {
       const data = error.response?.data;
       const msg =
         data?.email?.[0] ||
-        data?.username?.[0] ||
         data?.detail ||
-        'Error al crear la cuenta. Inténtalo de nuevo.';
+        'No se pudo crear la cuenta. Vuelva a intentarlo.';
       toast.error(msg);
     },
   });
@@ -49,7 +68,7 @@ export default function Register() {
             <CheckCircle fontSize="large" />
           </div>
           <h2>¡Cuenta creada!</h2>
-          <p>Revisa tu correo electrónico para activar tu cuenta y comenzar a usar Afable.</p>
+          <p>Ya puede entrar con su correo y su contraseña.</p>
           <Link className="auth-strong-link" to={`/login${location.search}`}>Ir a iniciar sesión →</Link>
         </div>
       </div>
@@ -64,10 +83,10 @@ export default function Register() {
         </Link>
 
         <h1 className="auth-title">
-          Crea tu <span className="accent">cuenta.</span>
+          Cree su <span className="accent">cuenta.</span>
         </h1>
         <p className="auth-subtitle">
-          Empieza a automatizar tu operación con agentes de IA en minutos.
+          Ponga a trabajar agentes de IA sobre lo que su empresa ya tiene.
         </p>
 
         <form className="auth-form" onSubmit={handleSubmit(onSubmit)} noValidate>
@@ -79,7 +98,7 @@ export default function Register() {
                   id="first_name"
                   className="auth-input"
                   type="text"
-                  placeholder="Tu nombre"
+                  placeholder="Su nombre"
                   {...register('first_name', { required: 'Requerido' })}
                 />
               </div>
@@ -92,7 +111,7 @@ export default function Register() {
                   id="last_name"
                   className="auth-input"
                   type="text"
-                  placeholder="Tu apellido"
+                  placeholder="Su apellido"
                   {...register('last_name', { required: 'Requerido' })}
                 />
               </div>
@@ -118,23 +137,27 @@ export default function Register() {
             {errors.email && <p className="auth-error">{errors.email.message}</p>}
           </div>
 
+          {/* ⭐ El nombre de la empresa, en lugar del "nombre de usuario" que había acá.
+              Ese campo era obligatorio y el backend lo DESCARTABA: se pedía un dato que no
+              se guardaba en ninguna parte. Este sí se usa, y evita que la empresa nazca
+              llamándose "Empresa de Rosa" — el primer nombre que ven sus colegas.
+              Opcional: poner una pared en el registro cuesta más de lo que vale el dato. */}
           <div>
-            <label className="auth-label" htmlFor="username">Nombre de usuario</label>
+            <label className="auth-label" htmlFor="empresa">Nombre de su empresa</label>
             <div className="auth-input-wrap">
               <input
-                id="username"
+                id="empresa"
                 className="auth-input"
                 type="text"
-                placeholder="usuario_único"
-                autoComplete="username"
-                {...register('username', {
-                  required: 'El usuario es requerido',
-                  minLength: { value: 3, message: 'Mínimo 3 caracteres' },
-                  pattern: { value: /^[a-zA-Z0-9_.-]+$/, message: 'Solo letras, números, _ . -' },
+                placeholder="Panadería del Sur"
+                autoComplete="organization"
+                {...register('empresa', {
+                  maxLength: { value: 200, message: 'Demasiado largo' },
                 })}
               />
             </div>
-            {errors.username && <p className="auth-error">{errors.username.message}</p>}
+            <p className="auth-hint">Puede cambiarlo después. Si trabaja solo, ponga su nombre.</p>
+            {errors.empresa && <p className="auth-error">{errors.empresa.message}</p>}
           </div>
 
           <div>
@@ -173,7 +196,7 @@ export default function Register() {
         </form>
 
         <p className="auth-foot">
-          ¿Ya tienes cuenta? <Link className="auth-link" to={`/login${location.search}`}>Inicia sesión</Link>
+          ¿Ya tiene cuenta? <Link className="auth-link" to={`/login${location.search}`}>Inicie sesión</Link>
         </p>
       </div>
     </div>

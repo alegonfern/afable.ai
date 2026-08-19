@@ -145,7 +145,7 @@ export default function ContextoPage({ hideHeader = false }) {
                 />
                 <TextField
                   label="Contenido" value={newContent} onChange={e => setNewContent(e.target.value)}
-                  placeholder="Escribe lo que quieras que la IA sepa sobre esto..."
+                  placeholder="Escriba lo que quiera que la IA sepa sobre esto..."
                   multiline rows={3} fullWidth sx={inputSx}
                 />
                 <Box

@@ -13,7 +13,7 @@ import AgentesGaleria from './AgentesGaleria';
 export default function AgentesPage() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
-      <PageHeader title="Agentes" back="/app" backLabel="Trabajo" />
+      <PageHeader title="Agentes" back="/app" backLabel="Inicio" />
       <AgentesGaleria />
     </Box>
   );

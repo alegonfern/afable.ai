@@ -166,7 +166,7 @@ export default function HeroScene() {
 
       <div className="hs-legend">
         <span><i className="hs-legend-dot" /> 8 personas conectadas</span>
-        <span>4 áreas con sus propias Fuentes</span>
+        <span>4 areas con sus propios Workspaces</span>
         <span>3 agentes trabajando en el mismo hilo</span>
       </div>
     </div>

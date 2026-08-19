@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from django.http import StreamingHttpResponse
 from django.shortcuts import get_object_or_404
@@ -8,6 +9,9 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 
+from .hilos import hilo_para_escribir
+
+logger = logging.getLogger(__name__)
 from .models import (
     AgentConfig, Agent, AgentTemplate, Conversation, Message, Document, Automation,
     Routine, Skill, habilidades_como_contexto,
@@ -18,6 +22,7 @@ from .serializers import (
     AutomationSerializer, SkillSerializer, SkillWriteSerializer, RoutineSerializer,
 )
 from apps.organizations.models import Organization
+from apps.notificaciones.avisos import avisar_de_la_mencion, avisar_del_mensaje
 from apps.workspaces.permissions import alcance_de_agente
 from services.agent_service import chat_direct, stream_direct, resolve_model
 
@@ -101,7 +106,7 @@ def _get_user_role_context(user):
     return (' '.join(parts) + '\n\n') if parts else ''
 
 
-def _get_org_context(org, allowed_doc_ids=None, inyectados=None):
+def _get_org_context(org, allowed_doc_ids=None, inyectados=None, consulta='', con_herramientas=True):
     """Contexto de EMPRESA (no del usuario): formulario + índice de documentos
     subidos. Se inyecta siempre, en todos los modos — es lo que no está en
     ninguna tabla conectada (mission, tono, glosario, políticas).
@@ -115,7 +120,15 @@ def _get_org_context(org, allowed_doc_ids=None, inyectados=None):
     documentos cuyo texto entró completo al prompt. Sirve para citar: cuando el
     agente responde con el contenido que ya venía en el prompt no llama a ninguna
     herramienta, así que no queda rastro de procedencia y la respuesta salía sin
-    fuente — justo en el camino más común."""
+    fuente — justo en el camino más común.
+
+    `consulta` es lo que el usuario acaba de preguntar. Solo se usa cuando el corpus
+    de documentos no cabe en el prompt: ahí decide qué fragmentos entran. Vacío
+    (una automatización sin pregunta, por ejemplo) deja el comportamiento de antes.
+
+    `con_herramientas` dice si el agente va a correr con la capa de herramientas. En
+    `False` no se nombra ninguna: prometerle una herramienta que no puede llamar hace
+    que se gaste el turno intentando invocarla en vez de responder."""
     from apps.organizations.models import OrganizationContext, CompanyDocument, ContextCubicle
 
     parts = []
@@ -146,8 +159,7 @@ def _get_org_context(org, allowed_doc_ids=None, inyectados=None):
     #
     # Para una pyme el corpus entero suele caber, asi que la regla se da vuelta: primero
     # el texto integro, y solo cuando se acaba el presupuesto se cae al resumen mas la
-    # tool. La busqueda semantica (pgvector) reemplaza este recorte cuando el corpus
-    # crezca de verdad.
+    # tool.
     PRESUPUESTO_DOCS = 60_000   # caracteres
     TOPE_POR_DOC = 20_000
 
@@ -157,7 +169,61 @@ def _get_org_context(org, allowed_doc_ids=None, inyectados=None):
     docs = list(
         doc_qs.order_by('-updated_at' if hasattr(CompanyDocument, 'updated_at') else '-id')
     )
-    if docs:
+
+    # Cuando el corpus NO cabe, el recorte por presupuesto es una loteria: los
+    # documentos entran por fecha, asi que justo el que responde la pregunta puede
+    # quedar afuera o entrar cortado a los 20.000 caracteres. Ahi la busqueda
+    # semantica hace la diferencia — se recuperan los fragmentos que hablan de lo
+    # que se pregunto, salgan del documento que salgan.
+    #
+    # Si el corpus cabe entero no se usa: tener el texto completo a la vista le gana
+    # a cualquier recuperacion, y es el caso de la mayoria de las pymes.
+    recuperado_por_semantica = False
+    total_texto = sum(len((d.extracted_text or '').strip()) for d in docs)
+    if docs and consulta and total_texto > PRESUPUESTO_DOCS:
+        from services.retrieval import buscar, como_bloque_de_prompt
+        relevantes = buscar(org, consulta, allowed_doc_ids, k=12)
+        if relevantes:
+            if inyectados is not None:
+                for r in relevantes:
+                    if not any(i['id'] == r['documento_id'] for i in inyectados):
+                        inyectados.append({'id': r['documento_id'], 'title': r['titulo']})
+            parts.append(
+                'FRAGMENTOS RELEVANTES DE LOS DOCUMENTOS DE LA EMPRESA (los que hablan de lo '
+                'que se acaba de preguntar, recuperados de un corpus mas grande que lo que '
+                'cabe en esta conversacion). Responde usando esto como fuente principal y cita '
+                'el documento por su titulo.'
+                + (' Si necesitas el documento completo, llama a `read_company_document(id)`; '
+                   'si esto no alcanza para responder, busca de nuevo con `buscar_en_fuentes` '
+                   'usando otras palabras antes de decir que no sabes.'
+                   if con_herramientas else
+                   ' Si la respuesta no esta en estos fragmentos, dilo: no tienes forma de '
+                   'buscar mas.')
+                + '\n\n' + como_bloque_de_prompt(relevantes)
+            )
+            indice_resto = [
+                f"- [id={d.id}] «{d.title}»: {((d.summary or '').strip() or 'sin resumen disponible')[:200]}"
+                for d in docs
+            ]
+            if con_herramientas:
+                parts.append(
+                    'TODOS LOS DOCUMENTOS DE LA EMPRESA (usa read_company_document(id) o '
+                    '`buscar_en_fuentes` para lo que no este arriba):\n' + '\n'.join(indice_resto)
+                )
+            else:
+                parts.append(
+                    'TODOS LOS DOCUMENTOS DE LA EMPRESA (de estos solo tienes a la vista los '
+                    'fragmentos de arriba):\n' + '\n'.join(indice_resto)
+                )
+            recuperado_por_semantica = True
+
+    # Ojo con el orden de estas tres ramas: la primera version vaciaba `docs` para
+    # saltear el volcado, y con eso caia en el `else` de abajo y el prompt terminaba
+    # diciendo "la empresa todavia no tiene documentos" INMEDIATAMENTE despues de
+    # los fragmentos recuperados. Una bandera, no una lista vacia.
+    if recuperado_por_semantica:
+        pass
+    elif docs:
         completos, indice, gastado = [], [], 0
         for d in docs:
             texto = (d.extracted_text or '').strip()
@@ -180,22 +246,29 @@ def _get_org_context(org, allowed_doc_ids=None, inyectados=None):
             sello = _tz.localtime().strftime('%d-%m-%Y %H:%M')
             parts.append(
                 f'CONTENIDO DE LOS DOCUMENTOS DE LA EMPRESA (version vigente al {sello}). '
-                'Responde usando esto como fuente principal y cita el documento por su titulo. '
-                'Si el usuario dice que edito o actualizo un archivo, NO le pidas que te pegue el '
-                'contenido: llama a la herramienta `actualizar_documentos` y lee la version nueva '
-                'tu mismo. Si pregunta si EXISTE algo ("¿tengo un reporte de contabilidad?", "busca '
-                'en mis archivos..."), usa `buscar_en_fuentes`: nunca respondas que no puedes ver '
-                'sus archivos.\n\n' + '\n\n'.join(completos)
+                'Responde usando esto como fuente principal y cita el documento por su titulo.'
+                + (' Si el usuario dice que edito o actualizo un archivo, NO le pidas que te pegue '
+                   'el contenido: llama a la herramienta `actualizar_documentos` y lee la version '
+                   'nueva tu mismo. Si pregunta si EXISTE algo ("¿tengo un reporte de '
+                   'contabilidad?", "busca en mis archivos..."), usa `buscar_en_fuentes`: nunca '
+                   'respondas que no puedes ver sus archivos.'
+                   if con_herramientas else
+                   ' Esto es TODO lo que tienes a la vista: no puedes buscar ni releer archivos, '
+                   'asi que si algo no esta aca, dilo en vez de inventarlo.')
+                + '\n\n' + '\n\n'.join(completos)
             )
         if indice:
             parts.append(
-                'OTROS DOCUMENTOS DISPONIBLES (usa read_company_document(id) para leerlos '
-                'completos):\n' + '\n'.join(indice)
+                ('OTROS DOCUMENTOS DISPONIBLES (usa read_company_document(id) para leerlos '
+                 'completos):\n' if con_herramientas else
+                 'OTROS DOCUMENTOS DE LA EMPRESA (solo su resumen: no tienes forma de abrirlos '
+                 'completos en esta conversacion):\n') + '\n'.join(indice)
             )
     else:
         parts.append(
-            'La empresa todavia no tiene documentos ni archivos conectados. Si el usuario pregunta '
-            'por alguno, usa `buscar_en_fuentes` para confirmarlo antes de responder.'
+            'La empresa todavia no tiene documentos ni archivos conectados.'
+            + (' Si el usuario pregunta por alguno, usa `buscar_en_fuentes` para confirmarlo '
+               'antes de responder.' if con_herramientas else '')
         )
 
     cubicles = list(ContextCubicle.objects.filter(organization=org))
@@ -208,24 +281,36 @@ def _get_org_context(org, allowed_doc_ids=None, inyectados=None):
     return ('\n\n'.join(parts) + '\n\n') if parts else ''
 
 
-def _get_dummyjson_context(user):
-    from apps.organizations.models import ActiveIntegration
-    has = ActiveIntegration.objects.filter(user=user, integration_type='dummyjson', is_active=True).exists()
-    if not has:
-        return None
-    try:
-        from services.dummyjson_client import build_context_summary
-        return build_context_summary()
-    except Exception:
-        return None
+def _build_onboarding_context(user, agent=None, mention_system_id=None, consulta='', sesion=None):
+    """`consulta` es el mensaje que el usuario acaba de mandar. Se usa solo para
+    elegir qué fragmentos de documento entran al prompt cuando el corpus de la
+    empresa no cabe entero (ver `_get_org_context`).
 
-
-def _build_onboarding_context(user, agent=None, mention_system_id=None):
+    `sesion`, si viene, es la Sesión en la que se está trabajando. Le suma al agente
+    dos cosas: las instrucciones que la Sesión le da a TODOS sus agentes, y sus
+    archivos — que se AGREGAN a lo que el agente ya alcanzaba, nunca lo recortan. La
+    Sesión presta contexto; el Espacio es el que restringe."""
     from apps.organizations.models import IntegrationScan
 
+    # La empresa sale de la PERTENENCIA primero, y de la propiedad solo como respaldo.
+    #
+    # Antes era solo `filter(owner=user)`, y eso significaba que cualquier miembro del
+    # Workspace que no fuera el dueño recibía el prompt de "todavía no configuraste tu
+    # empresa": en un equipo de cinco, cuatro tenían un agente inútil. Se descubrió
+    # escribiendo las pruebas de permisos, cuando dos miembros comunes no veían ni sus
+    # propios documentos.
+    from apps.workspaces.permissions import membership_por_organizacion  # noqa: F401
+    from apps.workspaces.models import Membership
+
+    # La empresa sale de la PERTENENCIA y no de la propiedad: resolverla por `owner`
+    # dejaba a cualquier miembro que no fuera el dueño con el prompt de "todavía no
+    # configuraste tu empresa" — en un equipo de cinco, cuatro sin ver un solo documento.
+    membresia = Membership.objects.filter(user=user).select_related('organization').first()
+    org_de_pertenencia = membresia.organization if membresia else None
+
     orgs = Organization.objects.filter(owner=user).exclude(name="Personal")
-    has_org = orgs.exists()
-    # En este contexto el usuario es dueño de la org (filter owner=user) → acceso total.
+    has_org = bool(org_de_pertenencia) or orgs.exists()
+    # Dueño de la empresa o administrador del Workspace → acceso total en el prompt.
     perm_ctx = _get_permissions_context(user, is_owner=has_org)
 
     if not has_org:
@@ -239,14 +324,11 @@ El usuario aún no ha configurado su empresa. Tu objetivo es guiarlo amigablemen
 3. Cuando el usuario te confirme el nombre de su empresa, incluye EXACTAMENTE esta línea al final de tu respuesta (reemplaza NOMBRE con el nombre real):
    __ACTION__{{\"type\":\"create_org\",\"name\":\"NOMBRE\"}}__
 
-Sé conversacional, breve y entusiasta.
-
-Acciones adicionales disponibles:
-- Cargar datos demo: __ACTION__{{\"type\":\"load_demo\"}}__"""
+Sé conversacional, breve y entusiasta."""
         }
 
-    org = orgs.first()
-    scans = IntegrationScan.objects.filter(organization__owner=user)
+    org = org_de_pertenencia or orgs.first()
+    scans = IntegrationScan.objects.filter(organization=org)
     has_scan = scans.exists()
 
     role_ctx = _get_user_role_context(user)
@@ -255,32 +337,141 @@ Acciones adicionales disponibles:
     # "sin restricción": un agente que no está en ningún Espacio sigue viendo todo
     # lo de su empresa (ver `alcance_de_agente`).
     espacio_conns, espacio_docs = alcance_de_agente(agent)
-    docs_en_prompt = []
-    org_ctx = _get_org_context(
-        org, allowed_doc_ids=espacio_docs, inyectados=docs_en_prompt,
+
+    # ── La regla mas importante de los permisos de archivos ──────────────────────
+    # El alcance del agente se INTERSECTA con lo que ve la persona que esta
+    # conversando. Sin esto, restringir un archivo seria teatro: bastaria con
+    # preguntarselo al agente para leerlo.
+    #
+    # Ojo con quien es `user`: en una Tarea o una Automatizacion es el dueño de la
+    # empresa (ver `automation_runner._run_prompt`), o sea que esas corren con acceso de
+    # la empresa y no de una persona en particular. Es deliberado — una automatizacion
+    # es de la empresa — pero conviene tenerlo presente al restringir algo.
+    from apps.archivos.permisos import documentos_visibles
+    from apps.workspaces.permissions import membership_por_organizacion
+
+    membership_de_quien_pregunta = membership_por_organizacion(user, org)
+    visibles = set(
+        documentos_visibles(user, org, membership_de_quien_pregunta)
+        .values_list('id', flat=True)
     )
+    espacio_docs = (
+        sorted(visibles) if espacio_docs is None
+        else sorted(set(espacio_docs) & visibles)
+    )
+
+    # Los archivos de la Sesion se SUMAN al alcance del agente. Con `espacio_docs` en
+    # None el agente ya alcanza todo (incluidos estos), asi que no hay nada que sumar;
+    # con una lista, se amplia. Al reves seria un error: una Sesion no puede quitarle
+    # a un agente lo que su Espacio le dio.
+    if sesion is not None and espacio_docs is not None:
+        from apps.organizations.models import CompanyDocument
+
+        de_la_sesion = CompanyDocument.objects.filter(sesion=sesion).values_list('id', flat=True)
+        # Tambien recortados por lo que la persona ve: la Sesion presta sus archivos,
+        # pero no puede prestar uno que quien pregunta no tiene permiso de leer.
+        espacio_docs = sorted((set(espacio_docs) | set(de_la_sesion)) & visibles)
+
+    # Dentro de una Sesión el agente puede ANOTAR pendientes. Se le dice solo cuando hay
+    # Sesión: prometerle una herramienta que no tiene lo hace gastar el turno intentando
+    # invocarla — ya se vio pasar exactamente eso con las herramientas de sistemas.
+    bloque_tareas = ''
+    if sesion is not None:
+        bloque_tareas = (
+            f'\nESTÁS EN LA SESIÓN «{sesion.name}», que es el trabajo de un equipo.\n'
+            '- crear_tarea(titulo, detalle, para_mi): anota un pendiente que el equipo ve.\n'
+            '  Úsala cuando de la conversación salga algo que HAY QUE HACER y no se resuelva\n'
+            '  leyendo tu respuesta: un pago que falta, un dato que hay que pedir, algo por\n'
+            '  revisar. Con para_mi=true queda asignada a ti y podrán pedirte que la hagas.\n'
+            '  NO la uses para dejar constancia de lo que acabas de explicar: eso ya quedó\n'
+            '  escrito acá.\n'
+        )
+
+    docs_en_prompt = []
 
     # Primero intenta SystemConnection (arquitectura nueva)
     from apps.organizations.models import SystemConnection
     from services.connector_registry import get_connections_context
     # google_drive no es un sistema "consultable en vivo" (no tiene run_sql/query_odoo) —
     # su contenido llega vía CompanyDocument (sync) y el tool read_company_document,
-    # no por este modo. Si es la única conexión, no debe forzar 'connected_systems'.
+    # no por este modo: no cuenta como sistema consultable en vivo.
     connections = SystemConnection.objects.filter(organization=org, is_active=True).exclude(connector_type='google_drive')
     # El Espacio recorta antes que cualquier otra cosa: lo que no está en el Espacio
     # del agente no existe para ese agente, ni siquiera para nombrarlo en el prompt.
     if espacio_conns is not None:
         connections = connections.filter(id__in=espacio_conns)
-    if connections.exists():
-        conn_ctx = get_connections_context(org, espacio_conns) or ''
 
-        # Configuración del agente elegido (si trae instrucciones / scope de sistemas / modelo).
-        agent_block = ''
+    # El agente corre CON la capa de herramientas (`run_agent_live`) siempre que tenga
+    # algo que hacer con ellas — y con documentos siempre lo tiene: leer, buscar, crear
+    # y editar archivos no necesita ningún ERP conectado.
+    #
+    # Antes esto era `connections.exists()`, o sea que una empresa con solo documentos
+    # tenía un agente SIN herramientas: no podía buscar en las fuentes ni, desde que
+    # existe la edición, escribir un documento. `_tools_spec` es el que decide qué
+    # herramientas entrega según lo que haya conectado, así que acá alcanza con abrir la
+    # puerta; el prompt de abajo se adapta a que no haya sistemas.
+    hay_conexiones = connections.exists()
+    con_herramientas = True
+    org_ctx = _get_org_context(
+        org, allowed_doc_ids=espacio_docs, inyectados=docs_en_prompt, consulta=consulta,
+        con_herramientas=con_herramientas,
+    )
+
+    # QUIEN es este agente: sus instrucciones, su area, lo que la empresa le entrego y
+    # sus Habilidades. Se arma ACA, antes de elegir el modo, porque vale en todos.
+    #
+    # Estaba adentro del bloque de "sistemas conectados", asi que una empresa sin un
+    # ERP/SQL enchufado tenia agentes cuyas Instrucciones —el campo que MAS define a un
+    # agente— no llegaban al prompt. El constructor de agentes escribia en el vacio y
+    # la configuracion de Admin > Agentes tampoco cambiaba nada. Es el caso de
+    # cualquier pyme que hoy solo tiene documentos o una carpeta de Drive.
+    agent_block = ''
+    agent_model = None
+    if agent is not None:
+        if getattr(agent, 'model', ''):
+            agent_model = agent.model
+        if getattr(agent, 'area', ''):
+            agent_block += f"\nTu foco es el área de {AREA_NAMES.get(agent.area, agent.area)}.\n"
+        if getattr(agent, 'instructions', ''):
+            agent_block += f"\nInstrucciones del agente «{agent.name}»:\n{agent.instructions}\n"
+        # Lo que la empresa le entrego (los tres campos de la ficha del agente): sus
+        # datos, sus reglas y lo que le conviene saber.
+        config = getattr(agent, 'config', None)
+        if config is not None:
+            del_workspace = config.como_contexto()
+            if del_workspace:
+                agent_block += f"\n{del_workspace}\n"
+        # Las Habilidades van al final, despues de las instrucciones propias: son
+        # transversales a la empresa y no tienen que tapar lo que este agente en
+        # particular tiene que hacer.
+        de_habilidades = habilidades_como_contexto(agent)
+        if de_habilidades:
+            agent_block += f"\n{de_habilidades}\n"
+
+    # Lo que la Sesion le dice a todos sus agentes. Va al final, despues de lo propio
+    # del agente: es el contexto del trabajo puntual y no tiene que tapar su oficio.
+    if sesion is not None:
+        if (sesion.instrucciones_para_agentes or '').strip():
+            agent_block += (
+                f"\nESTÁS TRABAJANDO EN LA SESIÓN «{sesion.name}». "
+                f"Instrucciones de esta Sesión, válidas para todos sus agentes:\n"
+                f"{sesion.instrucciones_para_agentes.strip()}\n"
+            )
+        # Las Habilidades por defecto de la Sesion se aplican a sus conversaciones,
+        # ademas de las que el agente ya trae por su cuenta.
+        de_la_sesion = sesion.habilidades_por_defecto.filter(is_active=True).order_by('name')
+        if de_la_sesion:
+            bloques = '\n\n'.join(f'— {h.name}:\n{h.instructions}' for h in de_la_sesion)
+            agent_block += (
+                f"\nHabilidades que esta Sesión aplica siempre:\n{bloques}\n"
+            )
+
+    if con_herramientas:
+        conn_ctx = (get_connections_context(org, espacio_conns) or '') if hay_conexiones else ''
+
+        # A QUE sistemas puede mirar: esto si es propio del modo con herramientas.
         allowed_ids = None
-        agent_model = None
         if agent is not None:
-            if getattr(agent, 'model', ''):
-                agent_model = agent.model
             sys_ids = list(agent.systems.values_list('id', flat=True)) if agent.pk else []
             if espacio_conns is not None:
                 # Se intersecta, no se reemplaza: un sistema elegido a mano en la
@@ -292,24 +483,6 @@ Acciones adicionales disponibles:
                     connections.filter(id__in=sys_ids).values_list('name', flat=True)
                 )
                 agent_block += f"\nSOLO puedes consultar estos sistemas: {allowed_names}. No consultes otros.\n"
-            if getattr(agent, 'area', ''):
-                agent_block += f"\nTu foco es el área de {AREA_NAMES.get(agent.area, agent.area)}.\n"
-            if getattr(agent, 'instructions', ''):
-                agent_block += f"\nInstrucciones del agente «{agent.name}»:\n{agent.instructions}\n"
-            # Lo que la empresa le entrego al cargarlo (Admin > Agentes): sus datos,
-            # sus reglas y lo que le conviene saber. Sin esto, la configuracion seria
-            # un formulario que no cambia nada.
-            config = getattr(agent, 'config', None)
-            if config is not None:
-                del_workspace = config.como_contexto()
-                if del_workspace:
-                    agent_block += f"\n{del_workspace}\n"
-            # Las Habilidades van al final del bloque, despues de las instrucciones
-            # propias: son transversales a la empresa y no tienen que tapar lo que
-            # este agente en particular tiene que hacer.
-            de_habilidades = habilidades_como_contexto(agent)
-            if de_habilidades:
-                agent_block += f"\n{de_habilidades}\n"
 
         # Sin sistemas elegidos a mano, el alcance sigue siendo el del Espacio: si
         # no viajara acá, las herramientas volverían a ver toda la empresa.
@@ -326,16 +499,8 @@ Acciones adicionales disponibles:
                 allowed_ids = [mentioned.id]
                 agent_block += f"\nEl usuario mencionó explícitamente el sistema «{mentioned.name}» en este mensaje: consulta SOLO ese sistema.\n"
 
-        return {
-            'mode': 'connected_systems',
-            'org': org,
-            'allowed_ids': allowed_ids,
-            'allowed_doc_ids': espacio_docs,
-            'docs_en_prompt': docs_en_prompt,
-            'agent_model': agent_model,
-            'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
-{perm_ctx}{agent_block}
-{org_ctx}Tienes estos sistemas conectados (resumen de su esquema):
+        bloque_sistemas = (
+            f"""Tienes estos sistemas conectados (resumen de su esquema):
 
 {conn_ctx}
 
@@ -356,54 +521,80 @@ PRIMERO obtén el dato real: usa run_sql si el sistema es PostgreSQL/MSSQL, o qu
 sistema es Odoo. Explora con list_tables/describe_table si hace falta. NUNCA inventes un dato: si
 una consulta no devuelve resultados o falla, dilo con claridad. NO escribas tú una línea de
 fuente — el sistema la añade automáticamente con la tabla y la hora reales.
+"""
+            if hay_conexiones else
+            'NO tienes ningún sistema (ERP, CRM o base de datos) conectado, así que no puedes '
+            'responder con cifras de ventas, stock ni facturación al día. Si te piden algo de '
+            'eso, dilo con claridad y menciona que se conecta desde Espacios › Conexiones. '
+            'Nunca inventes una cifra.\n'
+        )
+
+        return {
+            # Se llamaba 'connected_systems', y desde que el agente corre con
+            # herramientas TAMBIÉN sin sistemas conectados ese nombre mentía: el modo es
+            # "el agente con herramientas", tenga o no un ERP enchufado.
+            'mode': 'con_herramientas',
+            'org': org,
+            'allowed_ids': allowed_ids,
+            'allowed_doc_ids': espacio_docs,
+            'docs_en_prompt': docs_en_prompt,
+            'agent_model': agent_model,
+            'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
+{perm_ctx}{agent_block}
+{org_ctx}{bloque_sistemas}
+HERRAMIENTAS DE ARCHIVOS — puedes leer y también ESCRIBIR documentos:
+- buscar_en_fuentes: busca por significado en los documentos y archivos de la empresa.
+- read_company_document(id): el contenido completo de un documento.
+- crear_documento(titulo, contenido): crea un documento de texto NUEVO y lo guarda. Úsala
+  cuando el usuario pida redactar o preparar algo que quiera conservar.
+- editar_documento(id, viejo, nuevo, mensaje): cambia un fragmento EXACTO por otro sin tocar
+  el resto. Lee el documento primero y copia el fragmento tal como está.
+- reescribir_documento(id, contenido, mensaje): reemplaza todo el texto. Solo cuando el
+  documento se reescribe de punta a punta.
+
+{bloque_tareas}
+Cada cambio que hagas queda guardado como una versión FIRMADA con tu nombre, y el equipo
+puede ver qué cambiaste y volver atrás. Por eso: nunca cambies algo que el usuario no pidió
+cambiar, y di siempre qué cambiaste. Si un documento no es editable (un PDF, un Excel), no
+insistas: ofrécele crear uno nuevo.
+
 Responde siempre en español, conciso. Usa markdown para respuestas largas.{ACTIONS_PROMPT}""",
         }
 
-    # Fallback: DummyJSON (demo)
+    # Sin sistemas CONSULTABLES en vivo. Ojo: eso no es lo mismo que "sin nada
+    # conectado" — los documentos y las carpetas de Drive ya vienen en `org_ctx`,
+    # arriba. El texto viejo decia "aun no hay sistemas conectados" y ofrecia cargar
+    # datos demo, o sea que el agente negaba tener los documentos que tenia a la vista
+    # en el mismo prompt.
     if not has_scan:
-        dj_ctx = _get_dummyjson_context(user)
-        if dj_ctx:
-            return {
-                'mode': 'dummyjson',
-                'docs_en_prompt': docs_en_prompt,
-                'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
-{perm_ctx}
-{org_ctx}Tienes acceso en tiempo real a los datos de la tienda conectada via DummyJSON.
-
-{dj_ctx}
-
-Usa estos datos para responder preguntas sobre ventas, inventario, clientes y métricas.
-Responde siempre en español. Usa markdown para estructurar respuestas largas.{ACTIONS_PROMPT}""",
-            }
         return {
             'mode': 'no_integration',
             'docs_en_prompt': docs_en_prompt,
+            'agent_model': agent_model,
             'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
-{perm_ctx}
-{org_ctx}La empresa está creada pero aún no hay sistemas conectados.
-Si el usuario pide análisis o reportes:
-1. Explícale que puede conectar su ERP o base de datos desde "Integraciones"
-2. Menciona que soportamos Odoo, SAP Business One (MSSQL) y PostgreSQL
-3. Ofrécele explorar con datos demo: "¿Quieres conectar datos demo para ver cómo funciona?"
-4. Si acepta los datos demo: __ACTION__{{"type":"connect_integration","integration":"dummyjson"}}__
+{perm_ctx}{agent_block}
+{org_ctx}Trabajas con lo que ves arriba: el contexto de la empresa y sus documentos.
+NO tienes ningún sistema (ERP, CRM o base de datos) conectado para consultar en vivo,
+así que no puedes responder con cifras de ventas, stock ni facturación al día. Si te
+piden algo de eso, dilo con claridad y menciona que se conecta desde Espacios › Conexiones
+(soportamos Odoo, SAP Business One y PostgreSQL). Nunca inventes una cifra.
 
 Responde siempre en español, sé conciso y orientado a la acción.{ACTIONS_PROMPT}"""
         }
 
     scan = scans.first()
     modules = ', '.join(scan.modules_found[:6]) if scan.modules_found else 'varios módulos'
-    dj_ctx = _get_dummyjson_context(user)
-    dj_section = f'\n\nADEMÁS tienes acceso a datos en tiempo real de DummyJSON Store:\n{dj_ctx}' if dj_ctx else ''
     ai_ctx = scan.ai_context[:800] if scan.ai_context else 'Sin contexto de escaneo.'
     return {
         'mode': 'full',
         'docs_en_prompt': docs_en_prompt,
+        'agent_model': agent_model,
         'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
-{perm_ctx}
+{perm_ctx}{agent_block}
 {org_ctx}Tienes acceso al contexto de datos escaneado de {scan.system_name}:
 {ai_ctx}
 
-Módulos disponibles: {modules}{dj_section}
+Módulos disponibles: {modules}
 
 Ayuda al usuario a analizar sus datos, generar reportes e insights empresariales.
 Responde siempre en español. Usa markdown para estructurar respuestas largas.
@@ -412,17 +603,49 @@ Cuando generes un reporte o análisis formal, usa títulos markdown (#, ##).{ACT
 
 
 def _get_or_create_default(user):
-    org, _ = Organization.objects.get_or_create(
-        owner=user,
-        name="Personal",
-        defaults={"sector": "otro"},
+    """Con qué agente contesta un hilo nuevo cuando nadie eligió otro.
+
+    ⭐ **Es el agente de SU EMPRESA, no uno aparte.** Antes cada chat creaba una
+    Organization llamada "Personal" con un agente "Afable Assistant" propio. Tres
+    problemas, y ninguno se veía de frente:
+
+    - Toda persona terminaba con una segunda empresa fantasma, además de la suya.
+    - Contestaba un agente SIN las instrucciones del agente base `@afable` — el que tiene
+      dicho que busque en las fuentes de la empresa y cite de dónde sacó cada dato. O sea
+      que el camino más usado del producto era el peor configurado.
+    - Esas empresas huérfanas son las que ya costaron una pérdida de datos al limpiarlas:
+      borrar tres se llevó agentes y conversaciones en cascada.
+
+    Media docena de consultas en el código hacían `.exclude(name='Personal')` para
+    esquivarlas: el codigo peleaba contra un artefacto propio.
+
+    Ahora que toda empresa nace con sus agentes base (`apps/agents/agentes_base.py`), el
+    por defecto tiene a dónde apuntar de verdad.
+
+    ⚠️ No se tocan las "Personal" que ya existen ni las conversaciones colgadas de ellas:
+    son datos de alguien. Solo se deja de crear más.
+    """
+    from apps.agents.agentes_base import sembrar_en
+
+    empresa = (
+        Organization.objects.filter(memberships__user=user)
+        .exclude(name='Personal').order_by('id').first()
+        or Organization.objects.filter(owner=user).exclude(name='Personal').order_by('id').first()
     )
-    agent, _ = Agent.objects.get_or_create(
-        organization=org,
-        name="Afable Assistant",
-        defaults={"description": "Agente personal de Afable", "is_active": True},
-    )
-    return org, agent
+    if empresa is None:
+        # Sin empresa no hay a quién preguntarle. Pasa solo con cuentas viejas anteriores
+        # a que el registro creara la empresa; se les arma la suya en vez de una "Personal".
+        empresa = Organization.crear_para_dueno(user)
+
+    agente = empresa.agents.filter(handle='afable', is_active=True).first()
+    if agente is None:
+        # Una empresa creada antes de que los agentes base fueran automáticos.
+        sembrar_en(empresa)
+        agente = (
+            empresa.agents.filter(handle='afable', is_active=True).first()
+            or empresa.agents.filter(is_active=True).order_by('id').first()
+        )
+    return empresa, agente
 
 
 def _resolve_agent(request, default_agent):
@@ -464,6 +687,29 @@ def _agente_mencionado(user, texto):
     return None
 
 
+def _sesion_del_pedido(request):
+    """La Sesion en la que se abre el hilo, o None.
+
+    Misma prudencia que con el Espacio: si el slug no corresponde a una Sesion que
+    esta persona alcanza, se trata como si no hubiera venido ninguno y la conversacion
+    queda personal — el resultado seguro.
+    """
+    sesion_slug = (request.data.get('sesion') or '').strip()
+    workspace_slug = (request.data.get('workspace') or '').strip()
+    if not sesion_slug or not workspace_slug:
+        return None
+    from apps.sesiones.permissions import require_sesion
+    from apps.workspaces.permissions import resolve_membership
+
+    membership = resolve_membership(request.user, workspace_slug)
+    if membership is None:
+        return None
+    try:
+        return require_sesion(membership, sesion_slug)
+    except Exception:
+        return None
+
+
 def _espacio_del_pedido(request):
     """El Espacio que viene en el pedido del chat, o None.
 
@@ -476,15 +722,36 @@ def _espacio_del_pedido(request):
     workspace_slug = (request.data.get('workspace') or '').strip()
     if not espacio_slug or not workspace_slug:
         return None
-    from apps.workspaces.permissions import require_space, resolve_membership
+    from apps.workspaces.permissions import require_workspace, resolve_membership
 
     membership = resolve_membership(request.user, workspace_slug)
     if membership is None:
         return None
     try:
-        return require_space(membership, espacio_slug)
+        return require_workspace(membership, espacio_slug)
     except NotFound:
         return None
+
+
+def fuentes_de_la_respuesta(texto, docs_en_prompt):
+    """Los documentos en los que se apoya la respuesta: `[{'id', 'titulo'}]`.
+
+    Mismo criterio conservador que la línea de texto: sólo los que la respuesta nombra.
+    Devolverlos como DATO es lo que permite abrirlos de un clic — y comprobar una
+    respuesta es justo lo que separa un juguete de una herramienta cuando alguien va a
+    decidir con ella.
+    """
+    if not texto or not docs_en_prompt:
+        return []
+    bajo = texto.lower()
+    vistos, fuentes = set(), []
+    for d in docs_en_prompt:
+        titulo = d.get('title')
+        if not titulo or titulo.lower() not in bajo or titulo in vistos:
+            continue
+        vistos.add(titulo)
+        fuentes.append({'id': d.get('id'), 'titulo': titulo})
+    return fuentes
 
 
 def citar_documentos_del_prompt(texto, docs_en_prompt):
@@ -518,16 +785,18 @@ def citar_documentos_del_prompt(texto, docs_en_prompt):
     return f"{texto}\n\n_[Fuente: {', '.join(limpios)}]_"
 
 
-def _agente_inicial(request, message, espacio, default_agent):
+def _agente_inicial(request, message, espacio, default_agent, sesion=None):
     """Quién contesta el primer mensaje de un hilo nuevo. En orden:
 
     1. El agente mencionado con `@`: es lo más explícito que hay.
     2. El elegido a mano en el selector.
-    3. Un agente DEL ESPACIO activo, si hay Espacio. Sin esto, decir "estoy
+    3. El agente por defecto de la SESIÓN, si el hilo se abre en una. Es lo que
+       configuró quien armó la Sesión para el trabajo que se hace ahí.
+    4. Un agente DEL ESPACIO activo, si hay Espacio. Sin esto, decir "estoy
        trabajando en Finanzas" y que conteste un agente que no pertenece a
        Finanzas — y que por lo tanto alcanza todos los datos de la empresa —
        vacía de sentido al Espacio en el camino más común.
-    4. El agente por omisión de siempre.
+    5. El agente por omisión de siempre.
     """
     mencionado = _agente_mencionado(request.user, message)
     if mencionado is not None:
@@ -536,6 +805,11 @@ def _agente_inicial(request, message, espacio, default_agent):
     elegido = _resolve_agent(request, None)
     if elegido is not None:
         return elegido
+
+    if sesion is not None and sesion.agente_por_defecto_id:
+        de_la_sesion = sesion.agente_por_defecto
+        if de_la_sesion.is_active:
+            return de_la_sesion
 
     if espacio is not None:
         del_espacio = espacio.agents.filter(is_active=True).order_by('name').first()
@@ -567,7 +841,21 @@ def _agente_de_conversacion(request, conversation):
     return agent
 
 
-ACTIONS_PROMPT = """
+# ⚠️ Regla de honestidad. El agente dijo "cotización guardada" sin haber llamado a
+# `crear_documento`: la persona lee que quedó guardada, va a buscarla y no está. Un
+# producto que dice haber hecho algo que no hizo se vuelve inservible más rápido que uno
+# que no sabe hacerlo, porque hay que revisarle todo.
+NO_MENTIR = """
+
+---
+LO QUE DICES QUE HICISTE:
+Nunca digas que guardaste, creaste, editaste o enviaste algo si no ejecutaste la
+herramienta correspondiente en este mismo turno. Si no tienes la herramienta o falló,
+dilo con todas sus letras y entrega el contenido en el chat para que la persona lo copie.
+Es preferible decir "no pude guardarlo" a que alguien salga a buscar un documento que no
+existe."""
+
+ACTIONS_PROMPT = NO_MENTIR + """
 
 ---
 ACCIONES DISPONIBLES EN LA PLATAFORMA:
@@ -581,30 +869,12 @@ Acciones y cuándo usarlas:
 - Crear agente: cuando pidan crear un agente, asistente o bot
   → __ACTION__{"type":"create_agent","name":"Nombre","description":"Para qué sirve"}__
 
-- Guardar documento: cuando el usuario pida o confirme guardar un entregable
-  → __ACTION__{"type":"save_document","title":"Título descriptivo","use_last_response":true}__
-  use_last_response guarda tu respuesta anterior completa (incluidos sus gráficos) tal cual.
-  Solo si el documento es contenido nuevo que no está en la conversación usa:
-  → __ACTION__{"type":"save_document","title":"Título","content":"contenido completo en markdown"}__
-
 - Navegar a sección: cuando el usuario quiera ir a una parte de la app
-  → __ACTION__{"type":"navigate","path":"/app/documentos"}__
-  Rutas válidas: /app, /app/agentes, /app/documentos, /app/integraciones, /app/tablero
-
-- Cargar datos demo: cuando pidan datos de prueba o demo
-  → __ACTION__{"type":"load_demo"}__
+  → __ACTION__{"type":"navigate","path":"/app/agentes"}__
+  Rutas válidas: /app, /app/agentes, /app/contexto, /app/tablero
 
 IMPORTANTE: Solo incluye __ACTION__ cuando el usuario PIDE EXPLÍCITAMENTE hacer algo. Para preguntas o análisis normales, responde sin acción.
 
-REGLA DEL ENTREGABLE: cuando tu respuesta sea un entregable completo — cualquier contenido
-que el usuario podría querer conservar: análisis con cifras o gráficos, reporte, informe,
-plan, propuesta, comparativa, minuta, resumen ejecutivo, presupuesto, cronograma, tabla de
-datos extensa, o cualquier documento redactado a pedido — termina SIEMPRE preguntando en
-una línea aparte: "¿Quieres que guarde este [análisis/informe/plan/documento según
-corresponda] como documento?" — SIN incluir la acción todavía.
-Recién cuando el usuario acepte, responde con una confirmación breve e incluye la acción
-save_document con use_last_response.
-No apliques la regla a respuestas conversacionales, aclaraciones o respuestas cortas.
 """
 
 
@@ -635,10 +905,13 @@ def _extract_action(text):
 
 def _strip_action(text):
     found = _find_action_json(text)
-    if not found:
-        return text.strip()
-    _, start, end = found
-    return (text[:start].rstrip() + text[end:]).strip()
+    if found:
+        _, start, end = found
+        text = text[:start].rstrip() + text[end:]
+    # ⚠️ Y el marcador suelto, sin JSON detrás. El modelo a veces escribe `__ACTION__` y
+    # nada más; como no había JSON que recortar, quedaba impreso al final de la respuesta.
+    # Es basura de nuestra plomería asomando en la cara de la persona.
+    return text.replace('__ACTION__', '').strip()
 
 
 def _execute_action(action_data, user, conversation=None):
@@ -656,13 +929,6 @@ def _execute_action(action_data, user, conversation=None):
                 'created': created,
                 'message': f'Empresa "{org.name}" {"creada" if created else "ya registrada"} ✓'
             }
-        elif action_type == 'load_demo':
-            from django.core.management import call_command
-            call_command('seed_demo', user.email, verbosity=0)
-            return {
-                'type': 'load_demo', 'success': True,
-                'message': 'Datos demo cargados ✓'
-            }
         elif action_type == 'create_agent':
             org = Organization.objects.filter(owner=user).first()
             if not org:
@@ -679,50 +945,11 @@ def _execute_action(action_data, user, conversation=None):
                 'created': created,
                 'message': f'Agente "{agent_obj.name}" {"creado" if created else "ya existe"} ✓'
             }
-        elif action_type == 'save_document':
-            title = action_data.get('title', 'Documento sin título')
-            content = action_data.get('content', '')
-            if action_data.get('use_last_response') and conversation is not None:
-                # Guarda el entregable tal cual quedó en la conversación (con sus
-                # gráficos embebidos) — el modelo no puede reproducir el base64.
-                last = conversation.messages.filter(role='assistant').order_by('-created_at').first()
-                if last:
-                    # La oferta de guardado no es parte del entregable (puede no ser
-                    # la última línea: a veces la sigue la cita de fuente).
-                    offer = re.compile(r'^\s*¿.*guard.*\?\s*$', re.IGNORECASE)
-                    lines = [ln for ln in last.content.rstrip().splitlines() if not offer.match(ln)]
-                    content = re.sub(r'\n{3,}', '\n\n', '\n'.join(lines)).rstrip()
-            doc_count = Document.objects.filter(user=user).count()
-            doc = Document.objects.create(
-                user=user, title=title, content=content,
-                conversation=conversation,
-                grid_x=0, grid_y=doc_count * 6, grid_w=8, grid_h=6,
-            )
-            return {
-                'type': 'save_document', 'success': True,
-                'document_id': doc.id, 'document_title': doc.title,
-                'message': f'Documento "{doc.title}" guardado ✓'
-            }
         elif action_type == 'navigate':
             return {
                 'type': 'navigate', 'success': True,
                 'path': action_data.get('path', '/app'),
                 'message': f'Navegando...'
-            }
-        elif action_type == 'connect_integration':
-            from apps.organizations.models import ActiveIntegration
-            integration = action_data.get('integration', 'dummyjson')
-            obj, created = ActiveIntegration.objects.get_or_create(
-                user=user, integration_type=integration,
-                defaults={'is_active': True},
-            )
-            if not created:
-                obj.is_active = True
-                obj.save(update_fields=['is_active'])
-            return {
-                'type': 'connect_integration', 'success': True,
-                'integration': integration,
-                'message': f'Integración {integration} conectada ✓',
             }
     except Exception as e:
         return {'type': action_type, 'success': False, 'message': str(e)}
@@ -742,44 +969,186 @@ class DirectChatView(APIView):
         _, default_agent = _get_or_create_default(request.user)
 
         if conversation_id:
-            conversation = get_object_or_404(Conversation, pk=conversation_id, user=request.user)
+            conversation = hilo_para_escribir(request.user, conversation_id)
             agent = _agente_de_conversacion(request, conversation)
         else:
             espacio = _espacio_del_pedido(request)
-            agent = _agente_inicial(request, message, espacio, default_agent)
+            sesion = _sesion_del_pedido(request)
+            agent = _agente_inicial(request, message, espacio, default_agent, sesion)
             conversation = Conversation.objects.create(
-                agent=agent, user=request.user, space=espacio,
+                agent=agent, user=request.user, workspace=espacio, sesion=sesion,
                 title=_conversation_title(agent, message))
 
+        from .menciones import agentes_mencionados, personas_mencionadas
+
         mention_system_id = request.data.get('system_id') or None
-        context = _build_onboarding_context(request.user, agent, mention_system_id)
+
+        Message.objects.create(
+            conversation=conversation, role='user', content=message, user=request.user,
+        )
+
+        # ⭐ A QUIÉN LE HABLARON. El `@` es la interfaz del producto y hasta acá resolvía
+        # una sola cosa: el PRIMER agente. "@analisis busca X y @datos hazme el gráfico"
+        # hacía contestar a uno y descartaba al otro en silencio.
+        alcanzables = _agentes_del_usuario(request.user)
+        mencionados = agentes_mencionados(alcanzables, message)
+
+        # Y las personas. Mencionar a un compañero le AVISA — sin esto, pedirle algo a
+        # alguien en un hilo es dejar un papel sobre un escritorio vacío.
+        nombrados = []
+        if conversation.sesion_id:
+            del_equipo = list(conversation.sesion.members.all())
+            nombrados = personas_mencionadas(message, del_equipo)
+            for quien in nombrados:
+                avisar_de_la_mencion(conversation, request.user, quien, message)
+        # El aviso general va al RESTO: a los nombrados ya les llegó el de la mención,
+        # que dice más. Uno por persona y por mensaje.
+        avisar_del_mensaje(conversation, request.user, message, excepto_a=nombrados)
+
+        # ⚠️ En un hilo de EQUIPO el agente contesta sólo si lo mencionan. La regla estaba
+        # escrita y probada en `hilos.py` desde que se construyó el chat grupal, y no la
+        # llamaba nadie: el agente venía contestando los 8 de 8 mensajes de un hilo entre
+        # personas. Es exactamente el error que hace que los bots terminen apagados.
+        if conversation.sesion_id and not mencionados:
+            conversation.save()
+            return Response({
+                'conversation_id': conversation.id, 'message': '', 'escucha': True,
+            })
+
+        # El agente al que le hablaron manda sobre el que venía en el hilo.
+        if mencionados:
+            agent = mencionados[0]
+
+        context = _build_onboarding_context(
+            request.user, agent, mention_system_id, consulta=message,
+            sesion=conversation.sesion,
+        )
         system_prompt = context['system_prompt']
 
-        Message.objects.create(conversation=conversation, role='user', content=message)
         full_history = list(conversation.messages.values('role', 'content').order_by('created_at'))
 
         model = (request.data.get('model') or '').strip() or context.get('agent_model')
         _, resolved_model = resolve_model(model)
 
-        if context.get('mode') == 'connected_systems':
+        # Lo que el agente deje escrito. Empieza vacía: un chat sin herramientas no
+        # escribe nada, y la pantalla tiene que poder contar con que el campo existe.
+        artefactos = []
+        if context.get('mode') == 'con_herramientas':
             from services.agent_service import run_agent_live
             response_text = run_agent_live(
                 full_history, context['org'], system_prompt, model,
                 context.get('allowed_ids'), context.get('allowed_doc_ids'),
+                # Se llena con lo que el agente deje escrito, para que el chat pueda
+                # ofrecer abrirlo sin mandar a la persona a otra pantalla.
+                tocados=artefactos,
+                # Para firmar las versiones que escriba: el historial de un documento
+                # dice qué agente lo tocó, no solo que "lo tocó la IA".
+                agente=agent,
+                # Y para que pueda ANOTAR una tarea: dentro de una Sesión, lo que sale de
+                # la conversación y hay que hacer deja de depender de que un humano se
+                # acuerde de anotarlo.
+                sesion=conversation.sesion,
             )
         else:
-            response_text = chat_direct(full_history, system_prompt, model)
+            response_text = chat_direct(full_history, system_prompt, model,
+                                        organization=context.get('org'), motivo='chat')
 
-        clean_response = citar_documentos_del_prompt(
-            _strip_action(response_text), context.get('docs_en_prompt'),
-        )
+        limpia = _strip_action(response_text)
+        docs = context.get('docs_en_prompt')
+        clean_response = citar_documentos_del_prompt(limpia, docs)
+        fuentes = fuentes_de_la_respuesta(limpia, docs)
         Message.objects.create(
             conversation=conversation, role='assistant', content=clean_response,
-            agent=agent, model_used=resolved_model,
+            agent=agent, model_used=resolved_model, fuentes=fuentes,
+            artefactos=artefactos,
         )
+
+        # Los demás agentes mencionados, cada uno con SUS instrucciones y SU alcance —
+        # que es el sentido de tener agentes distintos. Uno detrás de otro y no en
+        # paralelo: cada uno lee lo que contestó el anterior, que es lo que convierte dos
+        # respuestas sueltas en una colaboración.
+        extras = [
+            respuesta for respuesta in (
+                self._responder(conversation, otro, request, message, model)
+                for otro in mencionados[1:]
+            ) if respuesta is not None
+        ]
+
         conversation.save()
 
-        return Response({'conversation_id': conversation.id, 'message': clean_response, 'model': resolved_model})
+        return Response({
+            'conversation_id': conversation.id, 'message': clean_response,
+            'model': resolved_model, 'fuentes': fuentes, 'artefactos': artefactos,
+            'agente': {'id': agent.id, 'handle': agent.handle, 'cara': agent.cara},
+            'respuestas_extra': extras,
+        })
+
+    def _responder(self, conversation, agente, request, consulta, model):
+        """Un agente más contesta en el mismo hilo. Devuelve su mensaje, o None.
+
+        ⚠️ **La historia no puede terminar en la respuesta del otro agente.** Se probó y
+        el segundo agente devolvía VACÍO: para el modelo, el último turno era de un
+        asistente y no había ninguna pregunta que contestar. Se repite la consulta como
+        turno del usuario — que es exactamente lo que este agente está respondiendo — con
+        lo que dijo el anterior arriba, como contexto. Eso es lo que hace que la segunda
+        respuesta sea una continuación y no un monólogo aparte.
+        """
+        context = _build_onboarding_context(
+            request.user, agente, None, consulta=consulta, sesion=conversation.sesion,
+        )
+        historia = list(
+            conversation.messages.values('role', 'content').order_by('created_at')
+        )
+        if historia and historia[-1]['role'] != 'user':
+            # Y se le dice QUÉ LE TOCA. Repetir la consulta a secas hacía que el segundo
+            # agente rehiciera la tarea entera —se probó: @claude escribía el saludo y
+            # @analisis volvía a escribirlo en vez de opinar—, o sea dos monólogos en vez
+            # de una colaboración.
+            historia.append({
+                'role': 'user',
+                'content': (
+                    f'Te mencionaron en este mensaje: «{consulta}»\n\n'
+                    f'Otro agente ya respondió arriba lo que le correspondía. '
+                    f'Responde SOLO la parte que te toca a ti, sin repetir lo que él '
+                    f'ya dijo. Si no queda nada tuyo por aportar, dilo en una línea.'
+                ),
+            })
+        modelo = model or context.get('agent_model')
+        _, resuelto = resolve_model(modelo)
+
+        artefactos = []
+        if context.get('mode') == 'con_herramientas':
+            from services.agent_service import run_agent_live
+            texto = run_agent_live(
+                historia, context['org'], context['system_prompt'], modelo,
+                context.get('allowed_ids'), context.get('allowed_doc_ids'),
+                tocados=artefactos, agente=agente, sesion=conversation.sesion,
+            )
+        else:
+            texto = chat_direct(historia, context['system_prompt'], modelo,
+                                organization=context.get('org'), motivo='chat')
+
+        limpia = _strip_action(texto)
+        docs = context.get('docs_en_prompt')
+        contenido = citar_documentos_del_prompt(limpia, docs)
+        fuentes = fuentes_de_la_respuesta(limpia, docs)
+
+        # Una respuesta vacía no se guarda: dejaría una burbuja en blanco firmada por el
+        # agente, que se lee como que contestó y no dijo nada.
+        if not contenido.strip():
+            logger.warning('El agente %s no devolvió texto en el hilo %s',
+                           agente.handle, conversation.pk)
+            return None
+
+        msg = Message.objects.create(
+            conversation=conversation, role='assistant', content=contenido,
+            agent=agente, model_used=resuelto, fuentes=fuentes, artefactos=artefactos,
+        )
+        return {
+            'id': msg.id, 'message': contenido, 'model': resuelto,
+            'fuentes': fuentes, 'artefactos': artefactos,
+            'agente': {'id': agente.id, 'handle': agente.handle, 'cara': agente.cara},
+        }
 
 
 class ChatAttachmentView(APIView):
@@ -794,7 +1163,13 @@ class ChatAttachmentView(APIView):
         if not f:
             return Response({'detail': 'El campo file es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        result = process_document(f, f.content_type or '')
+        # La empresa sale de la PERTENENCIA, igual que en `_build_onboarding_context`:
+        # el resumen lo paga la empresa de quien sube el archivo, no su dueño.
+        from apps.workspaces.models import Membership
+        membresia = Membership.objects.filter(user=request.user).select_related('organization').first()
+
+        result = process_document(f, f.content_type or '',
+                                  membresia.organization if membresia else None)
         return Response({
             'filename': f.name,
             'extracted_text': result['extracted_text'],
@@ -816,22 +1191,56 @@ class DirectChatStreamView(APIView):
         _, default_agent = _get_or_create_default(request.user)
 
         if conversation_id:
-            conversation = get_object_or_404(Conversation, pk=conversation_id, user=request.user)
+            conversation = hilo_para_escribir(request.user, conversation_id)
             agent = _agente_de_conversacion(request, conversation)
         else:
             espacio = _espacio_del_pedido(request)
-            agent = _agente_inicial(request, message, espacio, default_agent)
+            sesion = _sesion_del_pedido(request)
+            agent = _agente_inicial(request, message, espacio, default_agent, sesion)
             conversation = Conversation.objects.create(
-                agent=agent, user=request.user, space=espacio,
+                agent=agent, user=request.user, workspace=espacio, sesion=sesion,
                 title=_conversation_title(agent, message))
 
+        from .menciones import agentes_mencionados, personas_mencionadas
+
         mention_system_id = request.data.get('system_id') or None
-        context = _build_onboarding_context(request.user, agent, mention_system_id)
-        system_prompt = context['system_prompt']
 
         mensaje_usuario = Message.objects.create(
-            conversation=conversation, role='user', content=message,
+            conversation=conversation, role='user', content=message, user=request.user,
         )
+        alcanzables = _agentes_del_usuario(request.user)
+        mencionados = agentes_mencionados(alcanzables, message)
+
+        nombrados = []
+        if conversation.sesion_id:
+            nombrados = personas_mencionadas(
+                message, list(conversation.sesion.members.all()),
+            )
+            for quien in nombrados:
+                avisar_de_la_mencion(conversation, request.user, quien, message)
+        # Lo que se escribe en una Sesión es del EQUIPO: al resto le llega el aviso. A los
+        # nombrados NO — ya recibieron el de la mención, que dice más.
+        avisar_del_mensaje(conversation, request.user, message, excepto_a=nombrados)
+
+        # ⚠️ En un hilo de EQUIPO el agente escucha y sólo contesta cuando lo mencionan
+        # (ver `hilos.le_hablan_a_la_ia`). Un asistente que responde cada mensaje de una
+        # conversación entre cinco personas la vuelve inusable.
+        if conversation.sesion_id and not mencionados:
+            conversation.save()
+            return Response({
+                'conversation_id': conversation.id,
+                'user_message_id': mensaje_usuario.id,
+                'escucha': True,
+            })
+
+        if mencionados:
+            agent = mencionados[0]
+
+        context = _build_onboarding_context(
+            request.user, agent, mention_system_id, consulta=message,
+            sesion=conversation.sesion,
+        )
+        system_prompt = context['system_prompt']
         full_history = list(conversation.messages.values('role', 'content').order_by('created_at'))
 
         conv_id = conversation.id
@@ -848,31 +1257,36 @@ class DirectChatStreamView(APIView):
         # Quien va a contestar viaja en el primer evento: si la mencion cambio el
         # agente, la pantalla tiene que enterarse antes de que empiece el texto.
         agente_payload = (
-            {'id': agent.id, 'name': agent.name, 'handle': agent.handle} if agent else None
+            {'id': agent.id, 'name': agent.name, 'handle': agent.handle, 'cara': agent.cara}
+            if agent else None
         )
 
         def event_stream():
             accumulated = []
+            artefactos = []
             yield f"data: {json.dumps({'conversation_id': conv_id, 'model': resolved_model, 'agent': agente_payload})}\n\n"
 
-            if mode == 'connected_systems':
+            if mode == 'con_herramientas':
                 # Agente con datos en vivo: emite estados de progreso por cada herramienta
                 # mientras consulta los sistemas, y al final el texto en trozos (efecto typing).
                 from services.agent_service import run_agent_live_events
                 full_text = ''
                 for event in run_agent_live_events(
                     full_history, org, system_prompt, model, allowed_ids, allowed_doc_ids,
+                    agente=agent, sesion=conversation.sesion,
                 ):
                     if 'status' in event:
                         yield f"data: {json.dumps({'status': event['status']})}\n\n"
                     elif 'final' in event:
                         full_text = event['final']
+                        artefactos = list(event.get('documentos') or [])
                 accumulated.append(full_text)
                 clean_stream = _strip_action(full_text)
                 for piece in _chunk_text(clean_stream):
                     yield f"data: {json.dumps({'chunk': piece})}\n\n"
             else:
-                for chunk in stream_direct(full_history, system_prompt, model):
+                for chunk in stream_direct(full_history, system_prompt, model,
+                                           organization=context.get('org'), motivo='chat'):
                     accumulated.append(chunk)
                     # Don't stream the action marker to the client
                     if '__ACTION__' not in chunk:
@@ -897,9 +1311,11 @@ class DirectChatStreamView(APIView):
                 # El modelo a veces responde SOLO con la acción; que el historial
                 # no quede con un mensaje vacío.
                 clean_response = action_result.get('message', '')
+            fuentes = fuentes_de_la_respuesta(_strip_action(full_response), docs_en_prompt)
             respuesta = Message.objects.create(
                 conversation_id=conv_id, role='assistant', content=clean_response,
-                agent_id=agent_id, model_used=resolved_model,
+                agent_id=agent_id, model_used=resolved_model, fuentes=fuentes,
+                artefactos=artefactos,
             )
             Conversation.objects.filter(pk=conv_id).update()
 
@@ -909,8 +1325,11 @@ class DirectChatStreamView(APIView):
             done_payload = {
                 'done': True,
                 'model': resolved_model,
+                'artefactos': artefactos,
                 'user_message_id': user_message_id,
                 'message_id': respuesta.id,
+                # En qué se apoyó, para poder abrirlo de un clic sin recargar el hilo.
+                'fuentes': fuentes,
             }
 
             if action_result:
@@ -924,53 +1343,70 @@ class DirectChatStreamView(APIView):
         return response
 
 
+def modelos_disponibles():
+    """Los modelos de IA que se le pueden ofrecer a elegir, y cuál es el default.
+
+    Función aparte de la vista porque el constructor de agentes necesita la misma
+    lista dentro de su respuesta de opciones (`apps/agents/builder.py`), y tener dos
+    copias de esta lógica termina con un selector que ofrece modelos distintos según
+    la pantalla.
+    """
+    from django.conf import settings
+    import requests
+
+    provider = getattr(settings, 'AI_PROVIDER', 'ollama')
+    default_model = (getattr(settings, 'OLLAMA_CLOUD_MODEL', '')
+                     if provider == 'ollama_cloud'
+                     else getattr(settings, 'OLLAMA_MODEL', ''))
+    models, seen = [], set()
+
+    # El modelo de embeddings vive en el mismo Ollama y por lo tanto sale en
+    # /api/tags, pero NO conversa: ofrecerlo en el selector es ofrecer un modelo que
+    # falla al primer mensaje. Aparecio solo al instalar la busqueda semantica.
+    embeddings = (getattr(settings, 'EMBEDDINGS_MODEL', '') or '').strip()
+    excluidos = {embeddings, f'{embeddings}:latest'} if embeddings else set()
+
+    def add(name, kind):
+        if name and name not in seen and name not in excluidos:
+            seen.add(name)
+            models.append({'id': name, 'label': name, 'kind': kind,
+                           'default': name == default_model})
+
+    # Locales (Ollama corriendo)
+    try:
+        base = getattr(settings, 'OLLAMA_BASE_URL', 'http://localhost:11434')
+        r = requests.get(f'{base}/api/tags', timeout=4)
+        for m in r.json().get('models', []):
+            nm = m.get('name', '')
+            add(nm, 'cloud' if nm.endswith('-cloud') else 'local')
+    except Exception:
+        pass
+
+    # Cloud configurados (aunque no estén en /api/tags)
+    for nm in getattr(settings, 'OLLAMA_CLOUD_MODELS', []):
+        add(nm, 'cloud')
+    add(getattr(settings, 'OLLAMA_CLOUD_MODEL', ''), 'cloud')
+
+    # Asegura que el default esté presente
+    add(default_model, 'cloud' if provider == 'ollama_cloud' else 'local')
+
+    # Anthropic y DeepSeek — solo aparecen en el selector si hay API key configurada.
+    if getattr(settings, 'ANTHROPIC_API_KEY', ''):
+        add('claude-opus-4-8', 'anthropic')
+        add('claude-sonnet-5', 'anthropic')
+    if getattr(settings, 'DEEPSEEK_API_KEY', ''):
+        add(getattr(settings, 'DEEPSEEK_MODEL', 'deepseek-v4-flash'), 'deepseek')
+
+    return {'models': models, 'default': default_model}
+
+
 class AvailableModelsView(APIView):
     """Modelos de IA disponibles para el selector de la app: los locales de Ollama
     (/api/tags) + los cloud configurados, marcando el default activo."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        from django.conf import settings
-        import requests
-
-        provider = getattr(settings, 'AI_PROVIDER', 'ollama')
-        default_model = (getattr(settings, 'OLLAMA_CLOUD_MODEL', '')
-                         if provider == 'ollama_cloud'
-                         else getattr(settings, 'OLLAMA_MODEL', ''))
-        models, seen = [], set()
-
-        def add(name, kind):
-            if name and name not in seen:
-                seen.add(name)
-                models.append({'id': name, 'label': name, 'kind': kind,
-                               'default': name == default_model})
-
-        # Locales (Ollama corriendo)
-        try:
-            base = getattr(settings, 'OLLAMA_BASE_URL', 'http://localhost:11434')
-            r = requests.get(f'{base}/api/tags', timeout=4)
-            for m in r.json().get('models', []):
-                nm = m.get('name', '')
-                add(nm, 'cloud' if nm.endswith('-cloud') else 'local')
-        except Exception:
-            pass
-
-        # Cloud configurados (aunque no estén en /api/tags)
-        for nm in getattr(settings, 'OLLAMA_CLOUD_MODELS', []):
-            add(nm, 'cloud')
-        add(getattr(settings, 'OLLAMA_CLOUD_MODEL', ''), 'cloud')
-
-        # Asegura que el default esté presente
-        add(default_model, 'cloud' if provider == 'ollama_cloud' else 'local')
-
-        # Anthropic y DeepSeek — solo aparecen en el selector si hay API key configurada.
-        if getattr(settings, 'ANTHROPIC_API_KEY', ''):
-            add('claude-opus-4-8', 'anthropic')
-            add('claude-sonnet-5', 'anthropic')
-        if getattr(settings, 'DEEPSEEK_API_KEY', ''):
-            add(getattr(settings, 'DEEPSEEK_MODEL', 'deepseek-v4-flash'), 'deepseek')
-
-        return Response({'models': models, 'default': default_model})
+        return Response(modelos_disponibles())
 
 
 class AgentListCreateView(APIView):
@@ -982,10 +1418,34 @@ class AgentListCreateView(APIView):
         return Response(AgentSerializer(agents, many=True).data)
 
     def post(self, request):
+        """Crear un agente por el endpoint viejo.
+
+        Resuelve el permiso igual que el constructor (`apps/agents/builder.py`): ser
+        miembro del Workspace de esa empresa Y que la politica
+        `agent_creation_policy` lo habilite. Antes bastaba con ser el dueño de la
+        Organization, asi que la politica del Workspace no se consultaba nunca y
+        quedaban dos puertas con reglas distintas para lo mismo.
+
+        La organizacion sigue viniendo del cuerpo por compatibilidad, pero ahora hay
+        que ser miembro de su Workspace: mandar la de otra empresa da 404.
+        """
+        from apps.workspaces.models import Workspace
+
+        from .builder import NoPuedeCrear, _membership_que_edita
+
         serializer = AgentSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        org = get_object_or_404(Organization, pk=serializer.validated_data['organization'].pk, owner=request.user)
-        serializer.save(organization=org)
+        org = serializer.validated_data['organization']
+
+        # La empresa ES el nivel de arriba: se le pregunta a ella por su slug, sin
+        # rebotar en un Workspace intermedio como cuando eran lo mismo.
+        try:
+            _membership_que_edita(request.user, org.slug)
+        except NoPuedeCrear as e:
+            return Response({'detail': str(e)}, status=status.HTTP_403_FORBIDDEN)
+
+        agent = serializer.save(organization=org, created_by=request.user)
+        AgentConfig.objects.get_or_create(agent=agent)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
@@ -1084,11 +1544,13 @@ class ChatView(APIView):
         conversation_id = serializer.validated_data.get('conversation_id')
 
         if conversation_id:
-            conversation = get_object_or_404(Conversation, pk=conversation_id, agent=agent, user=request.user)
+            conversation = hilo_para_escribir(request.user, conversation_id)
         else:
             conversation = Conversation.objects.create(agent=agent, user=request.user, title=user_message[:120])
 
-        Message.objects.create(conversation=conversation, role='user', content=user_message)
+        Message.objects.create(
+            conversation=conversation, role='user', content=user_message, user=request.user,
+        )
         history = list(conversation.messages.values('role', 'content').order_by('created_at'))
 
         if not org.odoo_connected:
@@ -1142,8 +1604,66 @@ class UserConversationDetailView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, conv_id):
-        conv = get_object_or_404(Conversation, pk=conv_id, user=request.user)
+        """Los mensajes del hilo.
+
+        ⚠️ **Filtraba por `user=request.user`**, así que un hilo compartido a una Sesión
+        no lo podía LEER nadie más que quien lo escribió — aunque el equipo entero
+        alcanzara la Sesión y pudiera escribir en él. Compartir dejaba ver el hilo en la
+        lista y daba 404 al abrirlo.
+
+        Se resuelve con el mismo embudo que la escritura (`hilo_para_escribir`): hilo
+        personal = de quien lo abrió; hilo de una Sesión = de quien alcanza la Sesión.
+        Una sola regla para leer y para escribir, que es lo que evita que se separen.
+        """
+        conv = hilo_para_escribir(request.user, conv_id)
         return Response(ConversationSerializer(conv).data)
+
+    def patch(self, request, conv_id):
+        """Renombra el hilo, o lo mueve a una Sesión.
+
+        Mover a una Sesión es lo que significa COMPARTIR una conversación: deja de ser
+        del historial privado de quien la escribió y pasa a verla el equipo de esa Sesión.
+        Mandar `sesion: null` la vuelve personal.
+
+        Solo el dueño del hilo puede hacerlo (`user=request.user`): compartir el trabajo
+        de otro no es una decisión de quien lo lee.
+        """
+        conv = get_object_or_404(Conversation, pk=conv_id, user=request.user)
+
+        if 'title' in request.data:
+            titulo = (request.data.get('title') or '').strip()[:500]
+            if not titulo:
+                return Response(
+                    {'detail': 'La conversación necesita un nombre.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            conv.title = titulo
+
+        if 'sesion' in request.data:
+            pedida = request.data.get('sesion')
+            if pedida in (None, '', 0):
+                conv.sesion = None
+            else:
+                # La Sesión tiene que ser una que esta persona alcance: compartir en una
+                # Sesión ajena sería meter su conversación donde no le corresponde.
+                from apps.sesiones.models import Sesion
+                from apps.workspaces.permissions import resolve_membership
+
+                slug = (request.data.get('workspace') or '').strip()
+                membership = resolve_membership(request.user, slug) if slug else None
+                sesion = (
+                    Sesion.objects.filter(workspace__organization=membership.organization, slug=pedida).first()
+                    if membership else None
+                )
+                if sesion is None or sesion.rol_de(request.user, membership) is None:
+                    return Response(
+                        {'detail': 'Esa Sesión no existe o no tiene acceso.'},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                conv.sesion = sesion
+
+        conv.save()
+        return Response(ConversationListSerializer(conv).data)
 
     def delete(self, request, conv_id):
         conv = get_object_or_404(Conversation, pk=conv_id, user=request.user)
@@ -1198,7 +1718,15 @@ def _user_org(user, org_id=None):
     las automatizaciones necesitan una empresa real). Levanta OrgRequiredError
     en vez de un 404 crudo para que la vista pueda devolver un mensaje claro.
     """
-    qs = Organization.objects.filter(owner=user).exclude(name='Personal')
+    # Por PERTENENCIA y no por propiedad: un Disparador corre solo y manda correos a
+    # nombre de la empresa, así que lo decide el rol y no quién apretó "crear empresa".
+    from apps.workspaces.permissions import empresas_of
+
+    qs = (
+        Organization.objects
+        .filter(id__in=[m.organization_id for m in empresas_of(user)])
+        .exclude(name='Personal')
+    )
     if org_id:
         org = qs.filter(pk=org_id).first()
     else:
@@ -1222,6 +1750,10 @@ class AutomationListCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         try:
             org = _user_org(request.user, request.data.get('organization'))
+            # Un Disparador corre solo, consulta los sistemas y manda correos a nombre
+            # de la empresa: no es algo que deba poder dejar andando cualquiera.
+            from apps.workspaces.permissions import exigir_rol
+            exigir_rol(request.user, org)
         except OrgRequiredError:
             return Response(
                 {'organization': ['Las automatizaciones no están disponibles en "Personal" — selecciona o crea una empresa real arriba.']},
@@ -1360,7 +1892,7 @@ class SkillListCreateView(APIView):
 
     def post(self, request):
         org = _user_org(request.user, request.data.get('organization'))
-        serializer = SkillWriteSerializer(data=request.data)
+        serializer = SkillWriteSerializer(data=request.data, context={'organization': org})
         serializer.is_valid(raise_exception=True)
         habilidad = serializer.save(organization=org, created_by=request.user)
         self._enganchar(habilidad, request.data.get('agent_ids'), org)
@@ -1391,7 +1923,10 @@ class SkillDetailView(SkillListCreateView):
 
     def patch(self, request, pk):
         org, habilidad = self._get(request, pk)
-        serializer = SkillWriteSerializer(habilidad, data=request.data, partial=True)
+        serializer = SkillWriteSerializer(
+            habilidad, data=request.data, partial=True,
+            context={'organization': habilidad.organization},
+        )
         serializer.is_valid(raise_exception=True)
         serializer.save()
         self._enganchar(habilidad, request.data.get('agent_ids'), org)
@@ -1439,7 +1974,7 @@ class ConversationBranchView(APIView):
             )
 
         rama = Conversation.objects.create(
-            agent=original.agent, user=request.user, space=original.space,
+            agent=original.agent, user=request.user, workspace=original.workspace,
             title=f'{original.title or "Conversación"} (rama)'[:500],
         )
         Message.objects.bulk_create([

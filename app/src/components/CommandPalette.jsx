@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, Typography, InputBase, useTheme } from '@mui/material';
 import {
   MessageSquare, Bot, LayoutDashboard, Plug, Plus, Search,
-  Settings, HelpCircle, Building2, User, FileText, Users,
+  Settings, HelpCircle, Building2, User, Users,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -10,15 +10,14 @@ const COMMANDS = [
   { group: 'Navegación', icon: MessageSquare,  label: 'Chat',             shortcut: 'G C', action: '/app' },
   { group: 'Navegación', icon: LayoutDashboard, label: 'Tablero',         shortcut: 'G T', action: '/app/tablero' },
   { group: 'Navegación', icon: Bot,            label: 'Agentes',          shortcut: 'G A', action: '/app/agentes' },
-  { group: 'Navegación', icon: Plug,           label: 'Conexiones',    shortcut: 'G I', action: '/app/integraciones' },
-  { group: 'Navegación', icon: FileText,       label: 'Documentos',                        action: '/app/documentos' },
+  { group: 'Navegación', icon: Plug,           label: 'Conexiones',    shortcut: 'G I', action: '/app/contexto?tab=integraciones' },
   { group: 'Navegación', icon: Building2,      label: 'Workspace',                         action: '/app/admin/workspace' },
   { group: 'Navegación', icon: User,           label: 'Mi Perfil',                         action: '/app/perfil' },
   { group: 'Navegación', icon: Users,          label: 'Equipo',                             action: '/app/equipo' },
   { group: 'Navegación', icon: Settings,       label: 'Configuración',                     action: '/app/configuracion' },
   { group: 'Navegación', icon: HelpCircle,     label: 'Ayuda',                             action: '/app/ayuda' },
   { group: 'Acciones',   icon: Plus,           label: 'Nueva conversación',                action: 'new-chat' },
-  { group: 'Acciones',   icon: Bot,            label: 'Crear agente',                      action: 'new-agent' },
+  { group: 'Acciones',   icon: Bot,            label: 'Crear agente',                      action: '/app/agentes/nuevo' },
 ];
 
 export default function CommandPalette({ open, onClose }) {

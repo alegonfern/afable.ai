@@ -33,15 +33,130 @@ def _run_prompt(user, organization, prompt: str, agent=None) -> str:
     from apps.agents.views import _build_onboarding_context
     from services.agent_service import run_agent_live, chat_direct
 
-    ctx = _build_onboarding_context(user, agent)
+    # El prompt de la automatizacion hace de consulta: si el corpus de documentos no
+    # cabe en el contexto, es lo que decide que fragmentos entran.
+    ctx = _build_onboarding_context(user, agent, consulta=prompt)
     system_prompt = ctx.get('system_prompt', '')
-    if ctx.get('mode') == 'connected_systems':
-        return run_agent_live(
+    if ctx.get('mode') == 'con_herramientas':
+        salida = run_agent_live(
             [{'role': 'user', 'content': prompt}], organization, system_prompt,
             model=ctx.get('agent_model'), allowed_ids=ctx.get('allowed_ids'),
-            allowed_doc_ids=ctx.get('allowed_doc_ids'),
+            allowed_doc_ids=ctx.get('allowed_doc_ids'), agente=agent,
         )
-    return chat_direct([{'role': 'user', 'content': prompt}], system_prompt)
+    else:
+        salida = chat_direct([{'role': 'user', 'content': prompt}], system_prompt,
+                             organization=organization, motivo='automatizacion')
+    return _limpiar_para_leer(salida)
+
+
+def _limpiar_para_leer(texto: str) -> str:
+    """Saca del texto lo que es protocolo y no respuesta.
+
+    Por acá salen las Tareas y las Automatizaciones: nadie ejecuta acciones ni
+    herramientas con este resultado, se lee y se guarda. El chat sí las ejecuta, y por
+    eso limpia recién después de extraerlas — acá hay que hacerlo nosotros.
+
+    Sin esto, el resultado de una Tarea ejecutada por un agente llegaba con
+    `__ACTION__{"type":"search",...}` pegado adelante: el modelo intenta invocar
+    escribiendo, porque no todos usan el campo `tool_calls`.
+    """
+    from apps.agents.views import _strip_action
+    from services.agent_service import _quitar_llamadas_visibles
+
+    return _quitar_llamadas_visibles(_strip_action(texto or '')).strip()
+
+
+def publicar_en_sesion(automation, texto: str, titulo: str = ''):
+    """El agente abre una conversación en la Sesión con lo que encontró.
+
+    Esto es lo que vuelve al agente un miembro del equipo y no una herramienta: la
+    conversación aparece en el feed de la Sesión como cualquier otra, la ve todo el que
+    entra, y NADIE la pidió. Antes el resultado se iba por correo a una sola persona y el
+    equipo no se enteraba.
+
+    Se escriben los dos turnos —el encargo y la respuesta— y no solo la respuesta, porque
+    quien lo lee tres días después necesita saber qué se le había pedido. Y queda marcada
+    con `autonoma` para que el feed pueda decir que la trajo el agente solo.
+    """
+    from apps.agents.models import Conversation, Message
+
+    agente = automation.agent or _agente_por_omision(automation.organization)
+    if agente is None:
+        # Sin ningún agente en la empresa no hay a quién atribuirle el hilo, y
+        # `Conversation.agent` no admite vacío.
+        raise RuntimeError('La empresa no tiene ningún agente con el que publicar.')
+
+    conv = Conversation.objects.create(
+        agent=agente, sesion=automation.sesion, user=automation.user,
+        title=(titulo or automation.name)[:500], autonoma=True,
+    )
+    Message.objects.create(
+        conversation=conv, role='user',
+        content=automation.prompt or f'Encargo permanente: {automation.name}',
+    )
+    Message.objects.create(
+        conversation=conv, role='assistant', content=texto, agent=agente,
+    )
+    return conv
+
+
+def _agente_por_omision(organization):
+    from apps.agents.models import Agent
+
+    return Agent.objects.filter(organization=organization, is_active=True).first()
+
+
+def anotar_tarea(automation, texto: str):
+    """Deja el pendiente anotado en la Sesión, con el resultado adentro.
+
+    Para los encargos que terminan en algo que alguien tiene que hacer: "avisame si hay
+    facturas sin pagar" no se resuelve leyendo el aviso, se resuelve pagándolas. La tarea
+    nace ya con el resultado y firmada por el agente, así que el equipo ve de dónde salió.
+    """
+    from apps.sesiones.models import Task
+
+    return Task.objects.create(
+        sesion=automation.sesion,
+        title=automation.name[:255],
+        description=automation.prompt or '',
+        agent=automation.agent or _agente_por_omision(automation.organization),
+        resultado=texto[:_MAX_RESULT_CHARS],
+        ejecutada_at=timezone.now(),
+        # `created_by` vacío a propósito: NADIE la escribió, la dejó el agente. Es el
+        # mismo par que usa la herramienta `crear_tarea` (`created_by` vacío + `agent`
+        # puesto) para que las dos vías se lean igual en la lista. Quién configuró el
+        # encargo se ve en el Disparador, que es donde importa.
+    )
+
+
+def entregar(automation, texto: str, asunto: str = '') -> str:
+    """Manda el resultado a donde el encargo dijo. Devuelve el error si algo falló.
+
+    Los destinos conviven: el correo avisa afuera, la Sesión deja el registro adentro. Se
+    intentan los dos por separado a propósito — que falle el SMTP no puede hacer perder la
+    publicación, que es la que queda guardada.
+    """
+    problemas = []
+
+    if automation.sesion_id:
+        try:
+            publicar_en_sesion(automation, texto, asunto)
+            if automation.crear_tarea:
+                anotar_tarea(automation, texto)
+        except Exception as e:
+            logger.exception('Automation %s: fallo publicando en la Sesión', automation.id)
+            problemas.append(f'no se pudo publicar en la Sesión: {e}')
+
+    if automation.notify_email:
+        try:
+            _send_result_email(
+                automation.notify_email, f'Afable — {asunto or automation.name}', texto,
+            )
+        except Exception as e:
+            logger.exception('Automation %s: fallo enviando correo', automation.id)
+            problemas.append(f'falló el correo: {e}')
+
+    return ('Se ejecutó pero ' + '; '.join(problemas))[:500] if problemas else ''
 
 
 def _send_result_email(to_email: str, subject: str, body: str):
@@ -75,18 +190,11 @@ def execute_automation(automation, contexto_extra: str = '') -> dict:
                 f'{contexto_extra}\n\n'
                 f'Con eso a la vista: {automation.prompt}'
             )
-        result = _run_prompt(automation.user, automation.organization, prompt)
+        result = _run_prompt(
+            automation.user, automation.organization, prompt, agent=automation.agent,
+        )
         automation.last_result = result[:_MAX_RESULT_CHARS]
-        automation.last_error = ''
-        try:
-            _send_result_email(
-                automation.notify_email,
-                f'Afable — {automation.name}',
-                result,
-            )
-        except Exception as e:
-            logger.exception('Automation %s: fallo enviando correo', automation.id)
-            automation.last_error = f'Se ejecutó pero falló el correo: {e}'
+        automation.last_error = entregar(automation, result)
         automation.save()
         return {'ok': True, 'result': automation.last_result, 'error': automation.last_error}
     except Exception as e:
@@ -125,15 +233,15 @@ def _execute_event_automation(automation) -> dict:
                 f"EVENTO DETECTADO EN LOS SISTEMAS CONECTADOS:\n{check['details']}\n\n---\n\n"
                 f"TAREA (a raíz de este evento):\n{automation.prompt}"
             )
-            result = _run_prompt(automation.user, automation.organization, full_prompt)
+            result = _run_prompt(
+                automation.user, automation.organization, full_prompt,
+                agent=automation.agent,
+            )
             body = f"{check['details']}\n\n---\n\n{result}"
         automation.last_result = body[:_MAX_RESULT_CHARS]
-        automation.last_error = ''
-        try:
-            _send_result_email(automation.notify_email, f'Afable — {automation.name}', body)
-        except Exception as e:
-            logger.exception('Automation %s: fallo enviando correo', automation.id)
-            automation.last_error = f'El evento disparó pero falló el correo: {e}'
+        # Mismo camino que el encargo programado: si hay Sesión, el equipo se entera del
+        # evento ahí. Antes el aviso solo existía en la casilla de una persona.
+        automation.last_error = entregar(automation, body)
         automation.save()
         return {'ok': True, 'fired': True, 'result': automation.last_result, 'error': automation.last_error}
     except Exception as e:

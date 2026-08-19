@@ -10,6 +10,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import PublicOutlinedIcon from '@mui/icons-material/PublicOutlined';
 import PageHeader from '../../components/PageHeader';
+import TareasTab from './TareasTab';
 import { api } from '../../services/api';
 import { useWorkspace } from '../../context/WorkspaceContext';
 
@@ -17,10 +18,10 @@ import { useWorkspace } from '../../context/WorkspaceContext';
 // `coleccion` es el segmento de la URL de la API — no siempre coinciden porque
 // la API habla español y el modelo de datos inglés.
 const PESTANAS = [
-  { campo: 'connections', coleccion: 'conexiones', label: 'Fuentes',  vacio: 'Este Espacio todavía no tiene ninguna conexión enganchada.' },
-  { campo: 'documents',   coleccion: 'documentos', label: 'Documentos', vacio: 'Ningún documento vive en este Espacio.' },
-  { campo: 'agents',      coleccion: 'agentes',    label: 'Agentes',  vacio: 'Ningún agente trabaja todavía en este Espacio.' },
-  { campo: 'members',     coleccion: 'personas',   label: 'Personas', vacio: 'Nadie está agregado a este Espacio.' },
+  { campo: 'connections', coleccion: 'conexiones', label: 'Fuentes',  vacio: 'Este Workspace todavía no tiene ninguna conexión enganchada.' },
+  { campo: 'documents',   coleccion: 'documentos', label: 'Documentos', vacio: 'Ningún documento vive en este Workspace.' },
+  { campo: 'agents',      coleccion: 'agentes',    label: 'Agentes',  vacio: 'Ningún agente trabaja todavía en este Workspace.' },
+  { campo: 'members',     coleccion: 'personas',   label: 'Personas', vacio: 'Nadie está agregado a este Workspace.' },
 ];
 
 function etiqueta(item, campo) {
@@ -38,6 +39,7 @@ function detalle(item, campo) {
 }
 
 const PESTANA_CONVERSACIONES = 'conversaciones';
+const PESTANA_TAREAS = 'tareas';
 
 export default function EspacioDetallePage() {
   const theme = useTheme();
@@ -64,7 +66,7 @@ export default function EspacioDetallePage() {
       setEspacio(data);
       setError('');
     } catch {
-      setError('Este Espacio no existe o no tiene acceso.');
+      setError('Este Workspace no existe o no tiene acceso.');
     } finally {
       setCargando(false);
     }
@@ -110,7 +112,7 @@ export default function EspacioDetallePage() {
       const { data } = await api.removeFromSpace(slug, spaceSlug, pestana.coleccion, [id]);
       setEspacio(data);
     } catch {
-      setError('No se pudo sacar del Espacio.');
+      setError('No se pudo sacar del Workspace.');
     }
   };
 
@@ -119,7 +121,7 @@ export default function EspacioDetallePage() {
       const { data } = await api.updateSpace(slug, spaceSlug, { visibility });
       setEspacio(data);
     } catch {
-      setError('No se pudo cambiar quién entra a este Espacio.');
+      setError('No se pudo cambiar quién entra a este Workspace.');
     }
   };
 
@@ -134,8 +136,8 @@ export default function EspacioDetallePage() {
   if (!espacio) {
     return (
       <Box sx={{ p: 3 }}>
-        <PageHeader title="Espacio" back="/app/contexto?tab=espacios" backLabel="Espacios" />
-        <Alert severity="warning" sx={{ mt: 2 }}>{error || 'Espacio no encontrado.'}</Alert>
+        <PageHeader title="Workspace" back="/app/contexto?tab=espacios" backLabel="Workspaces" />
+        <Alert severity="warning" sx={{ mt: 2 }}>{error || 'Workspace no encontrado.'}</Alert>
       </Box>
     );
   }
@@ -147,7 +149,7 @@ export default function EspacioDetallePage() {
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
       <PageHeader
         title={`${espacio.icon || '📁'}  ${espacio.name}`}
-        back="/app/contexto?tab=espacios" backLabel="Espacios"
+        back="/app/contexto?tab=espacios" backLabel="Workspaces"
       />
 
       <Box sx={{ px: { xs: 2, sm: 3 }, pt: 2 }}>
@@ -187,11 +189,19 @@ export default function EspacioDetallePage() {
               label={`${p.label} (${(espacio[p.campo] || []).length})`}
             />
           ))}
+          <Tab value={PESTANA_TAREAS} label="Tareas" />
           <Tab value={PESTANA_CONVERSACIONES} label="Conversaciones" />
         </Tabs>
       </Box>
 
-      {tab === PESTANA_CONVERSACIONES ? (
+      {tab === PESTANA_TAREAS ? (
+        // Los agentes y las personas del Espacio se pasan desde la ficha, que ya los
+        // trae: pedirlos de nuevo sería un viaje extra por lo mismo.
+        <TareasTab
+          slug={slug} spaceSlug={spaceSlug}
+          agentes={espacio.agents || []} personas={espacio.members || []}
+        />
+      ) : tab === PESTANA_CONVERSACIONES ? (
         <Box sx={{ px: { xs: 2, sm: 3 }, pt: 2, pb: 5, maxWidth: 780, width: '100%' }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
             Lo que se trabajó en este Espacio. A diferencia de su historial personal,
@@ -247,7 +257,7 @@ export default function EspacioDetallePage() {
                 key={item.id}
                 divider
                 secondaryAction={
-                  <IconButton edge="end" size="small" onClick={() => soltar(item.id)} aria-label="Sacar del Espacio">
+                  <IconButton edge="end" size="small" onClick={() => soltar(item.id)} aria-label="Sacar del Workspace">
                     <DeleteOutlineIcon fontSize="small" />
                   </IconButton>
                 }
@@ -307,7 +317,7 @@ export default function EspacioDetallePage() {
             navigate('/app/contexto?tab=espacios');
           }}
         >
-          Eliminar este Espacio
+          Eliminar este Workspace
         </Button>
       </Box>
     </Box>

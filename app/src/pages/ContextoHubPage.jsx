@@ -1,55 +1,37 @@
-import { useState } from 'react';
-import { Box, Tabs, Tab, useTheme } from '@mui/material';
+import { Box } from '@mui/material';
 import { useSearchParams } from 'react-router-dom';
 import PageHeader from '../components/PageHeader';
+import NavConocimiento from '../components/NavConocimiento';
 import IntegrationsPage from './IntegrationsPage';
 import MiContextoPage from './MiContextoPage';
-import ContextoPage from './ContextoPage';
-import DocumentosTab from './DocumentosTab';
 import EspaciosTab from './espacios/EspaciosTab';
 
-const TABS = [
-  { value: 'espacios',      label: 'Espacios' },
-  { value: 'integraciones', label: 'Conexiones' },
-  { value: 'mi-contexto',   label: 'Mi Contexto' },
-  { value: 'cubiculos',     label: 'Cubículos' },
-  { value: 'documentos',    label: 'Carpetas' },
-];
+// De dónde sale lo que el agente sabe. Archivos es del mismo grupo pero vive en su propia
+// pantalla (tiene árbol de carpetas y su propio `?carpeta=`), así que la barra de pestañas
+// se comparte — ver `NavConocimiento`. El `?tab=` es la fuente de verdad y no un estado
+// local: con estado, entrar desde otro item del menú no cambiaba de pestaña.
+const TITULOS = {
+  espacios: 'Workspaces',
+  integraciones: 'Conexiones',
+  'mi-contexto': 'Contexto de la empresa',
+};
 
 export default function ContextoHubPage() {
-  const theme = useTheme();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const initial = TABS.some(t => t.value === searchParams.get('tab'))
-    ? searchParams.get('tab') : 'espacios';
-  const [tab, setTab] = useState(initial);
+  const [searchParams] = useSearchParams();
 
-  const handleChange = (_, value) => {
-    setTab(value);
-    setSearchParams({ tab: value }, { replace: true });
-  };
+  const pedida = searchParams.get('tab');
+  const tab = TITULOS[pedida] ? pedida : 'espacios';
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
-      <PageHeader title="Espacios" back="/app" backLabel="Chat" />
+      {/* El título sigue a la pestaña: decía "Workspaces" incluso estando en Conexiones. */}
+      <PageHeader title={TITULOS[tab]} back="/app" backLabel="Inicio" />
 
-      <Box sx={{ borderBottom: `1px solid ${theme.palette.divider}`, px: { xs: 2, sm: 3 } }}>
-        <Tabs
-          value={tab} onChange={handleChange}
-          sx={{ minHeight: 40, '& .MuiTab-root': { minHeight: 40, textTransform: 'none', fontSize: '0.82rem' } }}
-        >
-          {TABS.map(t => <Tab key={t.value} value={t.value} label={t.label} />)}
-        </Tabs>
-      </Box>
+      <NavConocimiento activa={tab} />
 
       {tab === 'espacios' && <EspaciosTab />}
       {tab === 'integraciones' && <IntegrationsPage hideHeader />}
       {tab === 'mi-contexto' && <MiContextoPage hideHeader />}
-      {tab === 'cubiculos' && <ContextoPage hideHeader />}
-      {tab === 'documentos' && (
-        <Box sx={{ pt: 2.5, pb: 5, px: { xs: 2, sm: 3 }, maxWidth: 860, width: '100%' }}>
-          <DocumentosTab />
-        </Box>
-      )}
     </Box>
   );
 }

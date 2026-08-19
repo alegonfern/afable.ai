@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Outlet } from 'react-router-dom';
+import BurbujaSoporte from '../../components/BurbujaSoporte';
 import { Box, useMediaQuery, useTheme } from '@mui/material';
 import Header from './Header';
 import Drawer from './Drawer';
@@ -54,6 +55,10 @@ export default function DashboardLayout() {
           <Outlet context={{ focusMode, toggleFocusMode }} />
         </Box>
       </Box>
+
+      {/* Escribirle a soporte desde donde sea. En modo enfoque no: ahí la pantalla se
+          vacía a propósito. */}
+      {!focusMode && <BurbujaSoporte />}
     </Box>
   );
 }

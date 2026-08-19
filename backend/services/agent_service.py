@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 _MODEL_DOWN_MSG = ("El modelo de IA tuvo un problema temporal y no respondió. "
                    "Vuelve a intentarlo en unos segundos.")
 
+from . import consumo
 from .odoo_client import OdooClient, OdooConnectionError
 from .odoo_tools import ODOO_TOOLS, execute_tool
 
@@ -94,30 +95,41 @@ def chunk_text(text: str, size: int = 28):
         yield buf
 
 
-def chat_direct(history: list[dict], system_prompt: str = "", model: str = None) -> str:
+def chat_direct(history: list[dict], system_prompt: str = "", model: str = None,
+                organization=None, motivo: str = 'chat') -> str:
+    """Devuelve el texto TAL CUAL lo dio el modelo, sin limpiar.
+
+    A proposito: quien llama desde el chat necesita el `__ACTION__{...}` intacto para
+    extraer la accion (`_extract_action` en apps/agents/views.py) y recien despues
+    sacarlo del texto que se muestra. Limpiar aca se comeria la accion y romperia el
+    alta de empresa. Los consumidores que NO usan el protocolo de acciones —Tareas y
+    Automatizaciones— limpian en `automation_runner._run_prompt`.
+    """
     provider, resolved = resolve_model(model)
     if provider == 'anthropic':
-        return _chat_anthropic_simple(history, system_prompt, resolved)
+        return _chat_anthropic_simple(history, system_prompt, resolved, organization, motivo)
     if provider == 'deepseek':
-        return _chat_deepseek_simple(history, system_prompt, resolved)
-    return _chat_ollama(history, system_prompt, resolved)
+        return _chat_deepseek_simple(history, system_prompt, resolved, organization, motivo)
+    return _chat_ollama(history, system_prompt, resolved, organization, motivo)
 
 
-def stream_direct(history: list[dict], system_prompt: str = "", model: str = None):
+def stream_direct(history: list[dict], system_prompt: str = "", model: str = None,
+                  organization=None, motivo: str = 'chat'):
     """Generator que entrega el texto en trozos. Ollama transmite token a token; Anthropic
     y DeepSeek no soportan streaming en este endpoint, así que se pide la respuesta completa
     y se trocea igual (misma técnica que usa el modo con sistemas conectados) para mantener
     el efecto typing."""
     provider, resolved = resolve_model(model)
     if provider == 'anthropic':
-        yield from chunk_text(_chat_anthropic_simple(history, system_prompt, resolved))
+        yield from chunk_text(_chat_anthropic_simple(history, system_prompt, resolved, organization, motivo))
     elif provider == 'deepseek':
-        yield from chunk_text(_chat_deepseek_simple(history, system_prompt, resolved))
+        yield from chunk_text(_chat_deepseek_simple(history, system_prompt, resolved, organization, motivo))
     else:
-        yield from _stream_ollama(history, system_prompt, resolved)
+        yield from _stream_ollama(history, system_prompt, resolved, organization, motivo)
 
 
-def _stream_ollama(history: list[dict], system_prompt: str, model: str):
+def _stream_ollama(history: list[dict], system_prompt: str, model: str,
+                   organization=None, motivo: str = 'chat'):
     base_url, model, headers = _ollama_config(model)
 
     messages = []
@@ -138,6 +150,10 @@ def _stream_ollama(history: list[dict], system_prompt: str, model: str):
                 if chunk:
                     yield chunk
                 if data.get('done'):
+                    # El último trozo del stream es el que trae las cuentas de la
+                    # llamada completa; los anteriores vienen sin ellas.
+                    consumo.registrar('ollama', model, data,
+                                      organization=organization, motivo=motivo)
                     break
     except Exception:
         logger.exception("stream_direct falló")
@@ -154,7 +170,7 @@ Sector: {organization.sector or 'No especificado'}
 """
 
     if _is_ollama(provider):
-        return _chat_ollama(history, system_prompt)
+        return _chat_ollama(history, system_prompt, organization=organization, motivo='agente')
 
     odoo_client = OdooClient(
         url=organization.odoo_url,
@@ -162,12 +178,13 @@ Sector: {organization.sector or 'No especificado'}
         username=organization.odoo_username,
         api_key=organization.odoo_api_key,
     )
-    return _run_anthropic_agent(history, system_prompt, odoo_client)
+    return _run_anthropic_agent(history, system_prompt, odoo_client, organization)
 
 
 # ── Ollama ────────────────────────────────────────────────────────────
 
-def _chat_ollama(history: list[dict], system_prompt: str = "", model: str = None) -> str:
+def _chat_ollama(history: list[dict], system_prompt: str = "", model: str = None,
+                 organization=None, motivo: str = 'chat') -> str:
     base_url, model, headers = _ollama_config(model)
 
     messages = []
@@ -180,7 +197,9 @@ def _chat_ollama(history: list[dict], system_prompt: str = "", model: str = None
     try:
         resp = _post_chat(base_url, {"model": model, "messages": messages, "stream": False},
                           headers, timeout=120)
-        return resp.json()['message']['content']
+        datos = resp.json()
+        consumo.registrar('ollama', model, datos, organization=organization, motivo=motivo)
+        return datos['message']['content']
     except requests.exceptions.ConnectionError:
         return "No se pudo conectar con el modelo. Si usas Ollama local, asegúrate de que esté corriendo; si usas Ollama Cloud, revisa OLLAMA_API_KEY y la conexión."
     except Exception:
@@ -190,18 +209,22 @@ def _chat_ollama(history: list[dict], system_prompt: str = "", model: str = None
 
 # ── Anthropic ─────────────────────────────────────────────────────────
 
-def _chat_anthropic_simple(history: list[dict], system_prompt: str = "", model: str = None) -> str:
+def _chat_anthropic_simple(history: list[dict], system_prompt: str = "", model: str = None,
+                           organization=None, motivo: str = 'chat') -> str:
     messages = _build_api_messages(history)
+    modelo = model or "claude-sonnet-4-6"
     response = _get_anthropic_client().messages.create(
-        model=model or "claude-sonnet-4-6",
+        model=modelo,
         max_tokens=4096,
         system=system_prompt,
         messages=messages,
     )
+    consumo.registrar('anthropic', modelo, response, organization=organization, motivo=motivo)
     return _extract_text(response)
 
 
-def _chat_deepseek_simple(history: list[dict], system_prompt: str = "", model: str = None) -> str:
+def _chat_deepseek_simple(history: list[dict], system_prompt: str = "", model: str = None,
+                          organization=None, motivo: str = 'chat') -> str:
     model = model or getattr(settings, 'DEEPSEEK_MODEL', 'deepseek-chat')
     messages = []
     if system_prompt:
@@ -218,13 +241,16 @@ def _chat_deepseek_simple(history: list[dict], system_prompt: str = "", model: s
             headers=headers, timeout=120,
         )
         resp.raise_for_status()
-        return resp.json()['choices'][0]['message']['content']
+        datos = resp.json()
+        consumo.registrar('deepseek', model, datos, organization=organization, motivo=motivo)
+        return datos['choices'][0]['message']['content']
     except Exception:
         logger.exception("_chat_deepseek_simple falló")
         return _MODEL_DOWN_MSG
 
 
-def _run_anthropic_agent(history: list[dict], system_prompt: str, odoo_client: OdooClient) -> str:
+def _run_anthropic_agent(history: list[dict], system_prompt: str, odoo_client: OdooClient,
+                         organization=None) -> str:
     messages = _build_api_messages(history)
 
     for _ in range(10):
@@ -236,6 +262,8 @@ def _run_anthropic_agent(history: list[dict], system_prompt: str, odoo_client: O
             tools=ODOO_TOOLS,
             messages=messages,
         )
+        consumo.registrar('anthropic', "claude-opus-4-8", response,
+                          organization=organization, motivo='agente')
 
         if response.stop_reason == "end_turn":
             return _extract_text(response)
@@ -414,7 +442,7 @@ def _provider_for_model(model: str) -> str:
     return 'ollama'
 
 
-def run_agent_live_events(history: list[dict], organization, system_prompt: str, model: str = None, allowed_ids=None, allowed_doc_ids=None):
+def run_agent_live_events(history: list[dict], organization, system_prompt: str, model: str = None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None):
     """
     Generador del agente con datos en vivo. Va emitiendo dicts de progreso
     {'status': '...'} mientras consulta los sistemas conectados vía tool-use, y al
@@ -424,27 +452,37 @@ def run_agent_live_events(history: list[dict], organization, system_prompt: str,
     """
     provider = _provider_for_model(model) if model else getattr(settings, 'AI_PROVIDER', 'ollama')
     if provider == 'anthropic':
-        yield from _run_anthropic_agent_live_events(history, system_prompt, organization, model, allowed_ids, allowed_doc_ids)
+        yield from _run_anthropic_agent_live_events(history, system_prompt, organization, model, allowed_ids, allowed_doc_ids, agente, sesion)
     elif provider == 'deepseek':
-        yield from _run_deepseek_agent_events(history, system_prompt, organization, model, allowed_ids, allowed_doc_ids)
+        yield from _run_deepseek_agent_events(history, system_prompt, organization, model, allowed_ids, allowed_doc_ids, agente, sesion)
     else:
-        yield from _run_ollama_agent_events(history, system_prompt, organization, model, allowed_ids, allowed_doc_ids)
+        yield from _run_ollama_agent_events(history, system_prompt, organization, model, allowed_ids, allowed_doc_ids, agente, sesion)
 
 
-def run_agent_live(history: list[dict], organization, system_prompt: str, model: str = None, allowed_ids=None, allowed_doc_ids=None) -> str:
-    """Versión no-streaming: drena el generador y devuelve solo el texto final."""
+def run_agent_live(history: list[dict], organization, system_prompt: str, model: str = None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None, tocados: list = None) -> str:
+    """Versión no-streaming: drena el generador y devuelve solo el texto final.
+
+    `tocados`, si viene, se llena con los documentos que el agente dejó escritos. Es una
+    lista que pone quien llama en vez de un segundo valor de retorno para no romper a los
+    que ya usan esta función esperando un texto.
+    """
     final = ''
-    for event in run_agent_live_events(history, organization, system_prompt, model, allowed_ids, allowed_doc_ids):
+    for event in run_agent_live_events(
+        history, organization, system_prompt, model, allowed_ids, allowed_doc_ids, agente,
+        sesion,
+    ):
         if 'final' in event:
             final = event['final']
+            if tocados is not None:
+                tocados.extend(event.get('documentos') or [])
     return final
 
 
-def _run_ollama_agent_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None):
+def _run_ollama_agent_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None):
     from services import agent_tools
 
     base_url, model, headers = _ollama_config(model)
-    tools = agent_tools.tools_for_ollama(organization, allowed_ids)
+    tools = agent_tools.tools_for_ollama(organization, allowed_ids, sesion)
     provenance: list = []
     artifacts: dict = {}
     seen_calls: set = set()
@@ -458,7 +496,10 @@ def _run_ollama_agent_events(history, system_prompt, organization, model=None, a
         for _ in range(_MAX_ITERS):
             resp = _post_chat(base_url, {"model": model, "messages": messages,
                                          "tools": tools, "stream": False}, headers)
-            msg = resp.json().get('message', {})
+            datos = resp.json()
+            consumo.registrar('ollama', model, datos,
+                              organization=organization, motivo='agente')
+            msg = datos.get('message', {})
             tool_calls = msg.get('tool_calls') or []
 
             if not tool_calls:
@@ -472,7 +513,7 @@ def _run_ollama_agent_events(history, system_prompt, organization, model=None, a
                                      'arguments': json.dumps(args_sueltos or {})},
                     }]
                 else:
-                    yield {'final': _finalize((msg.get('content') or '').strip(), provenance, artifacts)}
+                    yield _evento_final((msg.get('content') or '').strip(), provenance, artifacts)
                     return
 
             messages.append({
@@ -493,23 +534,23 @@ def _run_ollama_agent_events(history, system_prompt, organization, model=None, a
                     continue
                 seen_calls.add(sig)
                 yield {'status': _tool_status(name, args)}
-                result = agent_tools.execute_tool(name, args, organization, provenance, allowed_ids, artifacts, allowed_doc_ids)
+                result = agent_tools.execute_tool(name, args, organization, provenance, allowed_ids, artifacts, allowed_doc_ids, agente, sesion)
                 messages.append({"role": "tool", "content": _tool_result_json(result)})
 
-        yield {'final': _finalize(
+        yield _evento_final(
             "Consulté los sistemas pero no logré cerrar la respuesta. Reformula la pregunta de forma más específica.",
-            provenance, artifacts)}
+            provenance, artifacts)
     except requests.exceptions.ConnectionError:
-        yield {'final': "No se pudo conectar con el modelo. Si usas Ollama local, asegúrate de que esté corriendo; si usas Ollama Cloud, revisa OLLAMA_API_KEY y la conexión."}
+        yield {'final': "No se pudo conectar con el modelo. Si usas Ollama local, asegúrate de que esté corriendo; si usas Ollama Cloud, revisa OLLAMA_API_KEY y la conexión.", 'documentos': list((artifacts or {}).get('documentos') or [])}
     except requests.exceptions.HTTPError:
         logger.exception("Ollama agent loop falló tras reintentos")
-        yield {'final': _MODEL_DOWN_MSG}
+        yield {'final': _MODEL_DOWN_MSG, 'documentos': list((artifacts or {}).get('documentos') or [])}
     except Exception as e:
         logger.exception("Ollama agent loop falló")
-        yield {'final': f"Error al consultar los sistemas: {str(e)}"}
+        yield {'final': f"Error al consultar los sistemas: {str(e)}", 'documentos': list((artifacts or {}).get('documentos') or [])}
 
 
-def _run_deepseek_agent_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None):
+def _run_deepseek_agent_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None):
     """
     API de DeepSeek — compatible con el formato de chat completions de OpenAI.
     Reusa `tools_for_ollama` porque el esquema de herramientas es idéntico
@@ -520,7 +561,7 @@ def _run_deepseek_agent_events(history, system_prompt, organization, model=None,
     from services import agent_tools
 
     model = model or settings.DEEPSEEK_MODEL
-    tools = agent_tools.tools_for_ollama(organization, allowed_ids)
+    tools = agent_tools.tools_for_ollama(organization, allowed_ids, sesion)
     provenance: list = []
     artifacts: dict = {}
     seen_calls: set = set()
@@ -547,10 +588,13 @@ def _run_deepseek_agent_events(history, system_prompt, organization, model=None,
                     detail = resp.json().get('error', {}).get('message', resp.text)
                 except Exception:
                     detail = resp.text
-                yield {'final': f"DeepSeek respondió con un error: {detail}"}
+                yield {'final': f"DeepSeek respondió con un error: {detail}", 'documentos': list((artifacts or {}).get('documentos') or [])}
                 return
 
-            msg = resp.json()['choices'][0]['message']
+            datos = resp.json()
+            consumo.registrar('deepseek', model, datos,
+                              organization=organization, motivo='agente')
+            msg = datos['choices'][0]['message']
             tool_calls = msg.get('tool_calls') or []
 
             if not tool_calls:
@@ -564,7 +608,7 @@ def _run_deepseek_agent_events(history, system_prompt, organization, model=None,
                                      'arguments': json.dumps(args_sueltos or {})},
                     }]
                 else:
-                    yield {'final': _finalize((msg.get('content') or '').strip(), provenance, artifacts)}
+                    yield _evento_final((msg.get('content') or '').strip(), provenance, artifacts)
                     return
 
             messages.append({
@@ -587,45 +631,50 @@ def _run_deepseek_agent_events(history, system_prompt, organization, model=None,
                     continue
                 seen_calls.add(sig)
                 yield {'status': _tool_status(name, args)}
-                result = agent_tools.execute_tool(name, args, organization, provenance, allowed_ids, artifacts, allowed_doc_ids)
+                result = agent_tools.execute_tool(name, args, organization, provenance, allowed_ids, artifacts, allowed_doc_ids, agente, sesion)
                 messages.append({
                     "role": "tool", "tool_call_id": tc.get('id'),
                     "content": _tool_result_json(result),
                 })
 
-        yield {'final': _finalize(
+        yield _evento_final(
             "Consulté los sistemas pero no logré cerrar la respuesta. Reformula la pregunta de forma más específica.",
-            provenance, artifacts)}
+            provenance, artifacts)
     except requests.exceptions.ConnectionError:
-        yield {'final': "No se pudo conectar con la API de DeepSeek. Revisa la conexión."}
+        yield {'final': "No se pudo conectar con la API de DeepSeek. Revisa la conexión.", 'documentos': list((artifacts or {}).get('documentos') or [])}
     except requests.exceptions.HTTPError:
         logger.exception("DeepSeek agent loop falló tras reintentos")
-        yield {'final': _MODEL_DOWN_MSG}
+        yield {'final': _MODEL_DOWN_MSG, 'documentos': list((artifacts or {}).get('documentos') or [])}
     except Exception as e:
         logger.exception("DeepSeek agent loop falló")
-        yield {'final': f"Error al consultar los sistemas: {str(e)}"}
+        yield {'final': f"Error al consultar los sistemas: {str(e)}", 'documentos': list((artifacts or {}).get('documentos') or [])}
 
 
-def _run_anthropic_agent_live_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None):
+def _run_anthropic_agent_live_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None):
     from services import agent_tools
 
-    tools = agent_tools.tools_for_anthropic(organization, allowed_ids)
+    tools = agent_tools.tools_for_anthropic(organization, allowed_ids, sesion)
     provenance: list = []
     artifacts: dict = {}
     messages = _build_api_messages(history)
     client = _get_anthropic_client()
+    modelo = model or "claude-sonnet-4-6"
 
     try:
         for _ in range(_MAX_ITERS):
             response = client.messages.create(
-                model=model or "claude-sonnet-4-6",
+                model=modelo,
                 max_tokens=4096,
                 system=system_prompt,
                 tools=tools,
                 messages=messages,
             )
+            # Dentro del bucle y no al final: si la pregunta da ocho vueltas, el costo
+            # son las ocho llamadas, no la última.
+            consumo.registrar('anthropic', modelo, response,
+                              organization=organization, motivo='agente')
             if response.stop_reason != "tool_use":
-                yield {'final': _finalize(_extract_text(response), provenance, artifacts)}
+                yield _evento_final(_extract_text(response), provenance, artifacts)
                 return
 
             messages.append({"role": "assistant", "content": response.content})
@@ -633,7 +682,7 @@ def _run_anthropic_agent_live_events(history, system_prompt, organization, model
             for block in response.content:
                 if getattr(block, 'type', None) == "tool_use":
                     yield {'status': _tool_status(block.name, block.input)}
-                    result = agent_tools.execute_tool(block.name, block.input, organization, provenance, allowed_ids, artifacts, allowed_doc_ids)
+                    result = agent_tools.execute_tool(block.name, block.input, organization, provenance, allowed_ids, artifacts, allowed_doc_ids, agente, sesion)
                     results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,
@@ -641,9 +690,9 @@ def _run_anthropic_agent_live_events(history, system_prompt, organization, model
                     })
             messages.append({"role": "user", "content": results})
 
-        yield {'final': _finalize("Superé el límite de iteraciones. Intenta una pregunta más específica.", provenance, artifacts)}
+        yield _evento_final("Superé el límite de iteraciones. Intenta una pregunta más específica.", provenance, artifacts)
     except Exception as e:
-        yield {'final': f"Error al consultar los sistemas: {str(e)}"}
+        yield {'final': f"Error al consultar los sistemas: {str(e)}", 'documentos': list((artifacts or {}).get('documentos') or [])}
 
 
 _INLINE_IMG_RE = re.compile(r'!\[([^\]]*)\]\(data:image/[^)]+\)')
@@ -659,10 +708,20 @@ def _strip_inline_images(content: str) -> str:
 
 
 def _embed_figures(text: str, artifacts: dict) -> str:
-    """Sustituye los marcadores [[FIGURA_n]] por la imagen markdown real."""
-    if not artifacts:
+    """Sustituye los marcadores [[FIGURA_n]] por la imagen markdown real.
+
+    ⚠️ `artifacts` dejó de ser solo figuras: también lleva `documentos`, lo que el agente
+    dejó escrito. Sin filtrar, esa lista se pegaba en el mensaje como si fuera una imagen
+    —`![Gráfico](data:image/png;base64,[{'id': 36, ...}])`— y la persona veía un pegote de
+    código en medio de su respuesta. Acá SOLO se miran los marcadores de figura.
+    """
+    figuras = {
+        k: v for k, v in (artifacts or {}).items()
+        if _FIG_MARKER_RE.fullmatch(k or '')
+    }
+    if not figuras:
         return _FIG_MARKER_RE.sub('', text)
-    for marker, png_b64 in artifacts.items():
+    for marker, png_b64 in figuras.items():
         uri = f'data:image/png;base64,{png_b64}'
         # A veces el modelo envuelve el marcador en su propia sintaxis de imagen
         # (![alt]([[FIGURA_n]])): ahí el marcador es la URL, no el bloque entero.
@@ -719,6 +778,20 @@ def _quitar_llamadas_visibles(texto: str) -> str:
         salida.append(bruto)
         i = fin + 1
     return ''.join(salida).strip()
+
+
+def _evento_final(text: str, provenance: list, artifacts: dict = None) -> dict:
+    """El cierre del generador: el texto y lo que quedó ESCRITO.
+
+    Van juntos a propósito. Si el documento que el agente acaba de escribir no viaja con
+    la respuesta, el chat solo puede decir "listo, lo dejé guardado" y la persona tiene
+    que salir a buscarlo a otra pantalla — que es exactamente lo que hacía sentir que el
+    trabajo del agente se perdía.
+    """
+    return {
+        'final': _finalize(text, provenance, artifacts),
+        'documentos': list((artifacts or {}).get('documentos') or []),
+    }
 
 
 def _finalize(text: str, provenance: list, artifacts: dict = None) -> str:

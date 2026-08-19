@@ -6,6 +6,7 @@ import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import App from './App';
+import { instalarCapturaDeErrores } from './services/erroresRecientes';
 import { ThemeContextProvider, useThemeMode } from './context/ThemeContext';
 
 const queryClient = new QueryClient({
@@ -291,6 +292,10 @@ function ThemeWrapper({ children }) {
     </ThemeProvider>
   );
 }
+
+// Antes de dibujar nada: si algo revienta en el primer render, el mensaje a
+// soporte tiene que poder contarlo.
+instalarCapturaDeErrores();
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

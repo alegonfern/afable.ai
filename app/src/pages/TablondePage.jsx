@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import GridLayout from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
@@ -90,9 +91,21 @@ function LiveKpisContent() {
   if (loading) return <Box sx={{ px: 2, pb: 2, fontSize: '0.8rem', color: 'text.disabled' }}>Cargando datos en vivo…</Box>;
   const conns = data?.connections || [];
   if (!conns.length) {
+    // Un vacío que dice qué falta Y CÓMO llegar. "Conecta un sistema en Conexiones"
+    // mandaba a una pantalla sin link — y Conexiones ni siquiera está en este menú, así
+    // que la instrucción era imposible de seguir sin adivinar dónde buscar.
     return (
       <Box sx={{ px: 2, pb: 2, fontSize: '0.8rem', color: 'text.secondary' }}>
-        Conecta un sistema en Conexiones para ver KPIs en vivo.
+        Todavía no hay datos en vivo.{' '}
+        <Box
+          component={RouterLink}
+          to="/app/contexto?tab=integraciones"
+          sx={{ color: '#586AD0', fontWeight: 600, textDecoration: 'none',
+                '&:hover': { textDecoration: 'underline' } }}
+        >
+          Conecte el sistema donde factura o lleva el stock
+        </Box>{' '}
+        y acá aparecen sus cifras.
       </Box>
     );
   }
@@ -132,7 +145,7 @@ function NotaContent({ text, onChange }) {
         component="textarea"
         value={text}
         onChange={e => onChange(e.target.value)}
-        placeholder="Escribe una nota..."
+        placeholder="Escriba una nota..."
         sx={{
           flex: 1, width: '100%', minHeight: 60,
           bgcolor: 'transparent', border: 'none', outline: 'none', resize: 'none',
@@ -623,7 +636,7 @@ export default function TablondePage() {
     <Box ref={containerRef} sx={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
       <style>{GRID_STYLES}</style>
 
-      <PageHeader title="Mi tablero" back="/app" backLabel="Chat" actions={addCardBtn} />
+      <PageHeader title="Mi tablero" back="/app" backLabel="Inicio" actions={addCardBtn} />
 
       <Box sx={{ px: 3, pt: 2, pb: 4, flex: 1 }}>
 

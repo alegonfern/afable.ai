@@ -36,6 +36,8 @@ import {
   // Building2 kept for user menu items only
 } from 'lucide-react';
 import { toast } from 'react-toastify';
+import SelectorEspacio from '../../../components/SelectorEspacio';
+import Notificaciones from '../../../components/Notificaciones';
 import { authService } from '../../../services/auth';
 import { api } from '../../../services/api';
 import { DRAWER_WIDTH, MINI_DRAWER_WIDTH } from '../../../config';
@@ -259,6 +261,13 @@ export default function Header({ open, handleDrawerToggle }) {
         <Box sx={{ pb: 0.75 }} />
       </Menu>
 
+      {/* ⭐ En QUÉ WORKSPACE se está trabajando. Va acá arriba y no adentro del chat
+          porque no es una cosa del chat: el Workspace decide qué conocimiento y qué
+          agentes se alcanzan, y eso vale para Archivos, Agentes y Sesiones igual. La
+          empresa cambia una vez al año; el Workspace, varias veces al día — el que
+          está siempre a la vista tiene que ser este. */}
+      <SelectorEspacio />
+
       {/* Search pill — center */}
       <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', px: 2 }}>
         <Box
@@ -300,6 +309,10 @@ export default function Header({ open, handleDrawerToggle }) {
           </Typography>
         </Box>
       </Box>
+
+      {/* La campana, al lado del modo claro/oscuro: los dos son de la persona y no de
+          la pantalla en la que está. */}
+      <Notificaciones color={textMuted} />
 
       {/* Claro / oscuro: arriba a la derecha, donde se busca sin pensar.
           Un solo icono, el del modo activo. Antes había sol + interruptor +

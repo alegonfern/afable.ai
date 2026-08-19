@@ -197,8 +197,13 @@ class SystemConnectionListCreateView(APIView):
         return Response(SystemConnectionSerializer(connections, many=True).data)
 
     def post(self, request):
-        org_id = request.data.get('organization')
-        org = get_object_or_404(Organization, pk=org_id, owner=request.user)
+        # Conectar un sistema es cargar credenciales de la empresa: hace falta ser
+        # editor. Antes se pedía ser el DUEÑO, que dejaba afuera al administrador que no
+        # fundó la empresa y adentro a quien la fundó aunque ya fuera sólo miembro.
+        from apps.workspaces.permissions import exigir_rol
+
+        org = Organization.objects.filter(pk=request.data.get('organization')).first()
+        exigir_rol(request.user, org)
         config = request.data.get('config', {})
         name = request.data.get('name', '')
         connector_type = request.data.get('connector_type', '')
@@ -610,9 +615,13 @@ class CompanyDocumentListCreateView(APIView):
         content_type = file_obj.content_type or ''
         is_public = str(request.data.get('is_public', '')).lower() in ('true', '1', 'on')
 
+        from services.documentos import es_editable
+
         doc = CompanyDocument.objects.create(
             organization=org, uploaded_by=request.user, title=title,
             category=category, file=file_obj, content_type=content_type, is_public=is_public,
+            # Lo decide el tipo: un .md o .txt se puede editar en Afable, un PDF no.
+            editable=es_editable(file_obj.name, content_type),
         )
 
         from services.document_processing import process_document
@@ -621,6 +630,17 @@ class CompanyDocumentListCreateView(APIView):
         doc.summary = result['summary']
         doc.processing_error = result['error']
         doc.save(update_fields=['extracted_text', 'summary', 'processing_error'])
+
+        # Busqueda semantica: se trocea y vectoriza recien subido. Si el proveedor
+        # de embeddings no esta, el documento queda sin indexar y la subida termina
+        # bien igual — se recupera con `manage.py indexar_conocimiento`.
+        from services.indexing import indexar_documento_sin_ruido
+        indexar_documento_sin_ruido(doc)
+
+        # La version 1 es el estado con el que entro: asi "volver al original" siempre
+        # es posible, tambien despues de que lo edite un agente.
+        from services.documentos import asegurar_version_inicial
+        asegurar_version_inicial(doc, autor=request.user)
 
         return Response(CompanyDocumentSerializer(doc, context={'request': request}).data, status=status.HTTP_201_CREATED)
 

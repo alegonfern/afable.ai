@@ -724,7 +724,7 @@ export default function IntegrationsPage({ hideHeader = false }) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
-      {!hideHeader && <PageHeader title="Conexiones" back="/app" backLabel="Chat" />}
+      {!hideHeader && <PageHeader title="Conexiones" back="/app" backLabel="Inicio" />}
 
       <Box sx={{ pt: 2.5, pb: 5, px: { xs: 2, sm: 3 }, maxWidth: 860, width: '100%' }}>
 

@@ -25,13 +25,19 @@ INSTALLED_APPS = [
     # La app que ya existia, que se va reemplazando pantalla por pantalla.
     'apps.organizations',
     'apps.agents',
-    # Apps del enfoque nuevo, todavia vacias: se llenan a medida que cada
-    # funcionalidad nueva reemplaza a la anterior.
+    # Fuentes de conocimiento: el corpus troceado y vectorizado (busqueda semantica).
     'apps.sources',
-    'apps.rooms',
+    # Archivos: carpetas, versiones y la edicion de documentos (tambien por la IA).
+    'apps.archivos',
+    # Sesiones: donde se trabaja en equipo — conversaciones, tareas y archivos.
+    # El cascaron se llamaba `rooms` (por "Salas"); se renombro al concepto real.
+    'apps.sesiones',
+    # Todavia vacia.
     'apps.tools',
     'apps.payments',
     'apps.leads',
+    'apps.soporte',
+    'apps.notificaciones',
 ]
 
 MIDDLEWARE = [
@@ -125,6 +131,11 @@ CORS_ALLOW_CREDENTIALS = True
 
 AFABLE_TEAM_EMAIL = config('AFABLE_TEAM_EMAIL', default='alegonfern@gmail.com')
 
+# A dónde llegan los mensajes del formulario de soporte de la app. Va aparte del correo
+# del equipo a propósito: el día que soporte lo atienda otra persona, se cambia acá y no
+# hay que revisar quién más usaba esa dirección.
+SOPORTE_EMAIL = config('SOPORTE_EMAIL', default='alegonfern@gmail.com')
+
 ANTHROPIC_API_KEY = config('ANTHROPIC_API_KEY', default='')
 DEEPSEEK_API_KEY = config('DEEPSEEK_API_KEY', default='')
 DEEPSEEK_MODEL = config('DEEPSEEK_MODEL', default='deepseek-v4-flash')
@@ -155,6 +166,19 @@ GOOGLE_CLIENT_ID = config('GOOGLE_CLIENT_ID', default='')
 GOOGLE_CLIENT_SECRET = config('GOOGLE_CLIENT_SECRET', default='')
 FLOW_WEBHOOK_URL = config('FLOW_WEBHOOK_URL', default='http://localhost:8001/api/v1/payments/webhook/confirm/')
 FLOW_RETURN_URL  = config('FLOW_RETURN_URL',  default='http://localhost:8001/api/v1/payments/return/')
+# Flow vuelve acá cuando alguien termina de registrar su tarjeta.
+FLOW_REGISTER_RETURN_URL = config(
+    'FLOW_REGISTER_RETURN_URL',
+    default='http://localhost:8001/api/v1/payments/tarjeta/retorno/',
+)
+
+# PayPal — cobra en USD a quien está fuera de Chile. Flow no puede: liquida en CLP.
+# El WEBHOOK_ID lo da PayPal cuando se registra el webhook en su panel, y sin él no
+# se puede verificar que un aviso venga de verdad de PayPal.
+PAYPAL_CLIENT_ID = config('PAYPAL_CLIENT_ID', default='')
+PAYPAL_SECRET = config('PAYPAL_SECRET', default='')
+PAYPAL_SANDBOX = config('PAYPAL_SANDBOX', default=True, cast=bool)
+PAYPAL_WEBHOOK_ID = config('PAYPAL_WEBHOOK_ID', default='')
 
 # AI provider: 'anthropic' | 'ollama' (local) | 'ollama_cloud' (Ollama Cloud)
 AI_PROVIDER    = config('AI_PROVIDER', default='ollama')
@@ -169,3 +193,17 @@ OLLAMA_CLOUD_MODEL    = config('OLLAMA_CLOUD_MODEL', default='gpt-oss:120b')
 # Modelos cloud a exponer en el selector de la app aunque no aparezcan en /api/tags
 # (lista separada por comas, ej: "gpt-oss:120b-cloud,qwen3-coder:480b-cloud").
 OLLAMA_CLOUD_MODELS   = [m.strip() for m in config('OLLAMA_CLOUD_MODELS', default='').split(',') if m.strip()]
+
+# Busqueda semantica (Knowledge > Search). Proveedor de embeddings: 'ollama' o
+# 'ninguno' para apagarla (los documentos vuelven a volcarse enteros al prompt,
+# como antes de que existiera). Anthropic no tiene API de embeddings, asi que la
+# ANTHROPIC_API_KEY no sirve aca.
+#
+# OJO: el modelo define la dimension del vector, y la dimension esta en la
+# migracion de `apps.sources.Fragmento` (768 = embeddinggemma). Cambiar a un
+# modelo de otra dimension exige una migracion nueva y reindexar todo.
+EMBEDDINGS_PROVIDER = config('EMBEDDINGS_PROVIDER', default='ollama')
+EMBEDDINGS_MODEL    = config('EMBEDDINGS_MODEL', default='embeddinggemma')
+# Vacio = usar OLLAMA_BASE_URL. Se separa para poder tener el modelo de embeddings
+# en otra maquina que el de chat.
+EMBEDDINGS_BASE_URL = config('EMBEDDINGS_BASE_URL', default='')

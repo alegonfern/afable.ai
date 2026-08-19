@@ -1,4 +1,10 @@
-"""Seed de los agentes base: los que existen en toda empresa desde el día cero.
+"""Comando para (re)sembrar los agentes base en empresas que ya existen.
+
+⚠️ **El camino normal ya NO es este.** Una empresa nueva los recibe sola al crearse
+(`apps/agents/agentes_base.py`, llamado desde `Organization.crear_para_dueno`). Este
+comando queda para las empresas creadas ANTES de ese cambio, que nacieron vacías.
+
+Del catálogo original:
 
 Un workspace recién creado no tiene a quién mencionar, y "cree su primer agente"
 es una pared para alguien que todavía no entendió qué es un agente. Estos cuatro
@@ -18,65 +24,10 @@ haberlas editado, y un seed que revienta el trabajo ajeno es peor que no correr.
 
 from django.core.management.base import BaseCommand
 
-from apps.agents.models import Agent
-from apps.organizations.models import Organization
-
-CIERRE = (
-    '\n\nHable en español neutro, tratando de usted. No invente cifras: si el dato '
-    'no está en las fuentes que puede consultar, dígalo con todas sus letras.'
+from apps.agents.agentes_base import (
+    AGENTES_BASE, acortar_handles, poner_caras, sembrar_en,
 )
-
-AGENTES_BASE = [
-    {
-        'handle': 'afable',
-        'name': 'Afable',
-        'description': 'Busca en todo lo que la empresa tiene conectado.',
-        'instructions': (
-            'Usted es el agente general de la empresa. Antes de contestar, busque en las '
-            'fuentes conectadas del Espacio: conexiones a sistemas y documentos. Responda '
-            'citando de dónde sacó cada dato — el nombre del documento o del sistema — para '
-            'que quien lea pueda ir a verificarlo.' + CIERRE
-        ),
-        'area': 'general',
-    },
-    {
-        'handle': 'claude',
-        'name': 'Claude',
-        'description': 'El modelo directo, sin datos de la empresa de por medio.',
-        'instructions': (
-            'Conteste con su propio conocimiento, sin consultar los sistemas ni los '
-            'documentos de la empresa. Sirve para redactar, traducir, resumir un texto '
-            'pegado en el chat o pensar en voz alta. Si la pregunta necesita datos internos, '
-            'dígalo y sugiera mencionar a @afable.' + CIERRE
-        ),
-        'area': 'general',
-    },
-    {
-        'handle': 'analisis',
-        'name': 'Análisis profundo',
-        'description': 'Cruza varias fuentes antes de contestar.',
-        'instructions': (
-            'Usted se toma el trabajo largo. Frente a una pregunta, primero enumere qué '
-            'necesita averiguar, consulte todas las fuentes que hagan falta — no se conforme '
-            'con la primera —, cruce los resultados y recién ahí conteste. Cierre siempre con '
-            'el nivel de confianza que tiene y qué le faltó para estar seguro.' + CIERRE
-        ),
-        'area': 'general',
-    },
-    {
-        'handle': 'constructor',
-        'name': 'Constructor de agentes',
-        'description': 'Ayuda a escribir y afinar las instrucciones de otros agentes.',
-        'instructions': (
-            'Usted ayuda a construir agentes. Cuando alguien describa lo que necesita, '
-            'devuelva una propuesta concreta: nombre, para qué sirve, qué fuentes debería '
-            'mirar y las instrucciones redactadas y listas para pegar. Pregunte lo mínimo '
-            'indispensable — una o dos cosas — antes de proponer; no interrogue.' + CIERRE
-        ),
-        'area': 'general',
-    },
-]
-
+from apps.organizations.models import Organization
 
 class Command(BaseCommand):
     help = 'Crea los agentes base (@afable, @claude, @analisis, @constructor) en cada empresa.'
@@ -93,25 +44,18 @@ class Command(BaseCommand):
             orgs = orgs.filter(pk=options['org'])
 
         creados = existentes = 0
+        caras = cortos = 0
         for org in orgs:
-            for base in AGENTES_BASE:
-                agente, nuevo = Agent.objects.get_or_create(
-                    organization=org,
-                    handle=base['handle'],
-                    defaults={
-                        'name': base['name'],
-                        'description': base['description'],
-                        'instructions': base['instructions'],
-                        'area': base['area'],
-                        'is_active': True,
-                    },
-                )
-                if nuevo:
-                    creados += 1
-                else:
-                    existentes += 1
+            nuevos = sembrar_en(org)
+            creados += nuevos
+            existentes += len(AGENTES_BASE) - nuevos
+            # Y los que ya existían sin cara: la galería no puede quedar a medias, con
+            # unos agentes reconocibles y otros en gris.
+            caras += poner_caras(org)
+            cortos += acortar_handles(org)
 
         self.stdout.write(self.style.SUCCESS(
             f'{creados} agentes base creados, {existentes} ya estaban, '
+            f'{caras} recibieron su cara, {cortos} handles acortados, '
             f'en {orgs.count()} empresa(s).'
         ))

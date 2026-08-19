@@ -24,6 +24,8 @@ class HandleDeAgenteTests(TestCase):
             username='duena@afable.test', email='duena@afable.test', password='afable123',
         )
         self.org = Organization.objects.create(owner=self.user, name='Cocinas SpA')
+        from apps.workspaces.models import ROLE_ADMIN
+        self.org.agregar_miembro(self.user, ROLE_ADMIN)
 
     def test_el_handle_se_arma_desde_el_nombre(self):
         agente = Agent.objects.create(organization=self.org, name='Ventas Chile')
@@ -54,6 +56,8 @@ class MencionTests(TestCase):
             username='ajeno@afable.test', email='ajeno@afable.test', password='afable123',
         )
         self.org = Organization.objects.create(owner=self.user, name='Cocinas SpA')
+        from apps.workspaces.models import ROLE_ADMIN
+        self.org.agregar_miembro(self.user, ROLE_ADMIN)
         self.org_ajena = Organization.objects.create(owner=self.otra, name='Otra SpA')
 
         self.ventas = Agent.objects.create(organization=self.org, name='Ventas')
@@ -103,6 +107,8 @@ class HabilidadesTests(TestCase):
             username='duena@afable.test', email='duena@afable.test', password='afable123',
         )
         self.org = Organization.objects.create(owner=self.user, name='Cocinas SpA')
+        from apps.workspaces.models import ROLE_ADMIN
+        self.org.agregar_miembro(self.user, ROLE_ADMIN)
         self.ventas = Agent.objects.create(organization=self.org, name='Ventas')
         self.soporte = Agent.objects.create(organization=self.org, name='Soporte')
 
@@ -157,6 +163,27 @@ class HabilidadesTests(TestCase):
         creada = self.Skill.objects.get(pk=resp.json()['id'])
         self.assertEqual(creada.agents.count(), 0)
 
+    def test_repetir_el_nombre_avisa_en_vez_de_reventar(self):
+        """La base ya lo impedía, pero saltaba como IntegrityError: la persona veía un
+        error del sistema donde correspondía "ya tiene una con ese nombre"."""
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        datos = {'name': 'Tono formal', 'instructions': 'Trate de usted.'}
+
+        self.assertEqual(client.post('/api/v1/agents/habilidades/', datos, format='json').status_code, 201)
+        repetida = client.post('/api/v1/agents/habilidades/', datos, format='json')
+        self.assertEqual(repetida.status_code, 400)
+        self.assertIn('nombre', str(repetida.data).lower())
+
+    def test_el_nombre_repetido_no_distingue_mayusculas(self):
+        client = APIClient()
+        client.force_authenticate(user=self.user)
+        client.post('/api/v1/agents/habilidades/',
+                    {'name': 'Tono formal', 'instructions': 'x'}, format='json')
+        r = client.post('/api/v1/agents/habilidades/',
+                        {'name': 'TONO FORMAL', 'instructions': 'x'}, format='json')
+        self.assertEqual(r.status_code, 400)
+
     def test_una_habilidad_sin_instrucciones_se_rechaza(self):
         client = APIClient()
         client.force_authenticate(user=self.user)
@@ -175,7 +202,7 @@ class AlcanceDeEspacioTests(TestCase):
 
     def setUp(self):
         from apps.organizations.models import CompanyDocument, SystemConnection
-        from apps.workspaces.models import ROLE_ADMIN, Space, Workspace
+        from apps.workspaces.models import ROLE_ADMIN, Workspace
         from apps.workspaces.permissions import alcance_de_agente
 
         self.alcance = alcance_de_agente
@@ -184,8 +211,10 @@ class AlcanceDeEspacioTests(TestCase):
             username='duena@afable.test', email='duena@afable.test', password='afable123',
         )
         self.org = Organization.objects.create(owner=self.user, name='Cocinas SpA')
-        self.workspace = Workspace.objects.create(name='Cocinas SpA', organization=self.org)
-        self.workspace.add_member(self.user, ROLE_ADMIN)
+        from apps.workspaces.models import ROLE_ADMIN
+        self.org.agregar_miembro(self.user, ROLE_ADMIN)
+        self.workspace = Workspace.objects.create(organization=self.org, name='General')
+        self.org.agregar_miembro(self.user, ROLE_ADMIN)
 
         self.odoo = SystemConnection.objects.create(
             organization=self.org, name='Odoo Ventas', connector_type='odoo',
@@ -201,7 +230,7 @@ class AlcanceDeEspacioTests(TestCase):
         )
 
         self.ventas = Agent.objects.create(organization=self.org, name='Ventas')
-        self.espacio_ventas = Space.objects.create(workspace=self.workspace, name='Ventas')
+        self.espacio_ventas = Workspace.objects.create(organization=self.org, name='Ventas')
         self.espacio_ventas.connections.add(self.odoo)
         self.espacio_ventas.documents.add(self.catalogo)
         self.espacio_ventas.agents.add(self.ventas)
@@ -222,9 +251,9 @@ class AlcanceDeEspacioTests(TestCase):
         self.assertNotIn(self.contrato.id, docs)
 
     def test_el_alcance_es_la_union_de_varios_espacios(self):
-        from apps.workspaces.models import Space
+        from apps.workspaces.models import Workspace
 
-        otro = Space.objects.create(workspace=self.workspace, name='Personas')
+        otro = Workspace.objects.create(organization=self.org, name='Personas')
         otro.connections.add(self.sap)
         otro.agents.add(self.ventas)
 
@@ -233,9 +262,9 @@ class AlcanceDeEspacioTests(TestCase):
 
     def test_un_espacio_vacio_deja_al_agente_sin_nada(self):
         """El silencio es la respuesta correcta: no se cae de vuelta a toda la empresa."""
-        from apps.workspaces.models import Space
+        from apps.workspaces.models import Workspace
 
-        pelado = Space.objects.create(workspace=self.workspace, name='Recién creado')
+        pelado = Workspace.objects.create(organization=self.org, name='Recién creado')
         nuevo = Agent.objects.create(organization=self.org, name='Nuevo')
         pelado.agents.add(nuevo)
 
@@ -292,9 +321,9 @@ class EspacioEnElChatTests(TestCase):
     """Trabajar EN un Espacio: qué agentes se ofrecen y dónde queda la conversación."""
 
     def setUp(self):
-        from apps.workspaces.models import ROLE_ADMIN, ROLE_MEMBER, Space, Workspace
+        from apps.workspaces.models import ROLE_ADMIN, ROLE_MEMBER, Workspace, Workspace
 
-        self.Space = Space
+        self.Workspace = Workspace
 
         self.duena = User.objects.create_user(
             username='duena@afable.test', email='duena@afable.test', password='afable123',
@@ -307,15 +336,15 @@ class EspacioEnElChatTests(TestCase):
         )
 
         self.org = Organization.objects.create(owner=self.duena, name='Cocinas SpA')
-        self.workspace = Workspace.objects.create(name='Cocinas SpA', organization=self.org)
-        self.workspace.add_member(self.duena, ROLE_ADMIN)
-        self.workspace.add_member(self.companero, ROLE_MEMBER)
-        self.workspace.add_member(self.ajeno, ROLE_MEMBER)
+        self.workspace = Workspace.objects.create(organization=self.org, name='General')
+        self.org.agregar_miembro(self.duena, ROLE_ADMIN)
+        self.org.agregar_miembro(self.companero, ROLE_MEMBER)
+        self.org.agregar_miembro(self.ajeno, ROLE_MEMBER)
 
         self.ventas = Agent.objects.create(organization=self.org, name='Ventas')
         self.personas = Agent.objects.create(organization=self.org, name='Personas')
 
-        self.espacio = Space.objects.create(workspace=self.workspace, name='Ventas')
+        self.espacio = Workspace.objects.create(organization=self.org, name='Ventas')
         self.espacio.agents.add(self.ventas)
         self.espacio.members.add(self.duena, self.companero)
 
@@ -327,7 +356,7 @@ class EspacioEnElChatTests(TestCase):
     def test_la_galeria_filtrada_solo_trae_los_agentes_del_espacio(self):
         resp = self._cliente(self.duena).get(
             '/api/v1/agents/gallery/',
-            {'workspace': self.workspace.slug, 'espacio': self.espacio.slug},
+            {'workspace': self.org.slug, 'espacio': self.espacio.slug},
         )
         self.assertEqual(resp.status_code, 200)
         nombres = [a['name'] for a in resp.json()['results']]
@@ -335,7 +364,7 @@ class EspacioEnElChatTests(TestCase):
 
     def test_sin_espacio_la_galeria_trae_todos(self):
         resp = self._cliente(self.duena).get(
-            '/api/v1/agents/gallery/', {'workspace': self.workspace.slug},
+            '/api/v1/agents/gallery/', {'workspace': self.org.slug},
         )
         nombres = {a['name'] for a in resp.json()['results']}
         self.assertEqual(nombres, {'Ventas', 'Personas'})
@@ -345,7 +374,7 @@ class EspacioEnElChatTests(TestCase):
         self.espacio.save()
         resp = self._cliente(self.ajeno).get(
             '/api/v1/agents/gallery/',
-            {'workspace': self.workspace.slug, 'espacio': self.espacio.slug},
+            {'workspace': self.org.slug, 'espacio': self.espacio.slug},
         )
         self.assertEqual(resp.status_code, 404)
 
@@ -353,10 +382,10 @@ class EspacioEnElChatTests(TestCase):
         from apps.agents.models import Conversation
 
         conv = Conversation.objects.create(
-            agent=self.ventas, user=self.duena, space=self.espacio, title='Cierre de mes',
+            agent=self.ventas, user=self.duena, workspace=self.espacio, title='Cierre de mes',
         )
         resp = self._cliente(self.companero).get(
-            f'/api/v1/workspaces/{self.workspace.slug}/espacios/{self.espacio.slug}/conversaciones/'
+            f'/api/v1/workspaces/{self.org.slug}/espacios/{self.espacio.slug}/conversaciones/'
         )
         self.assertEqual(resp.status_code, 200)
         cuerpo = resp.json()
@@ -370,7 +399,7 @@ class EspacioEnElChatTests(TestCase):
 
         Conversation.objects.create(agent=self.ventas, user=self.duena, title='Mía y de nadie más')
         resp = self._cliente(self.companero).get(
-            f'/api/v1/workspaces/{self.workspace.slug}/espacios/{self.espacio.slug}/conversaciones/'
+            f'/api/v1/workspaces/{self.org.slug}/espacios/{self.espacio.slug}/conversaciones/'
         )
         self.assertEqual(resp.json(), [])
 
@@ -380,10 +409,10 @@ class EspacioEnElChatTests(TestCase):
         self.espacio.visibility = 'restringido'
         self.espacio.save()
         Conversation.objects.create(
-            agent=self.ventas, user=self.duena, space=self.espacio, title='Confidencial',
+            agent=self.ventas, user=self.duena, workspace=self.espacio, title='Confidencial',
         )
         resp = self._cliente(self.ajeno).get(
-            f'/api/v1/workspaces/{self.workspace.slug}/espacios/{self.espacio.slug}/conversaciones/'
+            f'/api/v1/workspaces/{self.org.slug}/espacios/{self.espacio.slug}/conversaciones/'
         )
         self.assertEqual(resp.status_code, 404)
 
@@ -396,7 +425,7 @@ class EspacioEnElChatTests(TestCase):
                 self.data = data
 
         pedido = PedidoFalso(
-            self.duena, {'workspace': self.workspace.slug, 'space': self.espacio.slug},
+            self.duena, {'workspace': self.org.slug, 'space': self.espacio.slug},
         )
         self.assertEqual(_espacio_del_pedido(pedido), self.espacio)
 
@@ -412,7 +441,7 @@ class EspacioEnElChatTests(TestCase):
         self.espacio.visibility = 'restringido'
         self.espacio.save()
         pedido = PedidoFalso(
-            self.ajeno, {'workspace': self.workspace.slug, 'space': self.espacio.slug},
+            self.ajeno, {'workspace': self.org.slug, 'space': self.espacio.slug},
         )
         self.assertIsNone(_espacio_del_pedido(pedido))
 
@@ -463,7 +492,7 @@ class EspacioEnElChatTests(TestCase):
                 self.user = user
                 self.data = data
 
-        pelado = self.Space.objects.create(workspace=self.workspace, name='Vacío')
+        pelado = self.Workspace.objects.create(organization=self.org, name='Vacío')
         suelto = Agent.objects.create(organization=self.org, name='Por omisión')
         pedido = PedidoFalso(self.duena, {})
         self.assertEqual(_agente_inicial(pedido, 'hola', pelado, suelto), suelto)
@@ -567,19 +596,19 @@ class RamificarYEditarTests(TestCase):
         self.assertEqual(self.conv.messages.count(), 3)
 
     def test_la_rama_conserva_el_espacio_de_la_original(self):
-        from apps.workspaces.models import ROLE_ADMIN, Space, Workspace
+        from apps.workspaces.models import ROLE_ADMIN, Workspace
 
-        workspace = Workspace.objects.create(name='Cocinas SpA', organization=self.org)
-        workspace.add_member(self.duena, ROLE_ADMIN)
-        espacio = Space.objects.create(workspace=workspace, name='Ventas')
-        self.conv.space = espacio
+        workspace = Workspace.objects.create(organization=self.org, name='General')
+        self.org.agregar_miembro(self.duena, ROLE_ADMIN)
+        espacio = Workspace.objects.create(organization=workspace.organization, name='Ventas')
+        self.conv.workspace = espacio
         self.conv.save()
 
         resp = self.client_duena.post(
             f'/api/v1/agents/conversations/{self.conv.id}/ramificar/', {}, format='json',
         )
         rama = self.Conversation.objects.get(pk=resp.json()['id'])
-        self.assertEqual(rama.space, espacio)
+        self.assertEqual(rama.workspace, espacio)
 
     def test_no_se_puede_ramificar_una_conversacion_ajena(self):
         client = APIClient()
@@ -633,6 +662,8 @@ class DisparadoresTests(TestCase):
             username='duena@afable.test', email='duena@afable.test', password='afable123',
         )
         self.org = Organization.objects.create(owner=self.user, name='Cocinas SpA')
+        from apps.workspaces.models import ROLE_ADMIN
+        self.org.agregar_miembro(self.user, ROLE_ADMIN)
 
     def _horario(self, **config):
         return self.Automation.objects.create(

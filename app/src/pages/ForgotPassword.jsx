@@ -28,7 +28,7 @@ export default function ForgotPassword() {
       toast.error(
         error.response?.data?.detail ||
           error.response?.data?.email?.[0] ||
-          'Error al enviar el correo. Inténtalo de nuevo.'
+          'No se pudo enviar el correo. Vuelva a intentarlo.'
       );
     },
   });
@@ -42,7 +42,7 @@ export default function ForgotPassword() {
           <div className="auth-success-icon">
             <MailOutline fontSize="large" />
           </div>
-          <h2>Revisa tu correo</h2>
+          <h2>Revise su correo</h2>
           <p>
             Enviamos un enlace de recuperación a <strong style={{ color: '#9BA6E3' }}>{sentTo}</strong>.
             Puede tardar unos minutos.
@@ -61,10 +61,10 @@ export default function ForgotPassword() {
         </Link>
 
         <h1 className="auth-title">
-          Recupera tu <span className="accent">acceso.</span>
+          Recupere su <span className="accent">acceso.</span>
         </h1>
         <p className="auth-subtitle">
-          Ingresa tu correo y te enviaremos un enlace para restablecer tu contraseña.
+          Escriba su correo y le enviaremos un enlace para restablecer su contraseña.
         </p>
 
         <form className="auth-form" onSubmit={handleSubmit(onSubmit)} noValidate>

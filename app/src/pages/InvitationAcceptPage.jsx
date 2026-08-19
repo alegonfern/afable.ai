@@ -48,8 +48,12 @@ export default function InvitationAcceptPage() {
       setAceptando(true);
       const { data } = await api.acceptInvitation(token);
       await recargar();
-      seleccionar(data.workspace.slug);
-      toast.success(`Ya es parte de ${data.workspace.name}.`);
+      // `empresa`, no `workspace`: la Empresa es el nivel de arriba y es su slug el
+      // que viaja en las URLs de la API. Leer la clave vieja rompia la pantalla
+      // DESPUES de que el backend ya habia creado la membresia: se veia un error
+      // pero la persona ya estaba adentro.
+      seleccionar(data.empresa.slug);
+      toast.success(`Ya es parte de ${data.empresa.name}.`);
       navigate('/app/admin/personas', { replace: true });
     } catch (e) {
       toast.error(e.response?.data?.detail || 'No se pudo aceptar la invitación.');
@@ -118,9 +122,9 @@ export default function InvitationAcceptPage() {
 
   if (!vigente) {
     const textos = {
-      aceptada: 'Esta invitación ya fue aceptada. Inicie sesión para entrar al Workspace.',
-      revocada: 'Esta invitación fue revocada por quien administra el Workspace.',
-      vencida: 'Esta invitación venció. Pídale a quien administra el Workspace que la reenvíe.',
+      aceptada: 'Esta invitación ya fue aceptada. Inicie sesión para entrar a la Empresa.',
+      revocada: 'Esta invitación fue revocada por quien administra la Empresa.',
+      vencida: 'Esta invitación venció. Pídale a quien administra la Empresa que la reenvíe.',
     };
     return (
       <Marco>

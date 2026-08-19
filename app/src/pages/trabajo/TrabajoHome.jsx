@@ -1,9 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Box, IconButton, Typography, useTheme } from '@mui/material';
 import { Bot, Paperclip, SendHorizontal, Wrench } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import AgentesGaleria from './AgentesGaleria';
+import MencionAgentes, { useMenciones } from '../../components/MencionAgentes';
+import { useWorkspace } from '../../context/WorkspaceContext';
+import PrimerosPasos from '../../components/PrimerosPasos';
+import LoQueHizoAfable from '../../components/LoQueHizoAfable';
 
 const SALUDOS = [
   { texto: 'Qué bueno verlo', emoji: '👋' },
@@ -30,6 +34,14 @@ export default function TrabajoHome() {
   const borde = theme.palette.divider;
 
   const [texto, setTexto] = useState('');
+  const campoRef = useRef(null);
+  const { slug } = useWorkspace();
+
+  // También acá: la portada es donde más gente escribe su primer mensaje, y si el `@` no
+  // ofrece nada la funcionalidad más propia del producto pasa desapercibida.
+  const menciones = useMenciones({
+    texto, setTexto, workspace: slug, inputRef: campoRef,
+  });
 
   const nombre = currentUser?.first_name || (currentUser?.email || '').split('@')[0] || '';
   // Un saludo por sesion: cambia al recargar, no mientras se escribe.
@@ -43,6 +55,13 @@ export default function TrabajoHome() {
 
   return (
     <Box sx={{ maxWidth: 820, mx: 'auto', px: { xs: 2.5, md: 4 }, py: { xs: 4, md: 6 }, width: '100%' }}>
+      {/* Lo que le falta a la empresa. Se dibuja solo mientras falte algo, y solo al
+          administrador: los pasos son cosas que unicamente el puede hacer. */}
+      {/* Primero lo que Afable hizo solo —es la razón por la que se vuelve— y después
+          lo que falta configurar. */}
+      <LoQueHizoAfable />
+      <PrimerosPasos />
+
       <Typography
         sx={{
           textAlign: 'center', fontSize: '1.5rem', fontWeight: 600,
@@ -54,19 +73,29 @@ export default function TrabajoHome() {
 
       {/* Una sola caja: escribir y mandar */}
       <Box sx={{
+        position: 'relative',
         border: `1px solid ${borde}`, borderRadius: '12px', bgcolor: bgCaja,
         px: 2, pt: 1.75, pb: 1,
         '&:focus-within': { borderColor: 'rgba(88, 106, 208, 0.5)' },
         transition: 'border-color .15s',
       }}>
+        {menciones.mencion && (
+          <MencionAgentes
+            agentes={menciones.sugerencias}
+            indice={menciones.indice}
+            onElegir={menciones.elegir}
+          />
+        )}
         <Box
           component="textarea"
+          ref={campoRef}
           value={texto}
-          onChange={(e) => setTexto(e.target.value)}
+          onChange={menciones.alEscribir}
           onKeyDown={(e) => {
+            if (menciones.alTeclear(e)) return;
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); }
           }}
-          placeholder="¿En qué trabajamos hoy?"
+          placeholder="¿En qué trabajamos hoy? Escriba @ para llamar a un agente"
           rows={2}
           sx={{
             width: '100%', border: 'none', outline: 'none', resize: 'none',

@@ -22,33 +22,32 @@ import SeguridadPage from './pages/legal/SeguridadPage';
 
 // App
 import ChatPage from './pages/ChatPage';
-import AgentsPage from './pages/AgentsPage';
-import ExplorePage from './pages/ExplorePage';
 import ModelPage from './pages/ModelPage';
 import IntegrationsPage from './pages/IntegrationsPage';
 import TablondePage from './pages/TablondePage';
-import DocumentsPage from './pages/DocumentsPage';
 import ProfilePage from './pages/ProfilePage';
 import MiContextoPage from './pages/MiContextoPage';
 import ContextoPage from './pages/ContextoPage';
 import ContextoHubPage from './pages/ContextoHubPage';
 import EspacioDetallePage from './pages/espacios/EspacioDetallePage';
 import AutomationsPage from './pages/AutomationsPage';
-import RutinaPage from './pages/RutinaPage';
 import SettingsPage from './pages/SettingsPage';
 import HelpPage from './pages/HelpPage';
-import PricingPage from './pages/PricingPage';
-import PaymentResultPage from './pages/PaymentResultPage';
 
 // Pantallas nuevas, que van reemplazando a las anteriores una por una.
 // Personas reemplaza a TeamPage: la pertenencia y los roles ahora viven en el
 // Workspace (Membership), no en los campos org_admin/areas del usuario.
 import TrabajoHome from './pages/trabajo/TrabajoHome';
 import AgentesPage from './pages/trabajo/AgentesPage';
+import AgenteNuevoPage from './pages/trabajo/AgenteNuevoPage';
+import SesionPage from './pages/sesiones/SesionPage';
+import ArchivosPage from './pages/archivos/ArchivosPage';
+import DocumentoPage from './pages/archivos/DocumentoPage';
 import PersonasPage from './pages/admin/PersonasPage';
 import WorkspacePage from './pages/admin/WorkspacePage';
+import TareasPage from './pages/TareasPage';
 import AgentesAdminPage from './pages/admin/AgentesAdminPage';
-import AgenteConfigPage from './pages/admin/AgenteConfigPage';
+import FacturacionPage from './pages/admin/FacturacionPage';
 
 export default function App() {
   const [cmdOpen, setCmdOpen] = useState(false);
@@ -97,34 +96,45 @@ export default function App() {
             <Route index                     element={<TrabajoHome />} />
             <Route path="chat"               element={<ChatPage />} />
             <Route path="modelo"             element={<ModelPage />} />
-            {/* "Agentes" es la galería del Workspace. La pantalla anterior
-                (plantillas de rol) queda accesible hasta que se decida si la
-                absorbe la galería. */}
             <Route path="agentes"            element={<AgentesPage />} />
-            <Route path="agentes/plantillas" element={<AgentsPage />} />
-            <Route path="home"               element={<ExplorePage />} />
-            <Route path="integraciones"      element={<IntegrationsPage />} />
+            {/* El constructor: la misma pantalla crea y edita. */}
+            <Route path="agentes/nuevo"      element={<AgenteNuevoPage />} />
+            <Route path="agentes/:id/editar" element={<AgenteNuevoPage />} />
             <Route path="tablero"            element={<TablondePage />} />
-            <Route path="documentos"         element={<DocumentsPage />} />
-            <Route path="mi-contexto"        element={<MiContextoPage />} />
+            {/* Archivos: EL lugar de los archivos de la empresa, con carpetas,
+                versiones y edición. La pestaña Documentos del hub redirige acá. */}
+            <Route path="archivos"           element={<ArchivosPage />} />
+            <Route path="archivos/:docId"    element={<DocumentoPage />} />
             <Route path="contexto"           element={<ContextoHubPage />} />
             <Route path="espacios/:spaceSlug" element={<EspacioDetallePage />} />
-            <Route path="contexto-cubiculos" element={<ContextoPage />} />
-            <Route path="contexto-empresa"   element={<Navigate to="/app/mi-contexto" replace />} />
+            {/* Sesiones: donde trabaja el equipo. El Espacio es permisos sobre el
+                conocimiento; la Sesion es la superficie de trabajo. */}
+            <Route path="sesiones/:sesionSlug" element={<SesionPage />} />
             <Route path="automatizaciones"   element={<AutomationsPage />} />
-            <Route path="rutina"             element={<RutinaPage />} />
             <Route path="perfil"             element={<ProfilePage />} />
             <Route path="configuracion"      element={<SettingsPage />} />
             <Route path="ayuda"              element={<HelpPage />} />
-            <Route path="precios"            element={<PricingPage />} />
-            <Route path="pago/resultado"     element={<PaymentResultPage />} />
+            {/* La vitrina de precios y la pantalla de "gracias" se reemplazaron por
+                Facturación, que además dice con qué se paga y qué se cobró. Las rutas
+                viejas redirigen porque quedaron enlaces dando vuelta (y la pasarela
+                vuelve con `?pago=`, que Facturación sabe leer). */}
+            <Route path="precios"            element={<Navigate to="/app/admin/facturacion" replace />} />
+            <Route path="pago/resultado"     element={<Navigate to="/app/admin/facturacion" replace />} />
 
             {/* Pantallas nuevas; las rutas viejas redirigen para no romper enlaces */}
             <Route path="admin/personas"     element={<PersonasPage />} />
             <Route path="equipo"             element={<Navigate to="/app/admin/personas" replace />} />
+            {/* Tareas: todo lo pendiente cruzando Sesiones. Las tareas viven dentro de
+                una Sesión, pero "qué tengo pendiente" no es una pregunta sobre una Sesión. */}
+            <Route path="tareas"             element={<TareasPage />} />
             <Route path="admin/workspace"    element={<WorkspacePage />} />
             <Route path="admin/agentes"      element={<AgentesAdminPage />} />
-            <Route path="admin/agentes/:id"  element={<AgenteConfigPage />} />
+            {/* Facturación: el plan es de la empresa, así que vive en Admin y no en el
+                perfil de la persona. `precios` queda como la vitrina publica. */}
+            <Route path="admin/facturacion"  element={<FacturacionPage />} />
+            {/* La ficha de un agente es UNA: el constructor. Admin > Agentes es la
+                lista (ahi se ve de un vistazo lo que falta configurar) y abre ahi. */}
+            <Route path="admin/agentes/:id"  element={<Navigate to="/app/agentes" replace />} />
             <Route path="organizaciones"     element={<Navigate to="/app/admin/workspace" replace />} />
           </Route>
 
