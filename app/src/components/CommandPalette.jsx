@@ -5,6 +5,7 @@ import {
   Settings, HelpCircle, Building2, User, Users,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { api } from '../services/api';
 
 const COMMANDS = [
   { group: 'Navegación', icon: MessageSquare,  label: 'Chat',             shortcut: 'G C', action: '/app' },
@@ -25,6 +26,7 @@ export default function CommandPalette({ open, onClose }) {
   const d = theme.palette.mode === 'dark';
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(0);
+  const [hilos, setHilos] = useState([]);
   const inputRef = useRef(null);
   const navigate = useNavigate();
 
@@ -42,17 +44,53 @@ export default function CommandPalette({ open, onClose }) {
     if (open) {
       setQuery('');
       setSelected(0);
+      setHilos([]);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [open]);
 
-  const filtered = COMMANDS.filter(c =>
+  // Busca en el titulo Y en el contenido de los mensajes (lo resuelve el backend). Dos
+  // letras de minimo porque con una la lista es cualquier cosa, y con espera de 200ms
+  // para no disparar una consulta por tecla.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) { setHilos([]); return undefined; }
+    let vivo = true;
+    const espera = setTimeout(() => {
+      api.getConversations({ q, limite: 8, compartidos: 1 })
+        .then(r => { if (vivo) setHilos(r.data || []); })
+        .catch(() => { if (vivo) setHilos([]); });
+    }, 200);
+    return () => { vivo = false; clearTimeout(espera); };
+  }, [query]);
+
+  const comandos = COMMANDS.filter(c =>
     c.label.toLowerCase().includes(query.toLowerCase())
   );
 
+  // Los hilos entran con la MISMA forma que un comando, y asi el teclado, los grupos y
+  // el dibujado siguen siendo uno solo.
+  const conversaciones = hilos.map((c) => ({
+    group: 'Conversaciones',
+    clave: `conv-${c.id}`,
+    // El icono es la marca: un hilo que escribio otra persona no es lo mismo que el mio,
+    // y en una lista mezclada sin decirlo todo se lee como propio.
+    icon: c.compartido_conmigo ? Users : MessageSquare,
+    label: (c.title || 'Conversación').slice(0, 60),
+    nota: c.compartido_conmigo
+      ? `Compartida por ${c.autor_nombre || 'el equipo'}${c.sesion_nombre ? ` · ${c.sesion_nombre}` : ''}`
+      : (c.sesion_nombre ? `Compartida en ${c.sesion_nombre}` : null),
+    action: `conv:${c.id}`,
+  }));
+
+  const filtered = [...comandos, ...conversaciones];
+
   const execute = useCallback((cmd) => {
     onClose();
-    if (cmd.action.startsWith('/')) {
+    if (cmd.action.startsWith('conv:')) {
+      // Misma navegacion que usa la barra lateral para abrir un hilo.
+      navigate('/app/chat', { state: { conversationId: Number(cmd.action.slice(5)) } });
+    } else if (cmd.action.startsWith('/')) {
       navigate(cmd.action);
     } else {
       window.dispatchEvent(new CustomEvent('afable-cmd', { detail: cmd.action }));
@@ -98,7 +136,7 @@ export default function CommandPalette({ open, onClose }) {
           <InputBase
             inputRef={inputRef}
             fullWidth
-            placeholder="Buscar comando..."
+            placeholder="Buscar comando o conversación..."
             value={query}
             onChange={e => { setQuery(e.target.value); setSelected(0); }}
             onKeyDown={handleKeyDown}
@@ -132,7 +170,7 @@ export default function CommandPalette({ open, onClose }) {
                   const Icon = cmd.icon;
                   return (
                     <Box
-                      key={cmd.label}
+                      key={cmd.clave || cmd.label}
                       onClick={() => execute(cmd)}
                       onMouseEnter={() => setSelected(globalIdx)}
                       sx={{
@@ -145,9 +183,16 @@ export default function CommandPalette({ open, onClose }) {
                       }}
                     >
                       <Icon size={15} color={isSelected ? '#9BA6E3' : textMuted} />
-                      <Typography sx={{ flex: 1, fontSize: '0.875rem', color: isSelected ? textMain : textSemi, fontWeight: isSelected ? 500 : 400 }}>
-                        {cmd.label}
-                      </Typography>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography sx={{ fontSize: '0.875rem', color: isSelected ? textMain : textSemi, fontWeight: isSelected ? 500 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {cmd.label}
+                        </Typography>
+                        {cmd.nota && (
+                          <Typography sx={{ fontSize: '0.7rem', color: textMuted, mt: 0.125 }}>
+                            {cmd.nota}
+                          </Typography>
+                        )}
+                      </Box>
                       {cmd.shortcut && (
                         <Box sx={{ display: 'flex', gap: 0.5 }}>
                           {cmd.shortcut.split(' ').map(k => (

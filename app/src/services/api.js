@@ -79,7 +79,8 @@ export const api = {
   deleteDocument: (id) => apiClient.delete(`/agents/documents/${id}/`),
 
   // ── Conversations ──
-  getConversations: () => apiClient.get('/agents/conversations/'),
+  // params: { q, limite, compartidos }. Sin params se comporta como antes.
+  getConversations: (params) => apiClient.get('/agents/conversations/', { params }),
   getConversationMessages: (id) => apiClient.get(`/agents/conversations/${id}/messages/`),
   deleteConversation: (id) => apiClient.delete(`/agents/conversations/${id}/`),
   // Renombrar el hilo, o moverlo a una Sesión — que es lo que significa COMPARTIRLO:

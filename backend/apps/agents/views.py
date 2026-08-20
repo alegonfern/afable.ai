@@ -1593,11 +1593,51 @@ class ConversationDetailView(APIView):
 
 
 class UserConversationListView(APIView):
+    """El historial de la barra lateral, y la búsqueda de la paleta.
+
+    Tres parámetros, y los tres existen para no tener dos endpoints que se contradigan:
+
+    - `q` busca en el título Y en el contenido de los mensajes. Buscar solo por título
+      encontraría casi nada: los títulos se arman con los primeros 120 caracteres del
+      primer mensaje, así que lo que uno recuerda de una conversación casi nunca está ahí.
+    - `limite` recorta del lado del servidor. La barra pedía TODAS las conversaciones para
+      mostrar diez, y eso escala mal solo.
+    - `compartidos=1` incluye los hilos que el equipo compartió en las Sesiones que la
+      persona alcanza. La barra NO los pide (sigue siendo el historial propio); la
+      búsqueda sí, y los marca, porque encontrar algo que uno puede abrir y leer no
+      debería depender de quién lo escribió.
+    """
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        convs = Conversation.objects.filter(user=request.user).select_related('agent').order_by('-updated_at')
-        return Response(ConversationListSerializer(convs, many=True).data)
+        from apps.agents.hilos import hilos_alcanzables
+        from django.db.models import Q
+
+        if request.query_params.get('compartidos') in ('1', 'true'):
+            convs = hilos_alcanzables(request.user)
+        else:
+            convs = Conversation.objects.filter(user=request.user)
+
+        q = (request.query_params.get('q') or '').strip()
+        if q:
+            convs = convs.filter(
+                Q(title__icontains=q) | Q(messages__content__icontains=q)
+            ).distinct()
+
+        convs = convs.select_related('agent', 'sesion').order_by('-updated_at')
+
+        try:
+            limite = int(request.query_params.get('limite') or 0)
+        except ValueError:
+            limite = 0
+        if limite > 0:
+            convs = convs[:limite]
+
+        datos = ConversationListSerializer(
+            convs, many=True, context={'request': request},
+        ).data
+        return Response(datos)
 
 
 class UserConversationDetailView(APIView):

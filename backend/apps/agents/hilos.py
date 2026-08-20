@@ -58,6 +58,30 @@ def _alcanza_la_sesion(user, sesion):
     return sesiones_visibles(membership).filter(pk=sesion.pk).exists()
 
 
+def hilos_alcanzables(user):
+    """Un queryset con los hilos que esta persona puede abrir: los suyos, más los de las
+    Sesiones que alcanza.
+
+    Es la versión en conjunto de `hilo_para_escribir`, para poder BUSCAR sobre lo mismo
+    que se puede abrir. Tener dos reglas —una para abrir y otra para buscar— termina en un
+    buscador que muestra hilos que dan 404, o que esconde hilos que sí se pueden leer.
+    """
+    from django.db.models import Q
+
+    from apps.sesiones.permissions import sesiones_visibles
+    from apps.workspaces.models import Membership
+
+    # Una persona puede ser miembro de varias empresas, y `sesiones_visibles` trabaja
+    # sobre una membresía. La unión es lo que alcanza en total.
+    sesiones = set()
+    for membership in Membership.objects.filter(user=user).select_related('organization'):
+        sesiones.update(sesiones_visibles(membership).values_list('pk', flat=True))
+
+    if not sesiones:
+        return Conversation.objects.filter(user=user)
+    return Conversation.objects.filter(Q(user=user) | Q(sesion_id__in=sesiones))
+
+
 def le_hablan_a_la_ia(texto, hay_mas_de_uno, agentes_alcanzables=None):
     """Si el agente tiene que contestar este mensaje.
 

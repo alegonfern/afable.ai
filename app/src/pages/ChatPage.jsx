@@ -689,7 +689,12 @@ export default function ChatPage() {
           if (!line.startsWith('data: ')) continue;
           try {
             const data = JSON.parse(line.slice(6));
-            if (data.conversation_id) setConvId(data.conversation_id);
+            if (data.conversation_id && data.conversation_id !== convId) {
+              setConvId(data.conversation_id);
+              // Recien creada: la barra tiene que reflejarla sin recargar. La
+              // comparacion es para no avisar en cada trozo del stream.
+              window.dispatchEvent(new Event('afable-conversaciones'));
+            }
             if (data.agent) {
               // Si el usuario menciono a otro agente, el backend ya decidio: la
               // barra y la firma del mensaje tienen que reflejar a QUIEN contesta.

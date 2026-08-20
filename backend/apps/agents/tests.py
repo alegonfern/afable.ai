@@ -857,3 +857,136 @@ class CacheDePromptTests(TestCase):
 
         ctx = _build_onboarding_context(self.user, None, consulta='x')
         self.assertNotIn('HERRAMIENTAS DE ARCHIVOS', ctx['system_prompt'])
+
+
+class BuscarConversacionesTests(TestCase):
+    """La búsqueda de conversaciones: que encuentre lo que se puede abrir, y NADA más.
+
+    Lo que se protege acá es la propiedad que el producto promete sobre permisos. Un
+    buscador es la forma más cómoda de filtrar información sin que se note: alcanza con
+    que devuelva un título de más. Por eso busca sobre el mismo embudo que decide quién
+    entra a un hilo (`hilos_alcanzables`), y no sobre una consulta propia.
+    """
+
+    def setUp(self):
+        from apps.sesiones.models import Sesion, SesionMiembro, VISIBILIDAD_RESTRINGIDA
+        from apps.workspaces.models import ROLE_ADMIN, ROLE_MEMBER, Workspace
+
+        self.duena = User.objects.create_user(
+            username='duena@afable.test', email='duena@afable.test', password='afable123',
+            first_name='Marta',
+        )
+        self.companero = User.objects.create_user(
+            username='companero@afable.test', email='companero@afable.test',
+            password='afable123', first_name='Pedro',
+        )
+        self.ajeno = User.objects.create_user(
+            username='ajeno@afable.test', email='ajeno@afable.test', password='afable123',
+        )
+        self.org = Organization.objects.create(owner=self.duena, name='Cocinas SpA')
+        ws = Workspace.objects.create(organization=self.org, name='General')
+        self.org.agregar_miembro(self.duena, ROLE_ADMIN)
+        self.org.agregar_miembro(self.companero, ROLE_MEMBER)
+        self.org.agregar_miembro(self.ajeno, ROLE_MEMBER)
+        self.agente = Agent.objects.create(organization=self.org, name='Ventas')
+
+        # Una Sesión RESTRINGIDA donde entran Marta y Pedro, y el ajeno no.
+        self.sesion = Sesion.objects.create(
+            workspace=ws, name='Cierre de mes', slug='cierre-de-mes',
+            visibility=VISIBILIDAD_RESTRINGIDA,
+        )
+        SesionMiembro.objects.create(sesion=self.sesion, user=self.duena)
+        SesionMiembro.objects.create(sesion=self.sesion, user=self.companero)
+
+        self.mio = self._hilo(self.duena, 'Precios de gabinetes',
+                              'cuanto cuesta el gabinete de melamina', sesion=None)
+        self.compartido = self._hilo(self.companero, 'Facturas pendientes',
+                                     'revisar la melamina que quedo sin facturar',
+                                     sesion=self.sesion)
+        # De otra persona y sin Sesión: nadie más que su autor lo alcanza.
+        self.privado_ajeno = self._hilo(self.ajeno, 'Notas privadas',
+                                        'la melamina de mi casa', sesion=None)
+
+    def _hilo(self, user, titulo, texto, sesion=None):
+        from apps.agents.models import Conversation, Message
+
+        conv = Conversation.objects.create(
+            agent=self.agente, user=user, title=titulo, sesion=sesion,
+        )
+        Message.objects.create(conversation=conv, role='user', content=texto, user=user)
+        return conv
+
+    def _buscar(self, user, **params):
+        client = APIClient()
+        client.force_authenticate(user=user)
+        return client.get('/api/v1/agents/conversations/', params)
+
+    # ── Lo que tiene que encontrar ────────────────────────────────────
+
+    def test_busca_en_el_contenido_y_no_solo_en_el_titulo(self):
+        """Los títulos se arman con los primeros 120 caracteres del primer mensaje, así
+        que lo que uno recuerda de una conversación casi nunca está en el título."""
+        r = self._buscar(self.duena, q='melamina')
+        ids = [c['id'] for c in r.data]
+        self.assertIn(self.mio.id, ids)          # calza por contenido, no por titulo
+        r2 = self._buscar(self.duena, q='gabinetes')
+        self.assertIn(self.mio.id, [c['id'] for c in r2.data])   # y por titulo tambien
+
+    def test_encuentra_el_hilo_que_el_equipo_compartio_en_su_sesion(self):
+        r = self._buscar(self.duena, q='melamina', compartidos=1)
+        ids = [c['id'] for c in r.data]
+        self.assertIn(self.compartido.id, ids)
+
+    def test_el_hilo_ajeno_viene_marcado_y_dice_quien_lo_escribio(self):
+        """Una lista que mezcla lo propio con lo ajeno sin decirlo se lee como si todo
+        fuera propio."""
+        r = self._buscar(self.duena, q='melamina', compartidos=1)
+        fila = next(c for c in r.data if c['id'] == self.compartido.id)
+        self.assertTrue(fila['compartido_conmigo'])
+        self.assertEqual(fila['autor_nombre'], 'Pedro')
+        self.assertEqual(fila['sesion_nombre'], 'Cierre de mes')
+
+    def test_el_hilo_propio_no_viene_marcado(self):
+        r = self._buscar(self.duena, q='melamina', compartidos=1)
+        fila = next(c for c in r.data if c['id'] == self.mio.id)
+        self.assertFalse(fila['compartido_conmigo'])
+
+    # ── Lo que NO tiene que encontrar (es el punto) ───────────────────
+
+    def test_no_encuentra_el_hilo_privado_de_otra_persona(self):
+        r = self._buscar(self.duena, q='melamina', compartidos=1)
+        self.assertNotIn(self.privado_ajeno.id, [c['id'] for c in r.data])
+
+    def test_quien_no_alcanza_la_sesion_no_encuentra_su_hilo(self):
+        """El ajeno es miembro de la empresa, pero la Sesión es restringida y no está
+        invitado. Si el buscador se lo mostrara, sería la puerta de atrás."""
+        r = self._buscar(self.ajeno, q='melamina', compartidos=1)
+        ids = [c['id'] for c in r.data]
+        self.assertNotIn(self.compartido.id, ids)
+        self.assertNotIn(self.mio.id, ids)
+        self.assertIn(self.privado_ajeno.id, ids)   # el suyo si
+
+    def test_sin_el_parametro_la_barra_sigue_mostrando_solo_lo_propio(self):
+        """La barra lateral es el historial de cada uno y no cambia: lo compartido se
+        pide explícitamente, y solo lo pide el buscador."""
+        r = self._buscar(self.duena, q='melamina')
+        ids = [c['id'] for c in r.data]
+        self.assertIn(self.mio.id, ids)
+        self.assertNotIn(self.compartido.id, ids)
+
+    # ── El límite ─────────────────────────────────────────────────────
+
+    def test_el_limite_lo_aplica_el_servidor(self):
+        """Antes se pedían TODAS las conversaciones para mostrar diez en la barra."""
+        for i in range(5):
+            self._hilo(self.duena, f'Hilo {i}', 'melamina otra vez')
+        self.assertEqual(len(self._buscar(self.duena, q='melamina', limite=2).data), 2)
+        self.assertGreater(len(self._buscar(self.duena, q='melamina').data), 2)
+
+    def test_un_limite_invalido_no_revienta(self):
+        r = self._buscar(self.duena, limite='hola')
+        self.assertEqual(r.status_code, 200)
+
+    def test_sin_texto_devuelve_el_historial(self):
+        r = self._buscar(self.duena)
+        self.assertIn(self.mio.id, [c['id'] for c in r.data])

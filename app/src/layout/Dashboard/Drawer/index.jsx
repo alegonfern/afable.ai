@@ -92,9 +92,23 @@ export default function Drawer({ open, handleDrawerToggle }) {
     setUserMenuAnchor(null);
   };
 
-  useEffect(() => {
-    api.getConversations().then(r => setConversations(r.data.slice(0, 10))).catch(() => {});
+  // El limite lo pone el servidor: antes se pedian TODAS para mostrar diez.
+  const cargarConversaciones = useCallback(() => {
+    api.getConversations({ limite: 10 })
+      .then(r => setConversations(r.data))
+      .catch(() => {});
   }, []);
+
+  useEffect(() => { cargarConversaciones(); }, [cargarConversaciones]);
+
+  // El Drawer vive en el layout permanente: no se vuelve a montar al navegar, asi que
+  // sin esto una conversacion nueva no aparecia hasta recargar la pagina entera. Mismo
+  // patron que las Sesiones, mas abajo.
+  useEffect(() => {
+    const alCambiar = () => cargarConversaciones();
+    window.addEventListener('afable-conversaciones', alCambiar);
+    return () => window.removeEventListener('afable-conversaciones', alCambiar);
+  }, [cargarConversaciones]);
 
   const wsSlug = localStorage.getItem('afable_workspace_slug');
   // El Workspace elegido acota las Sesiones de la barra, igual que en Archivos.
@@ -491,6 +505,20 @@ export default function Drawer({ open, handleDrawerToggle }) {
                     <Typography sx={{ fontSize: '0.82rem' }}>Conversaciones</Typography>
                   </Box>
                   <Box sx={{ pl: 2.75 }}>
+                    {/* La barra muestra las diez ultimas a proposito. El buscador es la
+                        salida: sin el, diez es un tope que se lee como "no hay mas". */}
+                    <Box
+                      onClick={() => window.dispatchEvent(new Event('afable-open-search'))}
+                      sx={{
+                        display: 'flex', alignItems: 'center', gap: 0.75,
+                        px: 1, py: 0.35, borderRadius: '4px', cursor: 'pointer',
+                        color: textDisabled, '&:hover': { bgcolor: bgHover, color: textMuted },
+                        transition: 'all 0.1s',
+                      }}
+                    >
+                      <Search size={13} />
+                      <Typography sx={{ fontSize: '0.78rem' }}>Buscar conversaciones</Typography>
+                    </Box>
                     {conversations.map(conv => (
                       <Box
                         key={conv.id}
