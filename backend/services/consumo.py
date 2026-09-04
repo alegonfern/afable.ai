@@ -32,33 +32,50 @@ costo ya está gastado.
 """
 
 import logging
+from collections import namedtuple
 from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
-# Precio de lista del proveedor en US$ por millón de tokens (entrada, salida).
-# Es la tarifa por omisión: si hay una fila vigente en `TarifaModelo` para el modelo,
+# Una tarifa son los dos precios por millón MÁS los tres multiplicadores de caché,
+# porque cada proveedor cobra la caché distinto y meterlos como constantes globales
+# mentía: en Anthropic leer de caché vale 0,1 de la entrada, y en DeepSeek 0,032. Con
+# el factor de Anthropic aplicado a DeepSeek, el consumo cacheado quedaba tres veces
+# más caro de lo que el proveedor cobra.
+Tarifa = namedtuple(
+    'Tarifa', 'entrada salida factor_lectura factor_escritura factor_escritura_1h',
+)
+
+# Los multiplicadores de Anthropic, que son los que valen por omisión: leer 0,1 de la
+# entrada, escribir la caché de 5 minutos 1,25 y la de 1 hora el DOBLE. Esa última es
+# la que hace falta medir aparte: guardar por una hora cuesta más que guardar por cinco
+# minutos, y con un solo factor la cuenta se quedaba 60% corta en cada escritura.
+FACTOR_LECTURA = Decimal('0.1')
+FACTOR_ESCRITURA = Decimal('1.25')
+FACTOR_ESCRITURA_1H = Decimal('2')
+
+
+def _anthropic(entrada, salida):
+    return Tarifa(entrada, salida, FACTOR_LECTURA, FACTOR_ESCRITURA, FACTOR_ESCRITURA_1H)
+
+
+# Tarifa por omisión por familia de modelo: si hay una fila vigente en `TarifaModelo`,
 # manda la fila. Ollama corre en nuestro propio fierro, así que no tiene precio por
 # token — su costo es el servidor, no la llamada.
 TARIFAS_POR_OMISION = {
-    'haiku':   (1, 5),
-    'sonnet':  (3, 15),
-    'opus':    (5, 25),
-    'fable':   (10, 50),
-    'ollama':  (0, 0),
+    'haiku':   _anthropic(1, 5),
+    'sonnet':  _anthropic(3, 15),
+    'opus':    _anthropic(5, 25),
+    'fable':   _anthropic(10, 50),
+    'ollama':  Tarifa(0, 0, 0, 0, 0),
 }
-
-# Multiplicadores de caché del proveedor, sobre el precio de ENTRADA. En Decimal y no
-# en float porque los precios que vienen de `TarifaModelo` son Decimal, y Python no
-# multiplica Decimal por float.
-FACTOR_CACHE_LECTURA = Decimal('0.1')
-FACTOR_CACHE_ESCRITURA = Decimal('1.25')
 
 PROVEEDOR_ANTHROPIC = 'anthropic'
 PROVEEDOR_DEEPSEEK = 'deepseek'
 PROVEEDOR_OLLAMA = 'ollama'
 
-VACIO = {'entrada': 0, 'salida': 0, 'cache_lectura': 0, 'cache_escritura': 0}
+VACIO = {'entrada': 0, 'salida': 0, 'cache_lectura': 0, 'cache_escritura': 0,
+         'cache_escritura_1h': 0}
 
 
 def medir(proveedor: str, respuesta) -> dict:
@@ -83,15 +100,22 @@ def medir(proveedor: str, respuesta) -> dict:
 
 def _medir_anthropic(respuesta) -> dict:
     """El SDK entrega un objeto. `input_tokens` NO incluye la caché: los tokens leídos
-    y los escritos vienen aparte, así que se suman sin restar nada."""
+    y los escritos vienen aparte, así que se suman sin restar nada.
+
+    `cache_escritura` es el total de lo escrito y `cache_escritura_1h` la parte que se
+    guardó por una hora, que cuesta el doble. Se separan porque el SDK las reporta
+    aparte (`usage.cache_creation`) y cobrarlas al mismo factor deja la cuenta corta.
+    """
     uso = getattr(respuesta, 'usage', None)
     if uso is None:
         return dict(VACIO)
+    creacion = getattr(uso, 'cache_creation', None)
     return {
         'entrada': int(getattr(uso, 'input_tokens', 0) or 0),
         'salida': int(getattr(uso, 'output_tokens', 0) or 0),
         'cache_lectura': int(getattr(uso, 'cache_read_input_tokens', 0) or 0),
         'cache_escritura': int(getattr(uso, 'cache_creation_input_tokens', 0) or 0),
+        'cache_escritura_1h': int(getattr(creacion, 'ephemeral_1h_input_tokens', 0) or 0),
     }
 
 
@@ -105,7 +129,10 @@ def _medir_deepseek(respuesta) -> dict:
         'entrada': max(entrada, 0),
         'salida': int(uso.get('completion_tokens', 0) or 0),
         'cache_lectura': cache_lectura,
+        # DeepSeek no cobra por escribir la caché: el token que no acierta se paga a
+        # precio de entrada y queda guardado sin premio.
         'cache_escritura': 0,
+        'cache_escritura_1h': 0,
     }
 
 
@@ -118,6 +145,7 @@ def _medir_ollama(respuesta) -> dict:
         'salida': int(datos.get('eval_count', 0) or 0),
         'cache_lectura': 0,
         'cache_escritura': 0,
+        'cache_escritura_1h': 0,
     }
 
 
@@ -141,9 +169,9 @@ def tarifa_de(modelo: str):
     if fila is not None:
         return fila
 
-    for familia, precios in TARIFAS_POR_OMISION.items():
+    for familia, tarifa in TARIFAS_POR_OMISION.items():
         if familia in nombre:
-            return precios
+            return tarifa
     return None
 
 
@@ -159,7 +187,11 @@ def _tarifa_en_base(nombre: str):
         return None
     if tarifa is None:
         return None
-    return (tarifa.precio_entrada_usd_millon, tarifa.precio_salida_usd_millon)
+    return Tarifa(
+        tarifa.precio_entrada_usd_millon, tarifa.precio_salida_usd_millon,
+        tarifa.factor_cache_lectura, tarifa.factor_cache_escritura,
+        tarifa.factor_cache_escritura_1h,
+    )
 
 
 def creditos(modelo: str, medicion: dict) -> int:
@@ -172,22 +204,31 @@ def creditos(modelo: str, medicion: dict) -> int:
     tarifa = tarifa_de(modelo)
     if tarifa is None:
         return 0
-    # Los precios llegan como int si salieron del código y como Decimal si salieron de
+    # Los valores llegan como int si salieron del código y como Decimal si salieron de
     # la tabla. Se normalizan acá para que la cuenta sea la misma en los dos casos.
-    precio_entrada = Decimal(str(tarifa[0]))
-    precio_salida = Decimal(str(tarifa[1]))
+    def d(x):
+        return Decimal(str(x))
+
+    precio_entrada, precio_salida = d(tarifa.entrada), d(tarifa.salida)
     m = medicion or VACIO
+
+    # La escritura de 1 hora se cobra aparte del total escrito, no además: el resto es
+    # la de 5 minutos.
+    escritura_1h = m.get('cache_escritura_1h', 0)
+    escritura_5m = max(m.get('cache_escritura', 0) - escritura_1h, 0)
+
     total = (
         m.get('entrada', 0) * precio_entrada
         + m.get('salida', 0) * precio_salida
-        + m.get('cache_lectura', 0) * precio_entrada * FACTOR_CACHE_LECTURA
-        + m.get('cache_escritura', 0) * precio_entrada * FACTOR_CACHE_ESCRITURA
+        + m.get('cache_lectura', 0) * precio_entrada * d(tarifa.factor_lectura)
+        + escritura_5m * precio_entrada * d(tarifa.factor_escritura)
+        + escritura_1h * precio_entrada * d(tarifa.factor_escritura_1h)
     )
     return int(round(total))
 
 
 def registrar(proveedor: str, modelo: str, respuesta, organization=None,
-              usuario=None, motivo: str = '') -> None:
+              usuario=None, motivo: str = '', turno: str = '') -> None:
     """Anota lo que gastó una llamada. No devuelve nada y no levanta nunca.
 
     Se llama justo después de recibir la respuesta del modelo, dentro del bucle y no
@@ -198,6 +239,10 @@ def registrar(proveedor: str, modelo: str, respuesta, organization=None,
     `organization` puede venir en None a propósito. El chat de la landing lo usa un
     visitante que todavía no es empresa, y ese gasto es igual de real: sin la fila,
     el costo de vender queda invisible.
+
+    `turno` es el que une las filas de UNA MISMA pregunta. Sin él se puede sumar el
+    gasto total pero no se puede contestar cuántas vueltas dio una pregunta, que es
+    justo la cifra que decide dónde está la plata.
     """
     try:
         from apps.payments.models import ConsumoTokens
@@ -212,10 +257,12 @@ def registrar(proveedor: str, modelo: str, respuesta, organization=None,
             proveedor=proveedor or '',
             modelo=(modelo or '')[:120],
             motivo=(motivo or '')[:40],
+            turno=(turno or '')[:32],
             tokens_entrada=medicion['entrada'],
             tokens_salida=medicion['salida'],
             tokens_cache_lectura=medicion['cache_lectura'],
             tokens_cache_escritura=medicion['cache_escritura'],
+            tokens_cache_escritura_1h=medicion['cache_escritura_1h'],
             creditos=creditos(modelo, medicion),
             sin_tarifa=tarifa_de(modelo) is None,
         )

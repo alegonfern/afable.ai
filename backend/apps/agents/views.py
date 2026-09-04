@@ -539,19 +539,10 @@ fuente — el sistema la añade automáticamente con la tabla y la hora reales.
             'allowed_doc_ids': espacio_docs,
             'docs_en_prompt': docs_en_prompt,
             'agent_model': agent_model,
-            'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
-{perm_ctx}{agent_block}
+            'system_persona': f"{role_ctx}{perm_ctx}",
+            'system_prompt': f"""Eres Afable, el asistente empresarial de {org.name}.
+{agent_block}
 {org_ctx}{bloque_sistemas}
-HERRAMIENTAS DE ARCHIVOS — puedes leer y también ESCRIBIR documentos:
-- buscar_en_fuentes: busca por significado en los documentos y archivos de la empresa.
-- read_company_document(id): el contenido completo de un documento.
-- crear_documento(titulo, contenido): crea un documento de texto NUEVO y lo guarda. Úsala
-  cuando el usuario pida redactar o preparar algo que quiera conservar.
-- editar_documento(id, viejo, nuevo, mensaje): cambia un fragmento EXACTO por otro sin tocar
-  el resto. Lee el documento primero y copia el fragmento tal como está.
-- reescribir_documento(id, contenido, mensaje): reemplaza todo el texto. Solo cuando el
-  documento se reescribe de punta a punta.
-
 {bloque_tareas}
 Cada cambio que hagas queda guardado como una versión FIRMADA con tu nombre, y el equipo
 puede ver qué cambiaste y volver atrás. Por eso: nunca cambies algo que el usuario no pidió
@@ -571,8 +562,9 @@ Responde siempre en español, conciso. Usa markdown para respuestas largas.{ACTI
             'mode': 'no_integration',
             'docs_en_prompt': docs_en_prompt,
             'agent_model': agent_model,
-            'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
-{perm_ctx}{agent_block}
+            'system_persona': f"{role_ctx}{perm_ctx}",
+            'system_prompt': f"""Eres Afable, el asistente empresarial de {org.name}.
+{agent_block}
 {org_ctx}Trabajas con lo que ves arriba: el contexto de la empresa y sus documentos.
 NO tienes ningún sistema (ERP, CRM o base de datos) conectado para consultar en vivo,
 así que no puedes responder con cifras de ventas, stock ni facturación al día. Si te
@@ -589,8 +581,9 @@ Responde siempre en español, sé conciso y orientado a la acción.{ACTIONS_PROM
         'mode': 'full',
         'docs_en_prompt': docs_en_prompt,
         'agent_model': agent_model,
-        'system_prompt': f"""{role_ctx}Eres Afable, el asistente empresarial de {org.name}.
-{perm_ctx}{agent_block}
+        'system_persona': f"{role_ctx}{perm_ctx}",
+        'system_prompt': f"""Eres Afable, el asistente empresarial de {org.name}.
+{agent_block}
 {org_ctx}Tienes acceso al contexto de datos escaneado de {scan.system_name}:
 {ai_ctx}
 
@@ -1040,7 +1033,8 @@ class DirectChatView(APIView):
                 context.get('allowed_ids'), context.get('allowed_doc_ids'),
                 # Se llena con lo que el agente deje escrito, para que el chat pueda
                 # ofrecer abrirlo sin mandar a la persona a otra pantalla.
-                tocados=artefactos,
+                tocados=artefactos, usuario=request.user,
+                system_persona=context.get('system_persona', ''),
                 # Para firmar las versiones que escriba: el historial de un documento
                 # dice qué agente lo tocó, no solo que "lo tocó la IA".
                 agente=agent,
@@ -1051,7 +1045,8 @@ class DirectChatView(APIView):
             )
         else:
             response_text = chat_direct(full_history, system_prompt, model,
-                                        organization=context.get('org'), motivo='chat')
+                                        organization=context.get('org'), motivo='chat',
+                                        system_persona=context.get('system_persona', ''))
 
         limpia = _strip_action(response_text)
         docs = context.get('docs_en_prompt')
@@ -1123,10 +1118,12 @@ class DirectChatView(APIView):
                 historia, context['org'], context['system_prompt'], modelo,
                 context.get('allowed_ids'), context.get('allowed_doc_ids'),
                 tocados=artefactos, agente=agente, sesion=conversation.sesion,
+                system_persona=context.get('system_persona', ''), usuario=request.user,
             )
         else:
             texto = chat_direct(historia, context['system_prompt'], modelo,
-                                organization=context.get('org'), motivo='chat')
+                                organization=context.get('org'), motivo='chat',
+                                system_persona=context.get('system_persona', ''))
 
         limpia = _strip_action(texto)
         docs = context.get('docs_en_prompt')
@@ -1274,6 +1271,7 @@ class DirectChatStreamView(APIView):
                 for event in run_agent_live_events(
                     full_history, org, system_prompt, model, allowed_ids, allowed_doc_ids,
                     agente=agent, sesion=conversation.sesion,
+                    system_persona=context.get('system_persona', ''), usuario=request.user,
                 ):
                     if 'status' in event:
                         yield f"data: {json.dumps({'status': event['status']})}\n\n"
@@ -1286,7 +1284,8 @@ class DirectChatStreamView(APIView):
                     yield f"data: {json.dumps({'chunk': piece})}\n\n"
             else:
                 for chunk in stream_direct(full_history, system_prompt, model,
-                                           organization=context.get('org'), motivo='chat'):
+                                           organization=context.get('org'), motivo='chat',
+                                           system_persona=context.get('system_persona', '')):
                     accumulated.append(chunk)
                     # Don't stream the action marker to the client
                     if '__ACTION__' not in chunk:
@@ -1391,9 +1390,10 @@ def modelos_disponibles():
     add(default_model, 'cloud' if provider == 'ollama_cloud' else 'local')
 
     # Anthropic y DeepSeek — solo aparecen en el selector si hay API key configurada.
+    # Solo el modelo del techo: ofrecer Opus o Sonnet cuando el backend los va a
+    # servir con Haiku es un selector que miente.
     if getattr(settings, 'ANTHROPIC_API_KEY', ''):
-        add('claude-opus-4-8', 'anthropic')
-        add('claude-sonnet-5', 'anthropic')
+        add(getattr(settings, 'ANTHROPIC_MODEL', ''), 'anthropic')
     if getattr(settings, 'DEEPSEEK_API_KEY', ''):
         add(getattr(settings, 'DEEPSEEK_MODEL', 'deepseek-v4-flash'), 'deepseek')
 
@@ -1593,11 +1593,51 @@ class ConversationDetailView(APIView):
 
 
 class UserConversationListView(APIView):
+    """El historial de la barra lateral, y la búsqueda de la paleta.
+
+    Tres parámetros, y los tres existen para no tener dos endpoints que se contradigan:
+
+    - `q` busca en el título Y en el contenido de los mensajes. Buscar solo por título
+      encontraría casi nada: los títulos se arman con los primeros 120 caracteres del
+      primer mensaje, así que lo que uno recuerda de una conversación casi nunca está ahí.
+    - `limite` recorta del lado del servidor. La barra pedía TODAS las conversaciones para
+      mostrar diez, y eso escala mal solo.
+    - `compartidos=1` incluye los hilos que el equipo compartió en las Sesiones que la
+      persona alcanza. La barra NO los pide (sigue siendo el historial propio); la
+      búsqueda sí, y los marca, porque encontrar algo que uno puede abrir y leer no
+      debería depender de quién lo escribió.
+    """
+
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        convs = Conversation.objects.filter(user=request.user).select_related('agent').order_by('-updated_at')
-        return Response(ConversationListSerializer(convs, many=True).data)
+        from apps.agents.hilos import hilos_alcanzables
+        from django.db.models import Q
+
+        if request.query_params.get('compartidos') in ('1', 'true'):
+            convs = hilos_alcanzables(request.user)
+        else:
+            convs = Conversation.objects.filter(user=request.user)
+
+        q = (request.query_params.get('q') or '').strip()
+        if q:
+            convs = convs.filter(
+                Q(title__icontains=q) | Q(messages__content__icontains=q)
+            ).distinct()
+
+        convs = convs.select_related('agent', 'sesion').order_by('-updated_at')
+
+        try:
+            limite = int(request.query_params.get('limite') or 0)
+        except ValueError:
+            limite = 0
+        if limite > 0:
+            convs = convs[:limite]
+
+        datos = ConversationListSerializer(
+            convs, many=True, context={'request': request},
+        ).data
+        return Response(datos)
 
 
 class UserConversationDetailView(APIView):

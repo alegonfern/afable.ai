@@ -37,15 +37,21 @@ def _run_prompt(user, organization, prompt: str, agent=None) -> str:
     # cabe en el contexto, es lo que decide que fragmentos entran.
     ctx = _build_onboarding_context(user, agent, consulta=prompt)
     system_prompt = ctx.get('system_prompt', '')
+    system_persona = ctx.get('system_persona', '')
     if ctx.get('mode') == 'con_herramientas':
         salida = run_agent_live(
             [{'role': 'user', 'content': prompt}], organization, system_prompt,
             model=ctx.get('agent_model'), allowed_ids=ctx.get('allowed_ids'),
             allowed_doc_ids=ctx.get('allowed_doc_ids'), agente=agent,
+            system_persona=system_persona,
+            # Una automatización corre a nombre de quien la creó: sus permisos son los
+            # que valen, igual que si hubiera hecho la pregunta a mano.
+            usuario=user,
         )
     else:
         salida = chat_direct([{'role': 'user', 'content': prompt}], system_prompt,
-                             organization=organization, motivo='automatizacion')
+                             organization=organization, motivo='automatizacion',
+                             system_persona=system_persona)
     return _limpiar_para_leer(salida)
 
 

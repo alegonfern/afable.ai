@@ -92,9 +92,23 @@ export default function Drawer({ open, handleDrawerToggle }) {
     setUserMenuAnchor(null);
   };
 
-  useEffect(() => {
-    api.getConversations().then(r => setConversations(r.data.slice(0, 10))).catch(() => {});
+  // El limite lo pone el servidor: antes se pedian TODAS para mostrar diez.
+  const cargarConversaciones = useCallback(() => {
+    api.getConversations({ limite: 10 })
+      .then(r => setConversations(r.data))
+      .catch(() => {});
   }, []);
+
+  useEffect(() => { cargarConversaciones(); }, [cargarConversaciones]);
+
+  // El Drawer vive en el layout permanente: no se vuelve a montar al navegar, asi que
+  // sin esto una conversacion nueva no aparecia hasta recargar la pagina entera. Mismo
+  // patron que las Sesiones, mas abajo.
+  useEffect(() => {
+    const alCambiar = () => cargarConversaciones();
+    window.addEventListener('afable-conversaciones', alCambiar);
+    return () => window.removeEventListener('afable-conversaciones', alCambiar);
+  }, [cargarConversaciones]);
 
   const wsSlug = localStorage.getItem('afable_workspace_slug');
   // El Workspace elegido acota las Sesiones de la barra, igual que en Archivos.
@@ -266,7 +280,7 @@ export default function Drawer({ open, handleDrawerToggle }) {
     { key: 'admin',    label: 'Admin',    icon: <Settings size={14} /> },
   ];
 
-  const ITEMS_POR_MODO = {
+  const ITEMS_DESCONECTADOS = {
     trabajo: {
       seccion: null,
       items: [
@@ -306,6 +320,29 @@ export default function Drawer({ open, handleDrawerToggle }) {
       ],
     },
   };
+
+  // ⛔ DESCONECTADO el 2026-09-01, por decisión del usuario: se rehace la funcionalidad
+  // interna desde cero y cada item se vuelve a enchufar cuando su pantalla esté lista y
+  // en el lugar que le corresponde.
+  //
+  // NADA SE BORRÓ. El menú de tres modos sigue completo arriba, en
+  // `ITEMS_DESCONECTADOS`; las rutas siguen definidas en `App.jsx` y los endpoints
+  // siguen respondiendo. Reconectar un item es moverlo de esa constante a esta.
+  //
+  // Lo único vivo adentro es el CHAT y su historial de conversaciones.
+  const ITEMS_POR_MODO = {
+    trabajo:  { seccion: null, items: [] },
+    espacios: { seccion: null, items: [] },
+    admin:    { seccion: null, items: [] },
+  };
+
+  // La lista de Sesiones de la barra viaja con el resto: vuelve cuando volvamos a
+  // enchufar Sesiones. La carga de datos se deja como está para no tocar su lógica.
+  const MOSTRAR_SESIONES = false;
+
+  // El buscador de la barra. Sale por lo mismo que el del encabezado: con el menú
+  // desconectado no hay qué buscar todavía. El bloque queda entero abajo.
+  const MOSTRAR_BUSCADOR = false;
 
   useEffect(() => {
     // El chat y la home no estan en ninguna lista de items: son el modo Trabajo.
@@ -417,7 +454,8 @@ export default function Drawer({ open, handleDrawerToggle }) {
 
       <Box sx={{ borderBottom: `1px solid ${theme.palette.divider}`, mx: 1.5, mb: 0.5 }} />
 
-      {/* ── Search ── */}
+      {/* ── Search ── desconectado, ver la bandera arriba */}
+      {MOSTRAR_BUSCADOR && (
       <Box sx={{ px: 1.25, py: 0.5, flexShrink: 0 }}>
         <Box onClick={() => window.dispatchEvent(new CustomEvent('afable-open-search'))} sx={{
           display: 'flex', alignItems: 'center', gap: open ? 1 : 0,
@@ -436,6 +474,7 @@ export default function Drawer({ open, handleDrawerToggle }) {
           )}
         </Box>
       </Box>
+      )}
 
       {/* ── Main content (scrollable) ── */}
       <Box sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', py: 0.5 }}>
@@ -491,6 +530,20 @@ export default function Drawer({ open, handleDrawerToggle }) {
                     <Typography sx={{ fontSize: '0.82rem' }}>Conversaciones</Typography>
                   </Box>
                   <Box sx={{ pl: 2.75 }}>
+                    {/* La barra muestra las diez ultimas a proposito. El buscador es la
+                        salida: sin el, diez es un tope que se lee como "no hay mas". */}
+                    <Box
+                      onClick={() => window.dispatchEvent(new Event('afable-open-search'))}
+                      sx={{
+                        display: 'flex', alignItems: 'center', gap: 0.75,
+                        px: 1, py: 0.35, borderRadius: '4px', cursor: 'pointer',
+                        color: textDisabled, '&:hover': { bgcolor: bgHover, color: textMuted },
+                        transition: 'all 0.1s',
+                      }}
+                    >
+                      <Search size={13} />
+                      <Typography sx={{ fontSize: '0.78rem' }}>Buscar conversaciones</Typography>
+                    </Box>
                     {conversations.map(conv => (
                       <Box
                         key={conv.id}
@@ -542,8 +595,10 @@ export default function Drawer({ open, handleDrawerToggle }) {
           </Box>
         )}
 
-        {/* Sesiones: donde trabaja el equipo. Solo en Trabajo, como el chat. */}
-        {enTrabajo && (
+        {/* Sesiones: donde trabaja el equipo. Solo en Trabajo, como el chat.
+            ⛔ Desconectada el 2026-09-01 con `MOSTRAR_SESIONES`. El bloque queda entero:
+            volver a mostrarla es poner esa bandera en true. */}
+        {enTrabajo && MOSTRAR_SESIONES && (
           <Box sx={{ mb: 0.5 }}>
             <Tooltip title={!open ? 'Sesiones' : ''} placement="right" arrow>
               <Box sx={itemSx(isActive('/app/sesiones'))} onClick={() => setSesionesOpen(p => !p)}>

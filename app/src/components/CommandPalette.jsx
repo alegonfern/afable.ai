@@ -3,21 +3,45 @@ import { Box, Typography, InputBase, useTheme } from '@mui/material';
 import {
   MessageSquare, Bot, LayoutDashboard, Plug, Plus, Search,
   Settings, HelpCircle, Building2, User, Users,
+  FolderOpen, CheckSquare, Timer, BookOpen, CreditCard, Layers,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { api } from '../services/api';
 
-const COMMANDS = [
+// ⭐ La paleta es la RED DE SEGURIDAD del menu. Cuando la barra bajo de trece
+// destinos a cuatro, lo que salio de ella no dejo de existir: sigue acá, y por eso
+// sacarlo del menu no fue esconderlo. Toda ruta de la app tiene que figurar en esta
+// lista — una pantalla sin ninguna forma de llegar es una pantalla que no existe.
+const COMANDOS_DESCONECTADOS = [
   { group: 'Navegación', icon: MessageSquare,  label: 'Chat',             shortcut: 'G C', action: '/app' },
-  { group: 'Navegación', icon: LayoutDashboard, label: 'Tablero',         shortcut: 'G T', action: '/app/tablero' },
   { group: 'Navegación', icon: Bot,            label: 'Agentes',          shortcut: 'G A', action: '/app/agentes' },
-  { group: 'Navegación', icon: Plug,           label: 'Conexiones',    shortcut: 'G I', action: '/app/contexto?tab=integraciones' },
-  { group: 'Navegación', icon: Building2,      label: 'Workspace',                         action: '/app/admin/workspace' },
+  { group: 'Navegación', icon: FolderOpen,     label: 'Archivos',         shortcut: 'G F', action: '/app/archivos' },
+  { group: 'Navegación', icon: Users,          label: 'Equipo',                            action: '/app/admin/personas' },
+  { group: 'Navegación', icon: Plug,           label: 'Conexiones',       shortcut: 'G I', action: '/app/contexto?tab=integraciones' },
+  { group: 'Navegación', icon: CheckSquare,    label: 'Tareas',                            action: '/app/tareas' },
+  { group: 'Navegación', icon: Timer,          label: 'Disparadores',                      action: '/app/automatizaciones' },
+  { group: 'Navegación', icon: Layers,         label: 'Espacios',                          action: '/app/contexto?tab=espacios' },
+  { group: 'Navegación', icon: LayoutDashboard, label: 'Tablero',         shortcut: 'G T', action: '/app/tablero' },
+  { group: 'Navegación', icon: BookOpen,       label: 'Contexto de la empresa',            action: '/app/contexto?tab=mi-contexto' },
+  { group: 'Navegación', icon: Bot,            label: 'Agentes (administración)',           action: '/app/admin/agentes' },
+  { group: 'Navegación', icon: Building2,      label: 'Su empresa',                        action: '/app/admin/workspace' },
+  { group: 'Navegación', icon: CreditCard,     label: 'Facturación',                       action: '/app/admin/facturacion' },
   { group: 'Navegación', icon: User,           label: 'Mi Perfil',                         action: '/app/perfil' },
-  { group: 'Navegación', icon: Users,          label: 'Equipo',                             action: '/app/equipo' },
   { group: 'Navegación', icon: Settings,       label: 'Configuración',                     action: '/app/configuracion' },
   { group: 'Navegación', icon: HelpCircle,     label: 'Ayuda',                             action: '/app/ayuda' },
+  { group: 'Navegación', icon: Settings,       label: 'Banco de pruebas',                  action: '/app/banco-de-pruebas' },
   { group: 'Acciones',   icon: Plus,           label: 'Nueva conversación',                action: 'new-chat' },
   { group: 'Acciones',   icon: Bot,            label: 'Crear agente',                      action: '/app/agentes/nuevo' },
+];
+
+// ⛔ DESCONECTADO el 2026-09-01: la paleta sería la puerta trasera a todo lo que se
+// sacó del menú. Queda solo lo que sigue vivo — el chat y la cuenta. Reconectar una
+// pantalla es mover su línea de `COMANDOS_DESCONECTADOS` a esta lista.
+const COMMANDS = [
+  { group: 'Navegación', icon: MessageSquare,  label: 'Chat',              shortcut: 'G C', action: '/app' },
+  { group: 'Navegación', icon: User,           label: 'Mi Perfil',                          action: '/app/perfil' },
+  { group: 'Navegación', icon: HelpCircle,     label: 'Ayuda',                              action: '/app/ayuda' },
+  { group: 'Acciones',   icon: Plus,           label: 'Nueva conversación',                 action: 'new-chat' },
 ];
 
 export default function CommandPalette({ open, onClose }) {
@@ -25,6 +49,7 @@ export default function CommandPalette({ open, onClose }) {
   const d = theme.palette.mode === 'dark';
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState(0);
+  const [hilos, setHilos] = useState([]);
   const inputRef = useRef(null);
   const navigate = useNavigate();
 
@@ -42,17 +67,53 @@ export default function CommandPalette({ open, onClose }) {
     if (open) {
       setQuery('');
       setSelected(0);
+      setHilos([]);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [open]);
 
-  const filtered = COMMANDS.filter(c =>
+  // Busca en el titulo Y en el contenido de los mensajes (lo resuelve el backend). Dos
+  // letras de minimo porque con una la lista es cualquier cosa, y con espera de 200ms
+  // para no disparar una consulta por tecla.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) { setHilos([]); return undefined; }
+    let vivo = true;
+    const espera = setTimeout(() => {
+      api.getConversations({ q, limite: 8, compartidos: 1 })
+        .then(r => { if (vivo) setHilos(r.data || []); })
+        .catch(() => { if (vivo) setHilos([]); });
+    }, 200);
+    return () => { vivo = false; clearTimeout(espera); };
+  }, [query]);
+
+  const comandos = COMMANDS.filter(c =>
     c.label.toLowerCase().includes(query.toLowerCase())
   );
 
+  // Los hilos entran con la MISMA forma que un comando, y asi el teclado, los grupos y
+  // el dibujado siguen siendo uno solo.
+  const conversaciones = hilos.map((c) => ({
+    group: 'Conversaciones',
+    clave: `conv-${c.id}`,
+    // El icono es la marca: un hilo que escribio otra persona no es lo mismo que el mio,
+    // y en una lista mezclada sin decirlo todo se lee como propio.
+    icon: c.compartido_conmigo ? Users : MessageSquare,
+    label: (c.title || 'Conversación').slice(0, 60),
+    nota: c.compartido_conmigo
+      ? `Compartida por ${c.autor_nombre || 'el equipo'}${c.sesion_nombre ? ` · ${c.sesion_nombre}` : ''}`
+      : (c.sesion_nombre ? `Compartida en ${c.sesion_nombre}` : null),
+    action: `conv:${c.id}`,
+  }));
+
+  const filtered = [...comandos, ...conversaciones];
+
   const execute = useCallback((cmd) => {
     onClose();
-    if (cmd.action.startsWith('/')) {
+    if (cmd.action.startsWith('conv:')) {
+      // Misma navegacion que usa la barra lateral para abrir un hilo.
+      navigate('/app/chat', { state: { conversationId: Number(cmd.action.slice(5)) } });
+    } else if (cmd.action.startsWith('/')) {
       navigate(cmd.action);
     } else {
       window.dispatchEvent(new CustomEvent('afable-cmd', { detail: cmd.action }));
@@ -98,7 +159,7 @@ export default function CommandPalette({ open, onClose }) {
           <InputBase
             inputRef={inputRef}
             fullWidth
-            placeholder="Buscar comando..."
+            placeholder="Buscar comando o conversación..."
             value={query}
             onChange={e => { setQuery(e.target.value); setSelected(0); }}
             onKeyDown={handleKeyDown}
@@ -132,7 +193,7 @@ export default function CommandPalette({ open, onClose }) {
                   const Icon = cmd.icon;
                   return (
                     <Box
-                      key={cmd.label}
+                      key={cmd.clave || cmd.label}
                       onClick={() => execute(cmd)}
                       onMouseEnter={() => setSelected(globalIdx)}
                       sx={{
@@ -145,9 +206,16 @@ export default function CommandPalette({ open, onClose }) {
                       }}
                     >
                       <Icon size={15} color={isSelected ? '#9BA6E3' : textMuted} />
-                      <Typography sx={{ flex: 1, fontSize: '0.875rem', color: isSelected ? textMain : textSemi, fontWeight: isSelected ? 500 : 400 }}>
-                        {cmd.label}
-                      </Typography>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography sx={{ fontSize: '0.875rem', color: isSelected ? textMain : textSemi, fontWeight: isSelected ? 500 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {cmd.label}
+                        </Typography>
+                        {cmd.nota && (
+                          <Typography sx={{ fontSize: '0.7rem', color: textMuted, mt: 0.125 }}>
+                            {cmd.nota}
+                          </Typography>
+                        )}
+                      </Box>
                       {cmd.shortcut && (
                         <Box sx={{ display: 'flex', gap: 0.5 }}>
                           {cmd.shortcut.split(' ').map(k => (

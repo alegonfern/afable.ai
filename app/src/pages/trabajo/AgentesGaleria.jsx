@@ -8,6 +8,7 @@ import { toast } from 'react-toastify';
 import { api } from '../../services/api';
 import FichaDelAgente from '../../components/FichaDelAgente';
 import { useWorkspace } from '../../context/WorkspaceContext';
+import PropuestasDeAgente from '../../components/PropuestasDeAgente';
 
 const PESTANAS = [
   { value: 'favoritos', label: 'Favoritos' },
@@ -308,6 +309,11 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
       {!embebida && (
         <Typography sx={{ fontSize: '1.125rem', fontWeight: 600 }}>Chatear con…</Typography>
       )}
+
+      {/* Lo que Afable propone sobre las carpetas que ya tienen material. Va ARRIBA de la
+          galería porque es lo que le falta a quien todavía no tiene agentes; se esconde
+          solo cuando no hay nada que proponer. */}
+      {!embebida && <PropuestasDeAgente onCreado={() => cargar()} />}
 
       {/* Buscador + Crear + Gestionar */}
       <Box sx={{ display: 'flex', gap: 1.25, mt: embebida ? 0 : 1.5, alignItems: 'stretch' }}>

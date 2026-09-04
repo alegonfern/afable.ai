@@ -1,10 +1,12 @@
 from django.urls import path
+from .banco_de_pruebas import BancoDePruebasView
 from .views import (
     OrganizationListCreateView, OrganizationDetailView,
     OdooIntegrationView, OdooTestConnectionView, IntegrationScanListView,
     ActiveIntegrationListView, ConnectIntegrationView, DisconnectIntegrationView,
     SystemConnectionListCreateView, SystemConnectionDetailView,
     SystemConnectionTestView, SystemConnectionSyncView,
+    CatalogoDeConectoresView, SystemConnectionEstadoView,
     OrganizationDashboardView, BusinessModelView,
     OrganizationContextView, CompanyDocumentListCreateView, CompanyDocumentDetailView,
     ContextCubicleListCreateView, ContextCubicleDetailView, ContextMarkdownView,
@@ -23,7 +25,14 @@ urlpatterns = [
     # SystemConnection — conectores genéricos (Odoo, SAP/MSSQL, PostgreSQL, CSV)
     path('dashboard/', OrganizationDashboardView.as_view(), name='org-dashboard'),
     path('model/', BusinessModelView.as_view(), name='org-model'),
+    # Banco de pruebas: recorrer estados del producto sin armarlos a mano. Solo para los
+    # correos de `settings.CUENTAS_DE_PRUEBA`, vacío en producción.
+    path('banco-de-pruebas/', BancoDePruebasView.as_view(), name='banco-de-pruebas'),
     path('connections/', SystemConnectionListCreateView.as_view(), name='system-connections'),
+    # Qué se puede conectar y qué se gana con cada cosa. Es la ficha, no la lista de
+    # claves técnicas: quien elige acá no sabe qué es «mssql».
+    path('connections/catalogo/', CatalogoDeConectoresView.as_view(), name='connector-catalog'),
+    path('connections/<int:pk>/estado/', SystemConnectionEstadoView.as_view(), name='system-connection-state'),
     path('connections/google-drive/start/', GoogleDriveConnectStartView.as_view(), name='google-drive-start'),
     path('connections/google-drive/callback/', GoogleDriveConnectCallbackView.as_view(), name='google-drive-callback'),
     path('connections/<int:pk>/', SystemConnectionDetailView.as_view(), name='system-connection-detail'),

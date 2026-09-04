@@ -25,6 +25,24 @@ class Agent(models.Model):
     systems = models.ManyToManyField(                     # a qué sistemas conectados puede consultar
         'organizations.SystemConnection', blank=True, related_name='agents'
     )
+    # ⭐ De qué carpeta cuelga. Es de donde sale TODO lo que el agente alcanza: los
+    # documentos de esa carpeta y los de sus subcarpetas, con los permisos que ya
+    # tiene la carpeta. Antes el alcance documental lo prestaba el Espacio con una
+    # lista elegida a mano (`Workspace.documents`), y el efecto era que alguien
+    # subía un documento, lo veía en Archivos, y el agente contestaba que no sabía
+    # nada — porque nadie se había acordado de agregarlo a esa lista.
+    #
+    # Anclarlo a la carpeta le da tres cosas sin preguntarle nada al usuario:
+    # alcance (lo que hay adentro), permisos (los de la carpeta) y sentido (una
+    # carpeta llamada Contabilidad ya dice de qué trata el agente).
+    #
+    # `null` es un agente de los de antes, sin carpeta: sigue viendo todo lo de su
+    # empresa, como siempre. Un agente nuevo SIEMPRE nace de una carpeta.
+    carpeta = models.ForeignKey(
+        'archivos.Carpeta', on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='agentes',
+        help_text='La carpeta de la que cuelga. Su contenido es el alcance del agente.',
+    )
     model = models.CharField(max_length=120, blank=True)  # override opcional del modelo de IA
     # Contenido de la "tarjeta del agente" (ventana de detalle antes de chatear):
     tools_summary = models.CharField(max_length=280, blank=True)          # qué herramientas usa / cómo analiza

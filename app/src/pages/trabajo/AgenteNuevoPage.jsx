@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import {
   Box, Button, Chip, CircularProgress, MenuItem, TextField, Typography, useTheme,
 } from '@mui/material';
-import { ArrowLeft, Bot } from 'lucide-react';
+import { ArrowLeft, Bot, FolderOpen, Plug } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { api } from '../../services/api';
 import { useWorkspace } from '../../context/WorkspaceContext';
@@ -67,6 +67,11 @@ export default function AgenteNuevoPage() {
 
   const [form, setForm] = useState(VACIO);
   const [opciones, setOpciones] = useState(null);
+  // De dónde cuelga el agente nuevo. Mientras esté vacío no se muestra el formulario:
+  // es lo que impide crear un agente sobre la nada.
+  const [origenes, setOrigenes] = useState(null);
+  const [origen, setOrigen] = useState(null);
+  const [preparando, setPreparando] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [handle, setHandle] = useState('');
@@ -112,6 +117,40 @@ export default function AgenteNuevoPage() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
+  useEffect(() => {
+    if (editando || !slug) return;
+    api.getOrigenesDeAgente(slug)
+      .then(({ data }) => setOrigenes(data))
+      .catch(() => setOrigenes({ carpetas: [], herramientas: [] }));
+  }, [slug, editando]);
+
+  // Elegir una carpeta no abre un formulario vacío: Afable mira lo que hay adentro y lo
+  // deja escrito. La persona corrige si quiere, pero nunca parte de cero.
+  const elegirCarpeta = async (carpeta) => {
+    setPreparando(true);
+    try {
+      const { data } = await api.redactarPropuestaDeAgente(slug, carpeta.id);
+      setForm((f) => ({
+        ...f,
+        name: data.nombre || carpeta.nombre,
+        description: data.descripcion || '',
+        instructions: data.instrucciones || '',
+      }));
+      setOrigen({ tipo: 'carpeta', id: carpeta.id, nombre: carpeta.ruta || carpeta.nombre });
+    } catch {
+      // Si no se pudo redactar, igual se sigue: peor es dejar a la persona trabada.
+      setForm((f) => ({ ...f, name: carpeta.nombre }));
+      setOrigen({ tipo: 'carpeta', id: carpeta.id, nombre: carpeta.ruta || carpeta.nombre });
+    } finally {
+      setPreparando(false);
+    }
+  };
+
+  const elegirHerramienta = (h) => {
+    setForm((f) => ({ ...f, name: f.name || h.nombre, system_ids: [h.id] }));
+    setOrigen({ tipo: 'herramienta', id: h.id, nombre: h.nombre });
+  };
+
   const alternar = (clave, valor) => {
     setForm((f) => ({
       ...f,
@@ -129,6 +168,7 @@ export default function AgenteNuevoPage() {
     try {
       setGuardando(true);
       const cuerpo = { workspace: slug, ...form, name: form.name.trim() };
+      if (!editando && origen?.tipo === 'carpeta') cuerpo.carpeta = origen.id;
       const { data } = editando
         ? await api.updateBuilderAgent(id, cuerpo)
         : await api.buildAgent(cuerpo);
@@ -162,6 +202,114 @@ export default function AgenteNuevoPage() {
           En este Workspace solo los editores y administradores crean agentes.
           Un administrador puede cambiarlo en Admin › Workspace.
         </Typography>
+      </Box>
+    );
+  }
+
+  // ⛔ Sin material no hay agente. El material es una carpeta con documentos o una
+  // herramienta conectada — ninguno de los dos es una pantalla en blanco, que es lo que
+  // esta regla existe para prohibir. Editar no pasa por acá: ese agente ya tiene origen.
+  if (!editando && !origen) {
+    const carpetas = origenes?.carpetas || [];
+    const herramientas = origenes?.herramientas || [];
+    const hayDonde = carpetas.length > 0 || herramientas.length > 0;
+
+    const Opcion = ({ icono, titulo, detalle, onClick }) => (
+      <Box
+        component="button" onClick={onClick} disabled={preparando}
+        sx={{
+          display: 'flex', alignItems: 'center', gap: 1.25, width: '100%',
+          px: 1.75, py: 1.4, mb: 1, borderRadius: '9px', cursor: 'pointer',
+          fontFamily: 'inherit', textAlign: 'left', bgcolor: bgSuave,
+          border: `1px solid ${borde}`, color: 'inherit',
+          '&:hover': { borderColor: '#586AD0' },
+          '&:disabled': { opacity: 0.6, cursor: 'default' },
+          transition: 'border-color 0.12s',
+        }}
+      >
+        <Box sx={{ color: textMuted, display: 'flex' }}>{icono}</Box>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography sx={{ fontSize: '0.9375rem', color: 'text.primary' }}>{titulo}</Typography>
+          <Typography sx={{ fontSize: '0.8125rem', color: textMuted }}>{detalle}</Typography>
+        </Box>
+      </Box>
+    );
+
+    return (
+      <Box sx={{ maxWidth: 700, mx: 'auto', px: { xs: 2.5, md: 5 }, py: { xs: 4, md: 6 }, width: '100%' }}>
+        <Button
+          onClick={() => navigate('/app/agentes')}
+          startIcon={<ArrowLeft size={15} />}
+          sx={{ textTransform: 'none', color: textMuted, fontSize: '0.875rem', mb: 2, ml: -1 }}
+        >
+          Agentes
+        </Button>
+
+        <Typography sx={{ fontSize: '1.35rem', fontWeight: 700, mb: 0.5 }}>
+          ¿Sobre qué va a trabajar?
+        </Typography>
+        <Typography sx={{ fontSize: '0.9375rem', color: textMuted, mb: 3 }}>
+          {hayDonde
+            ? 'Un agente responde sobre algo concreto. Elija de dónde saca lo que sabe.'
+            : 'Todavía no hay sobre qué. Un agente necesita material para poder responder.'}
+        </Typography>
+
+        {preparando && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 2 }}>
+            <CircularProgress size={15} sx={{ color: '#586AD0' }} />
+            <Typography sx={{ fontSize: '0.875rem', color: textMuted }}>
+              Mirando lo que hay en la carpeta…
+            </Typography>
+          </Box>
+        )}
+
+        {carpetas.length > 0 && (
+          <>
+            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: textMuted,
+                              textTransform: 'uppercase', letterSpacing: '0.06em', mb: 1 }}>
+              Sus carpetas
+            </Typography>
+            {carpetas.map((c) => (
+              <Opcion
+                key={`c-${c.id}`} icono={<FolderOpen size={17} />}
+                titulo={c.nombre} detalle={`${c.documentos} documentos · ${c.ruta}`}
+                onClick={() => elegirCarpeta(c)}
+              />
+            ))}
+          </>
+        )}
+
+        {herramientas.length > 0 && (
+          <>
+            <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: textMuted,
+                              textTransform: 'uppercase', letterSpacing: '0.06em', mt: 2.5, mb: 1 }}>
+              Sus herramientas
+            </Typography>
+            {herramientas.map((h) => (
+              <Opcion
+                key={`h-${h.id}`} icono={<Plug size={17} />}
+                titulo={h.nombre} detalle={`Consulta en vivo · ${h.tipo}`}
+                onClick={() => elegirHerramienta(h)}
+              />
+            ))}
+          </>
+        )}
+
+        {/* La IA como andamio: quien llega sin nada no ve un formulario que no sabe
+            llenar, ve el paso que le falta. */}
+        {origenes && !hayDonde && (
+          <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+            <Button onClick={() => navigate('/app/archivos')} sx={{ textTransform: 'none' }}>
+              Subir documentos
+            </Button>
+            <Button
+              onClick={() => navigate('/app/contexto?tab=integraciones')}
+              sx={{ textTransform: 'none' }}
+            >
+              Conectar una herramienta
+            </Button>
+          </Box>
+        )}
       </Box>
     );
   }

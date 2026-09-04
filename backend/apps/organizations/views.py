@@ -215,7 +215,58 @@ class SystemConnectionListCreateView(APIView):
         conn = SystemConnection(organization=org, name=name, connector_type=connector_type, category=category)
         conn.config = config
         conn.save()
+
+        # Regla del conector: lo que entra por acá necesita un lugar donde vivir, igual
+        # que lo que se sube a mano — y ese lugar es de donde después cuelga su agente.
+        # Se crea sola: pedirle al usuario que además invente la carpeta sería devolverle
+        # la decisión que este producto existe para tomar por él.
+        from services.conectores import carpeta_del_conector
+        carpeta_del_conector(org, connector_type, creado_por=request.user)
+
         return Response(SystemConnectionSerializer(conn).data, status=status.HTTP_201_CREATED)
+
+
+class CatalogoDeConectoresView(APIView):
+    """GET — qué se puede conectar, y qué se gana con cada cosa.
+
+    Devuelve la ficha completa, no la lista de claves técnicas: quien elige acá no sabe
+    qué es «mssql», sabe que tiene un SAP y quiere preguntarle cosas.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from services.conectores import catalogo
+
+        return Response({'conectores': catalogo()})
+
+
+class SystemConnectionEstadoView(APIView):
+    """POST — apagar o volver a encender un conector.
+
+    ⭐ **No hay forma de eliminar uno, y es a propósito.** Borrarlo se llevaría por delante
+    la consistencia de lo que ya entró por él: documentos sin origen, agentes apuntando a un
+    sistema que ya no existe. Apagado deja de traer datos y lo que trajo se queda.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        from apps.workspaces.permissions import exigir_rol
+
+        conn = SystemConnection.objects.filter(pk=pk).first()
+        if conn is None:
+            return Response({'detail': 'No encuentro ese conector.'}, status=status.HTTP_404_NOT_FOUND)
+        exigir_rol(request.user, conn.organization)
+
+        activo = request.data.get('is_active')
+        if activo is None:
+            return Response({'detail': 'Falta decir si se activa o se desactiva.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        conn.is_active = bool(activo)
+        conn.save(update_fields=['is_active', 'updated_at'])
+        return Response(SystemConnectionSerializer(conn).data)
 
 
 _DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file'
@@ -449,9 +500,35 @@ class SystemConnectionDetailView(APIView):
         return Response(SystemConnectionSerializer(conn).data)
 
     def delete(self, request, pk):
+        """Apaga el conector. **No lo borra**, salvo que nunca haya llegado a existir.
+
+        ⭐ La regla es que un conector se desactiva y no se elimina: borrarlo se lleva por
+        delante la consistencia de lo que entró por él —documentos que quedan sin origen,
+        agentes apuntando a un sistema que ya no está— y esa estructura es justamente lo
+        que le da valor al repositorio.
+
+        ⚠️ **La excepción, y por qué es explícita.** Al probar una conexión, la pantalla
+        crea una de verdad para poder testearla, y la descarta si el test falla. Eso NO es
+        un conector que la empresa tuvo: es un intento. Si esos se desactivaran en vez de
+        borrarse, cada credencial mal tipeada dejaría un fantasma apagado en la lista, y a
+        la décima el usuario tendría un cementerio — ensuciando lo mismo que la regla
+        protege.
+
+        Se distingue por `?descartar=1`, que manda quien probó, y no por adivinar el
+        estado: una heurística acá se equivoca en el caso raro y ahí se pierden datos. La
+        guarda igual exige que nunca haya sincronizado, para que el parámetro no sirva de
+        atajo para borrar un conector en uso.
+        """
         conn = self._get_conn(pk, request.user)
-        conn.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+
+        descartar = request.query_params.get('descartar') in ('1', 'true', 'True')
+        if descartar and conn.last_synced_at is None:
+            conn.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        conn.is_active = False
+        conn.save(update_fields=['is_active', 'updated_at'])
+        return Response(SystemConnectionSerializer(conn).data)
 
 
 class SystemConnectionTestView(APIView):

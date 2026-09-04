@@ -88,13 +88,14 @@ def _process_image(data: bytes, content_type: str, organization=None) -> dict:
     (sirve de OCR + resumen a la vez) y se usa como extracted_text Y summary."""
     import base64
     from . import consumo
-    from .agent_service import _get_anthropic_client
+    from .agent_service import _get_anthropic_client, modelo_anthropic
 
     try:
         b64 = base64.b64encode(data).decode('ascii')
         client = _get_anthropic_client()
+        modelo = modelo_anthropic()
         response = client.messages.create(
-            model="claude-sonnet-4-6",
+            model=modelo,
             max_tokens=500,
             messages=[{
                 "role": "user",
@@ -108,7 +109,7 @@ def _process_image(data: bytes, content_type: str, organization=None) -> dict:
                 ],
             }],
         )
-        consumo.registrar('anthropic', "claude-sonnet-4-6", response,
+        consumo.registrar('anthropic', modelo, response,
                           organization=organization, motivo='descripcion')
         text = "\n".join(b.text for b in response.content if getattr(b, 'type', None) == 'text').strip()
         if not text:
@@ -121,12 +122,13 @@ def _process_image(data: bytes, content_type: str, organization=None) -> dict:
 
 def _summarize_text(text: str, organization=None) -> str:
     from . import consumo
-    from .agent_service import _get_anthropic_client
+    from .agent_service import _get_anthropic_client, modelo_anthropic
 
     try:
         client = _get_anthropic_client()
+        modelo = modelo_anthropic()
         response = client.messages.create(
-            model="claude-sonnet-4-6",
+            model=modelo,
             max_tokens=300,
             messages=[{
                 "role": "user",
@@ -137,7 +139,7 @@ def _summarize_text(text: str, organization=None) -> str:
                 ),
             }],
         )
-        consumo.registrar('anthropic', "claude-sonnet-4-6", response,
+        consumo.registrar('anthropic', modelo, response,
                           organization=organization, motivo='resumen')
         return "\n".join(b.text for b in response.content if getattr(b, 'type', None) == 'text').strip()
     except Exception:

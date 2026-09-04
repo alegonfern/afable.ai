@@ -98,13 +98,17 @@ class Workspace(models.Model):
         settings.AUTH_USER_MODEL, blank=True, related_name='workspaces'
     )
 
-    # Lo que este Workspace le presta a sus agentes. El conocimiento es de la Empresa; acá
-    # se elige qué parte alcanza.
+    # Las conexiones que este Workspace le presta a sus agentes. Un sistema es caro de
+    # conectar y se comparte entre equipos, así que sigue colgando del Espacio.
+    #
+    # ⭐ Los DOCUMENTOS ya no se prestan desde acá (2026-08-31). Existía un
+    # `documents` M2M donde había que ir agregando a mano, uno por uno, qué archivos
+    # veía el agente — y mientras nadie se acordaba, alguien subía un documento, lo
+    # veía en Archivos, y el agente respondía que no sabía nada. Ahora el alcance
+    # documental sale de la carpeta del agente (`Agent.carpeta`):
+    # **la carpeta dice qué se alcanza, el Espacio dice quién entra.**
     connections = models.ManyToManyField(
         'organizations.SystemConnection', blank=True, related_name='workspaces'
-    )
-    documents = models.ManyToManyField(
-        'organizations.CompanyDocument', blank=True, related_name='workspaces'
     )
     agents = models.ManyToManyField(
         'agents.Agent', blank=True, related_name='workspaces'

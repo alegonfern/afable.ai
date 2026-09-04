@@ -93,7 +93,10 @@ export default function SesionConversacion({ sesion, slug, onSaludo }) {
       await cargar();
       // Queda abierto el hilo recién creado: quien escribió tiene que ver su respuesta,
       // no una lista donde adivinar cuál es la suya.
-      if (data.conversation_id) setAbierto(data.conversation_id);
+      if (data.conversation_id) {
+        setAbierto(data.conversation_id);
+        window.dispatchEvent(new Event('afable-conversaciones'));
+      }
     } catch {
       setError('No se pudo enviar. Intente de nuevo.');
     } finally {

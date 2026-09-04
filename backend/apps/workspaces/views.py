@@ -319,7 +319,6 @@ class InvitationAcceptView(APIView):
 # Workspace: no se puede meter en un Espacio una fuente de otra empresa.
 COLECCIONES_DE_ESPACIO = {
     'conexiones': ('connections', 'SystemConnection'),
-    'documentos': ('documents', 'CompanyDocument'),
     'agentes': ('agents', 'Agent'),
     'personas': ('members', 'User'),
 }
@@ -352,7 +351,7 @@ class WorkspaceListCreateView(APIView):
 
     def get(self, request, slug):
         espacios = workspaces_visible_to(request.membership).prefetch_related(
-            'connections', 'documents', 'agents', 'members'
+            'connections', 'agents', 'members'
         )
         return Response(WorkspaceListSerializer(espacios, many=True, context={'request': request}).data)
 

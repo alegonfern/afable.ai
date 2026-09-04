@@ -229,14 +229,21 @@ class AlcanceDeEspacioTests(TestCase):
             organization=self.org, title='Catálogo', file='y.pdf', extracted_text='precios',
         )
 
-        self.ventas = Agent.objects.create(organization=self.org, name='Ventas')
+        # El alcance documental sale de la CARPETA del agente; las conexiones, del Espacio.
+        from apps.archivos.models import Carpeta
+        self.carpeta_ventas = Carpeta.objects.create(organization=self.org, name='Ventas')
+        self.catalogo.carpeta = self.carpeta_ventas
+        self.catalogo.save(update_fields=['carpeta'])
+
+        self.ventas = Agent.objects.create(
+            organization=self.org, name='Ventas', carpeta=self.carpeta_ventas,
+        )
         self.espacio_ventas = Workspace.objects.create(organization=self.org, name='Ventas')
         self.espacio_ventas.connections.add(self.odoo)
-        self.espacio_ventas.documents.add(self.catalogo)
         self.espacio_ventas.agents.add(self.ventas)
 
     def test_un_agente_sin_espacio_no_queda_restringido(self):
-        """Compatibilidad: instalar Espacios no puede dejar ciegos a los agentes que ya existían."""
+        """Compatibilidad: un agente sin carpeta ni Espacio sigue viendo todo lo suyo."""
         suelto = Agent.objects.create(organization=self.org, name='Suelto')
         self.assertEqual(self.alcance(suelto), (None, None))
 
@@ -260,15 +267,56 @@ class AlcanceDeEspacioTests(TestCase):
         conns, _ = self.alcance(self.ventas)
         self.assertCountEqual(conns, [self.odoo.id, self.sap.id])
 
-    def test_un_espacio_vacio_deja_al_agente_sin_nada(self):
-        """El silencio es la respuesta correcta: no se cae de vuelta a toda la empresa."""
+    def test_un_espacio_vacio_deja_al_agente_sin_conexiones(self):
+        """El silencio es la respuesta correcta: no se cae de vuelta a toda la empresa.
+
+        Ojo con la segunda mitad: el agente está en un Espacio pero NO tiene carpeta, así
+        que su alcance documental es `None` —sin restricción— y no `[]`. No es un descuido:
+        desde el 31-08 los documentos los decide la carpeta, y este agente no eligió
+        ninguna. Restringirlo por un Espacio vacío lo dejaría mudo sin que nadie lo haya
+        pedido, que es justo lo que la compatibilidad evita.
+        """
         from apps.workspaces.models import Workspace
 
         pelado = Workspace.objects.create(organization=self.org, name='Recién creado')
         nuevo = Agent.objects.create(organization=self.org, name='Nuevo')
         pelado.agents.add(nuevo)
 
-        self.assertEqual(self.alcance(nuevo), ([], []))
+        conns, docs = self.alcance(nuevo)
+        self.assertEqual(conns, [])
+        self.assertIsNone(docs)
+
+    def test_una_carpeta_vacia_deja_al_agente_sin_documentos(self):
+        """Acá sí manda el silencio: la carpeta fue elegida, y está vacía."""
+        from apps.archivos.models import Carpeta
+
+        vacia = Carpeta.objects.create(organization=self.org, name='Recién creada')
+        nuevo = Agent.objects.create(organization=self.org, name='Nuevo', carpeta=vacia)
+
+        _, docs = self.alcance(nuevo)
+        self.assertEqual(docs, [])
+
+    def test_el_agente_alcanza_las_subcarpetas(self):
+        """Quien pregunta por Contabilidad espera que mire adentro de Contabilidad/Facturas."""
+        from apps.archivos.models import Carpeta
+        from apps.organizations.models import CompanyDocument
+
+        madre = Carpeta.objects.create(organization=self.org, name='Contabilidad')
+        hija = Carpeta.objects.create(organization=self.org, name='Facturas', parent=madre)
+        nieta = Carpeta.objects.create(organization=self.org, name='2026', parent=hija)
+
+        doc_hija = CompanyDocument.objects.create(
+            organization=self.org, title='Factura 1', file='f1.pdf', carpeta=hija,
+        )
+        doc_nieta = CompanyDocument.objects.create(
+            organization=self.org, title='Factura 2', file='f2.pdf', carpeta=nieta,
+        )
+        agente = Agent.objects.create(organization=self.org, name='Conta', carpeta=madre)
+
+        _, docs = self.alcance(agente)
+        self.assertCountEqual(docs, [doc_hija.id, doc_nieta.id])
+        # Y lo que está fuera de la rama no entra.
+        self.assertNotIn(self.contrato.id, docs)
 
     def test_el_prompt_no_nombra_los_documentos_de_otro_espacio(self):
         from apps.agents.views import _build_onboarding_context
@@ -770,3 +818,223 @@ class DisparadoresTests(TestCase):
         )
         resp = client.post(f'/api/v1/agents/webhooks/{auto.webhook_token}/', {'a': 1}, format='json')
         self.assertEqual(resp.status_code, 404)
+
+
+class CacheDePromptTests(TestCase):
+    """Que la caché de prompts no se rompa sin que nadie se dé cuenta.
+
+    La caché es coincidencia de PREFIJO: descuenta el 90% de lo que se repite, pero
+    solo si el comienzo del prompt es idéntico byte a byte. Todo lo que cambie por
+    persona tiene que ir DESPUÉS del corte. Si alguien vuelve a meter el nombre del
+    usuario arriba, la caché sigue "funcionando" y el descuento desaparece sin un solo
+    error en los registros. Estas pruebas son la alarma de eso.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='marta@afable.test', email='marta@afable.test', password='afable123',
+            first_name='Marta',
+        )
+        self.user.role = 'Gerenta de Finanzas'
+        self.user.save(update_fields=['role'])
+        self.org = Organization.objects.create(owner=self.user, name='Cocinas SpA')
+        from apps.workspaces.models import ROLE_ADMIN
+        self.org.agregar_miembro(self.user, ROLE_ADMIN)
+
+    def test_el_nombre_de_la_persona_no_va_en_el_prompt_compartido(self):
+        from apps.agents.views import _build_onboarding_context
+
+        ctx = _build_onboarding_context(self.user, None, consulta='¿cuánto vendimos?')
+        self.assertNotIn('Marta', ctx['system_prompt'])
+        self.assertNotIn('Gerenta de Finanzas', ctx['system_prompt'])
+        self.assertIn('Marta', ctx['system_persona'])
+
+    def test_dos_personas_de_la_misma_empresa_comparten_el_prompt(self):
+        """Es el punto entero: con el prefijo compartido hay UNA entrada de caché para
+        la empresa, no una por persona."""
+        from apps.agents.views import _build_onboarding_context
+
+        otro = User.objects.create_user(
+            username='pedro@afable.test', email='pedro@afable.test', password='afable123',
+            first_name='Pedro',
+        )
+        otro.role = 'Jefe de Bodega'
+        otro.save(update_fields=['role'])
+        self.org.agregar_miembro(otro, 'member')
+
+        uno = _build_onboarding_context(self.user, None, consulta='x')
+        dos = _build_onboarding_context(otro, None, consulta='x')
+        self.assertEqual(uno['system_prompt'], dos['system_prompt'])
+        self.assertNotEqual(uno['system_persona'], dos['system_persona'])
+
+    def test_el_bloque_de_herramientas_pide_cache(self):
+        from services.agent_service import _tools_cacheadas
+
+        tools = [{'name': 'a'}, {'name': 'b'}, {'name': 'c'}]
+        marcadas = _tools_cacheadas(tools)
+        # El corte va en la ÚLTIMA: marca el final del bloque, y con eso se cachea todo
+        # lo anterior. Marcar una del medio dejaría el resto fuera.
+        self.assertNotIn('cache_control', marcadas[0])
+        self.assertEqual(marcadas[-1]['cache_control'], {'type': 'ephemeral', 'ttl': '1h'})
+        self.assertEqual(len(marcadas), 3)
+        self.assertEqual(tools[-1], {'name': 'c'})  # no muta la lista original
+
+    def test_sin_herramientas_no_revienta(self):
+        from services.agent_service import _tools_cacheadas
+        self.assertEqual(_tools_cacheadas([]), [])
+
+    def test_el_sistema_va_en_dos_bloques_y_solo_el_estable_se_cachea(self):
+        from services.agent_service import _sistema_anthropic
+
+        bloques = _sistema_anthropic('lo compartido', 'Marta, Gerenta de Finanzas.')
+        self.assertEqual(len(bloques), 2)
+        self.assertEqual(bloques[0]['cache_control'], {'type': 'ephemeral', 'ttl': '1h'})
+        self.assertNotIn('cache_control', bloques[1])
+        self.assertEqual(bloques[1]['text'], 'Marta, Gerenta de Finanzas.')
+
+    def test_sin_parte_de_persona_va_un_solo_bloque(self):
+        from services.agent_service import _sistema_anthropic
+
+        self.assertEqual(len(_sistema_anthropic('lo compartido', '')), 1)
+        self.assertEqual(len(_sistema_anthropic('lo compartido', '   ')), 1)
+
+    def test_las_herramientas_de_archivos_no_estan_descritas_dos_veces(self):
+        """Estaban en el esquema Y escritas a mano en el prompt de sistema: el modelo
+        leía las mismas instrucciones dos veces y se pagaban dos veces por llamada."""
+        from apps.agents.views import _build_onboarding_context
+
+        ctx = _build_onboarding_context(self.user, None, consulta='x')
+        self.assertNotIn('HERRAMIENTAS DE ARCHIVOS', ctx['system_prompt'])
+
+
+class BuscarConversacionesTests(TestCase):
+    """La búsqueda de conversaciones: que encuentre lo que se puede abrir, y NADA más.
+
+    Lo que se protege acá es la propiedad que el producto promete sobre permisos. Un
+    buscador es la forma más cómoda de filtrar información sin que se note: alcanza con
+    que devuelva un título de más. Por eso busca sobre el mismo embudo que decide quién
+    entra a un hilo (`hilos_alcanzables`), y no sobre una consulta propia.
+    """
+
+    def setUp(self):
+        from apps.sesiones.models import Sesion, SesionMiembro, VISIBILIDAD_RESTRINGIDA
+        from apps.workspaces.models import ROLE_ADMIN, ROLE_MEMBER, Workspace
+
+        self.duena = User.objects.create_user(
+            username='duena@afable.test', email='duena@afable.test', password='afable123',
+            first_name='Marta',
+        )
+        self.companero = User.objects.create_user(
+            username='companero@afable.test', email='companero@afable.test',
+            password='afable123', first_name='Pedro',
+        )
+        self.ajeno = User.objects.create_user(
+            username='ajeno@afable.test', email='ajeno@afable.test', password='afable123',
+        )
+        self.org = Organization.objects.create(owner=self.duena, name='Cocinas SpA')
+        ws = Workspace.objects.create(organization=self.org, name='General')
+        self.org.agregar_miembro(self.duena, ROLE_ADMIN)
+        self.org.agregar_miembro(self.companero, ROLE_MEMBER)
+        self.org.agregar_miembro(self.ajeno, ROLE_MEMBER)
+        self.agente = Agent.objects.create(organization=self.org, name='Ventas')
+
+        # Una Sesión RESTRINGIDA donde entran Marta y Pedro, y el ajeno no.
+        self.sesion = Sesion.objects.create(
+            workspace=ws, name='Cierre de mes', slug='cierre-de-mes',
+            visibility=VISIBILIDAD_RESTRINGIDA,
+        )
+        SesionMiembro.objects.create(sesion=self.sesion, user=self.duena)
+        SesionMiembro.objects.create(sesion=self.sesion, user=self.companero)
+
+        self.mio = self._hilo(self.duena, 'Precios de gabinetes',
+                              'cuanto cuesta el gabinete de melamina', sesion=None)
+        self.compartido = self._hilo(self.companero, 'Facturas pendientes',
+                                     'revisar la melamina que quedo sin facturar',
+                                     sesion=self.sesion)
+        # De otra persona y sin Sesión: nadie más que su autor lo alcanza.
+        self.privado_ajeno = self._hilo(self.ajeno, 'Notas privadas',
+                                        'la melamina de mi casa', sesion=None)
+
+    def _hilo(self, user, titulo, texto, sesion=None):
+        from apps.agents.models import Conversation, Message
+
+        conv = Conversation.objects.create(
+            agent=self.agente, user=user, title=titulo, sesion=sesion,
+        )
+        Message.objects.create(conversation=conv, role='user', content=texto, user=user)
+        return conv
+
+    def _buscar(self, user, **params):
+        client = APIClient()
+        client.force_authenticate(user=user)
+        return client.get('/api/v1/agents/conversations/', params)
+
+    # ── Lo que tiene que encontrar ────────────────────────────────────
+
+    def test_busca_en_el_contenido_y_no_solo_en_el_titulo(self):
+        """Los títulos se arman con los primeros 120 caracteres del primer mensaje, así
+        que lo que uno recuerda de una conversación casi nunca está en el título."""
+        r = self._buscar(self.duena, q='melamina')
+        ids = [c['id'] for c in r.data]
+        self.assertIn(self.mio.id, ids)          # calza por contenido, no por titulo
+        r2 = self._buscar(self.duena, q='gabinetes')
+        self.assertIn(self.mio.id, [c['id'] for c in r2.data])   # y por titulo tambien
+
+    def test_encuentra_el_hilo_que_el_equipo_compartio_en_su_sesion(self):
+        r = self._buscar(self.duena, q='melamina', compartidos=1)
+        ids = [c['id'] for c in r.data]
+        self.assertIn(self.compartido.id, ids)
+
+    def test_el_hilo_ajeno_viene_marcado_y_dice_quien_lo_escribio(self):
+        """Una lista que mezcla lo propio con lo ajeno sin decirlo se lee como si todo
+        fuera propio."""
+        r = self._buscar(self.duena, q='melamina', compartidos=1)
+        fila = next(c for c in r.data if c['id'] == self.compartido.id)
+        self.assertTrue(fila['compartido_conmigo'])
+        self.assertEqual(fila['autor_nombre'], 'Pedro')
+        self.assertEqual(fila['sesion_nombre'], 'Cierre de mes')
+
+    def test_el_hilo_propio_no_viene_marcado(self):
+        r = self._buscar(self.duena, q='melamina', compartidos=1)
+        fila = next(c for c in r.data if c['id'] == self.mio.id)
+        self.assertFalse(fila['compartido_conmigo'])
+
+    # ── Lo que NO tiene que encontrar (es el punto) ───────────────────
+
+    def test_no_encuentra_el_hilo_privado_de_otra_persona(self):
+        r = self._buscar(self.duena, q='melamina', compartidos=1)
+        self.assertNotIn(self.privado_ajeno.id, [c['id'] for c in r.data])
+
+    def test_quien_no_alcanza_la_sesion_no_encuentra_su_hilo(self):
+        """El ajeno es miembro de la empresa, pero la Sesión es restringida y no está
+        invitado. Si el buscador se lo mostrara, sería la puerta de atrás."""
+        r = self._buscar(self.ajeno, q='melamina', compartidos=1)
+        ids = [c['id'] for c in r.data]
+        self.assertNotIn(self.compartido.id, ids)
+        self.assertNotIn(self.mio.id, ids)
+        self.assertIn(self.privado_ajeno.id, ids)   # el suyo si
+
+    def test_sin_el_parametro_la_barra_sigue_mostrando_solo_lo_propio(self):
+        """La barra lateral es el historial de cada uno y no cambia: lo compartido se
+        pide explícitamente, y solo lo pide el buscador."""
+        r = self._buscar(self.duena, q='melamina')
+        ids = [c['id'] for c in r.data]
+        self.assertIn(self.mio.id, ids)
+        self.assertNotIn(self.compartido.id, ids)
+
+    # ── El límite ─────────────────────────────────────────────────────
+
+    def test_el_limite_lo_aplica_el_servidor(self):
+        """Antes se pedían TODAS las conversaciones para mostrar diez en la barra."""
+        for i in range(5):
+            self._hilo(self.duena, f'Hilo {i}', 'melamina otra vez')
+        self.assertEqual(len(self._buscar(self.duena, q='melamina', limite=2).data), 2)
+        self.assertGreater(len(self._buscar(self.duena, q='melamina').data), 2)
+
+    def test_un_limite_invalido_no_revienta(self):
+        r = self._buscar(self.duena, limite='hola')
+        self.assertEqual(r.status_code, 200)
+
+    def test_sin_texto_devuelve_el_historial(self):
+        r = self._buscar(self.duena)
+        self.assertIn(self.mio.id, [c['id'] for c in r.data])

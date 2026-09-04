@@ -72,11 +72,27 @@ class ConversationListSerializer(serializers.ModelSerializer):
     # distinguir de un vistazo lo personal de lo que ve el equipo.
     sesion_nombre = serializers.CharField(source='sesion.name', read_only=True, default=None)
     sesion_slug = serializers.CharField(source='sesion.slug', read_only=True, default=None)
+    # Si el hilo lo escribió otra persona. La búsqueda alcanza los hilos que el equipo
+    # compartió en las Sesiones, y sin esto no habría con qué distinguirlos: una lista que
+    # mezcla lo propio con lo ajeno sin decirlo se lee como si todo fuera propio.
+    compartido_conmigo = serializers.SerializerMethodField()
+    autor_nombre = serializers.SerializerMethodField()
 
     class Meta:
         model = Conversation
         fields = ['id', 'agent', 'agent_name', 'title', 'last_message',
-                  'sesion', 'sesion_nombre', 'sesion_slug', 'created_at', 'updated_at']
+                  'sesion', 'sesion_nombre', 'sesion_slug', 'compartido_conmigo',
+                  'autor_nombre', 'created_at', 'updated_at']
+
+    def get_compartido_conmigo(self, obj):
+        quien = getattr(self.context.get('request'), 'user', None)
+        return bool(quien and obj.user_id and obj.user_id != quien.id)
+
+    def get_autor_nombre(self, obj):
+        autor = obj.user
+        if not autor:
+            return None
+        return autor.first_name or autor.email.split('@')[0]
 
     def get_last_message(self, obj):
         msg = obj.messages.last()

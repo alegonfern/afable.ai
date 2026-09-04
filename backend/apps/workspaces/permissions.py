@@ -169,30 +169,53 @@ def sources_visible_to(membership):
 
 
 def alcance_de_agente(agent):
-    """Qué fuentes alcanza este agente, según los Workspaces a los que pertenece.
+    """Qué alcanza este agente. Devuelve `(ids_de_conexiones, ids_de_documentos)`.
 
-    Devuelve `(ids_de_conexiones, ids_de_documentos)`. **`None` en cualquiera de los dos
-    significa "sin restricción"**, y es a propósito: un agente que no está en ningún
-    Workspace sigue viendo todo lo de su empresa. Si los Workspaces restringieran también a
-    los agentes que nadie asignó, instalar esta función dejaría a toda la instalación
-    existente con agentes que de golpe no saben nada.
+    **`None` en cualquiera de los dos significa «sin restricción»**, y es a propósito:
+    un agente que no está anclado a nada sigue viendo todo lo de su empresa. Si el
+    silencio fuera el default, instalar esta función habría dejado mudos de golpe a
+    todos los agentes que ya existían.
 
-    Un agente que SÍ está en Workspaces queda encerrado en la unión de sus fuentes, aunque
-    esa unión sea vacía: ahí el silencio es la respuesta correcta.
+    ## De dónde sale cada cosa (cambiado el 2026-08-31)
+
+    > **La carpeta dice QUÉ se alcanza. El Espacio dice QUIÉN entra.**
+
+    - **Documentos: de la carpeta del agente**, y de todas sus subcarpetas. Antes los
+      prestaba el Espacio con `Workspace.documents`, una lista que alguien tenía que
+      mantener documento por documento — y cuando nadie se acordaba, el agente no veía
+      un archivo que sí estaba subido y visible en Archivos. Para un usuario que no es
+      técnico eso es un producto roto, no una configuración pendiente.
+    - **Conexiones: de los Espacios**, como siempre. Un sistema es caro de conectar y
+      se comparte entre equipos; no cuelga de una carpeta.
+
+    Un agente anclado a una carpeta queda encerrado en ella aunque esté vacía: ahí el
+    silencio es la respuesta correcta, porque el alcance fue elegido.
     """
     if agent is None or not agent.pk:
         return None, None
 
-    workspaces = list(agent.workspaces.all())
-    if not workspaces:
-        return None, None
+    # Documentos: la rama de la carpeta. Sin carpeta, sin restricción documental.
+    if agent.carpeta_id:
+        from apps.organizations.models import CompanyDocument
+        documentos = list(
+            CompanyDocument.objects
+            .filter(carpeta__in=agent.carpeta.rama())
+            .values_list('id', flat=True)
+        )
+    else:
+        documentos = None
 
-    conexiones = set()
-    documentos = set()
-    for ws in workspaces:
-        conexiones.update(ws.connections.values_list('id', flat=True))
-        documentos.update(ws.documents.values_list('id', flat=True))
-    return list(conexiones), list(documentos)
+    # Conexiones: la unión de las de sus Espacios. Sin Espacios, sin restricción.
+    workspaces = list(agent.workspaces.all())
+    if workspaces:
+        conexiones = set()
+        for ws in workspaces:
+            conexiones.update(ws.connections.values_list('id', flat=True))
+        conexiones = list(conexiones)
+    else:
+        conexiones = None
+
+    return conexiones, documentos
 
 
 class EmpresaRolePermission(BasePermission):

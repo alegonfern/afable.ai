@@ -413,12 +413,43 @@ function KpiCard({ conn }) {
 }
 
 // ── Welcome / Dashboard ───────────────────────────────────────────────────────
-function WelcomeScreen() {
+// ⭐ La primera entrada. Quien llega no sabe qué pedir — y decirle «escriba su pregunta»
+// frente a un cursor parpadeando es la versión moderna de la carpeta vacía. Cada atajo
+// es una frase que la persona podría haber dicho, escrita por ella: se manda al chat tal
+// cual, y de ahí en adelante el agente usa sus herramientas (armar la estructura,
+// invitar, crear carpetas) para hacerlo de verdad.
+//
+// El primero va destacado porque es el que hace el trabajo grande; los otros son las
+// salidas para quien llega con otra intención — el impaciente que solo quiere subir un
+// archivo, el que ya tiene su Odoo andando, el que viene a mirar.
+const ATAJOS = [
+  { texto: 'Empecemos: ayúdame a armar mi empresa', principal: true },
+  { texto: '¿Qué puedo hacer en Afable?' },
+  { texto: 'Quiero subir un documento y preguntarle' },
+  { texto: 'Quiero invitar a alguien de mi equipo' },
+  { texto: 'Quiero conectar un sistema que ya uso' },
+  { texto: 'Tengo una duda' },
+];
+
+function WelcomeScreen({ onPreguntar }) {
   const theme = useTheme();
+  // Lo que le conviene hacer a esta persona ahora, calculado en el servidor sin gastar
+  // tokens. Si viene vacío no se dibuja nada: un producto que siempre tiene algo que
+  // decirte deja de decir algo cuando importa.
+  const [sugerencias, setSugerencias] = useState([]);
   const d = theme.palette.mode === 'dark';
   const navigate = useNavigate();
   const [dashboard, setDashboard] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const slug = localStorage.getItem('afable_workspace_slug');
+    if (slug) {
+      api.getRecomendaciones(slug)
+        .then(({ data }) => setSugerencias(data.recomendaciones || []))
+        .catch(() => setSugerencias([]));
+    }
+  }, []);
 
   useEffect(() => {
     api.getDashboard()
@@ -447,6 +478,69 @@ function WelcomeScreen() {
             : 'Conecta tu ERP o base de datos para ver datos en tiempo real'}
         </Typography>
       </Box>
+
+      {/* Lo que le conviene hacer ahora. Va ANTES de los atajos generales porque está
+          calculado sobre su empresa: «Facturación ya tiene 12 documentos» le habla a
+          usted, «¿qué puedo hacer acá?» le habla a cualquiera. */}
+      {onPreguntar && sugerencias.length > 0 && (
+        <Box sx={{ mb: 3 }}>
+          {sugerencias.map((s) => (
+            <Box
+              key={s.clave}
+              component="button"
+              onClick={() => onPreguntar(s.mensaje)}
+              sx={{
+                display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
+                px: 1.75, py: 1.25, mb: 1, borderRadius: '9px', fontFamily: 'inherit',
+                bgcolor: 'transparent', border: `1px solid ${theme.palette.divider}`,
+                '&:hover': { borderColor: '#586AD0' }, transition: 'border-color 0.12s',
+              }}
+            >
+              <Typography sx={{ fontSize: '0.9375rem', color: 'text.primary' }}>
+                {s.texto}
+              </Typography>
+              {s.detalle && (
+                <Typography sx={{ fontSize: '0.8125rem', color: 'text.disabled' }}>
+                  {s.detalle}
+                </Typography>
+              )}
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      {/* Los atajos de la primera entrada */}
+      {onPreguntar && (
+        <Box sx={{ mb: 3.5 }}>
+          <Typography sx={{ fontSize: '0.9rem', color: 'text.secondary', mb: 1.5 }}>
+            Cuénteme de su empresa y la dejamos andando. O empiece por donde quiera:
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            {ATAJOS.map((a) => (
+              <Box
+                key={a.texto}
+                component="button"
+                onClick={() => onPreguntar(a.texto)}
+                sx={{
+                  px: 1.75, py: 0.85, borderRadius: '999px', cursor: 'pointer',
+                  fontFamily: 'inherit', fontSize: '0.855rem',
+                  fontWeight: a.principal ? 600 : 400,
+                  color: a.principal ? 'primary.contrastText' : 'text.secondary',
+                  bgcolor: a.principal ? 'primary.main' : 'transparent',
+                  border: `1px solid ${a.principal ? 'transparent' : theme.palette.divider}`,
+                  transition: 'all 0.12s',
+                  '&:hover': {
+                    bgcolor: a.principal ? 'primary.dark' : theme.palette.action.hover,
+                    color: a.principal ? 'primary.contrastText' : 'text.primary',
+                  },
+                }}
+              >
+                {a.texto}
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      )}
 
       {/* KPI Panel — la diferencia real vs ChatGPT */}
       {loading ? (
@@ -689,7 +783,12 @@ export default function ChatPage() {
           if (!line.startsWith('data: ')) continue;
           try {
             const data = JSON.parse(line.slice(6));
-            if (data.conversation_id) setConvId(data.conversation_id);
+            if (data.conversation_id && data.conversation_id !== convId) {
+              setConvId(data.conversation_id);
+              // Recien creada: la barra tiene que reflejarla sin recargar. La
+              // comparacion es para no avisar en cada trozo del stream.
+              window.dispatchEvent(new Event('afable-conversaciones'));
+            }
             if (data.agent) {
               // Si el usuario menciono a otro agente, el backend ya decidio: la
               // barra y la firma del mensaje tienen que reflejar a QUIEN contesta.
@@ -912,7 +1011,7 @@ export default function ChatPage() {
         // empuja el compositor fuera de la pantalla.
         sx={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', position: 'relative' }}>
         {messages.length === 0 ? (
-          <WelcomeScreen />
+          <WelcomeScreen onPreguntar={sendMessage} />
         ) : (
           <Box sx={{ px: { xs: 2, sm: 3, md: 4 }, py: 3, maxWidth: 780, width: '100%', mx: 'auto' }}>
             {messages.map((msg, idx) => (

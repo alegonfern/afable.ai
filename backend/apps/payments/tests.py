@@ -15,6 +15,7 @@ fija acá es lo que rompería la confianza de un cliente que paga:
 import json
 import unittest.mock as mock
 from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -601,8 +602,8 @@ class MedicionDeConsumoTests(TestCase):
             usage = Uso()
 
         m = consumo.medir('anthropic', Respuesta())
-        self.assertEqual(m, {'entrada': 100, 'salida': 20,
-                             'cache_lectura': 900, 'cache_escritura': 50})
+        self.assertEqual(m, {'entrada': 100, 'salida': 20, 'cache_lectura': 900,
+                             'cache_escritura': 50, 'cache_escritura_1h': 0})
 
     def test_deepseek_descuenta_la_cache_de_la_entrada(self):
         """En el formato OpenAI `prompt_tokens` SÍ incluye los aciertos de caché. Sin
@@ -674,7 +675,8 @@ class MedicionDeConsumoTests(TestCase):
 
     def test_la_familia_salva_a_una_version_nueva(self):
         """Subir de versión no puede dejar un modelo sin tarifa, porque quedaría gratis."""
-        self.assertEqual(consumo.tarifa_de('claude-sonnet-9-9-fecha-futura'), (3, 15))
+        t = consumo.tarifa_de('claude-sonnet-9-9-fecha-futura')
+        self.assertEqual((t.entrada, t.salida), (3, 15))
 
     # ── La tabla manda sobre el código ────────────────────────────────
 
@@ -697,7 +699,8 @@ class MedicionDeConsumoTests(TestCase):
             precio_entrada_usd_millon=99, precio_salida_usd_millon=99,
             vigente_desde=timezone.now() + timedelta(days=30),
         )
-        self.assertEqual(consumo.tarifa_de('claude-sonnet-4-6'), (3, 15))
+        t = consumo.tarifa_de('claude-sonnet-4-6')
+        self.assertEqual((t.entrada, t.salida), (3, 15))
 
     # ── Registrar ─────────────────────────────────────────────────────
 
@@ -792,6 +795,92 @@ class MedicionDeConsumoTests(TestCase):
         e = consumo.estado(self.org)
         self.assertEqual(e['incluido'], 0)
         self.assertFalse(e['bloqueada'])
+
+    # ── Los factores de caché son por proveedor ───────────────────────
+
+    def test_la_cache_de_deepseek_no_se_cobra_al_factor_de_anthropic(self):
+        """El acierto de caché de DeepSeek vale 0,032 de la entrada y el de Anthropic
+        0,1. Con una constante global, el consumo cacheado de DeepSeek quedaba tres
+        veces más caro de lo que el proveedor cobra."""
+        TarifaModelo.objects.create(
+            modelo='deepseek-v4-flash', proveedor='deepseek',
+            precio_entrada_usd_millon=Decimal('0.44'),
+            precio_salida_usd_millon=Decimal('1.32'),
+            factor_cache_lectura=Decimal('0.0318'),
+            factor_cache_escritura=Decimal('1'),
+            factor_cache_escritura_1h=Decimal('1'),
+            vigente_desde=timezone.now() - timedelta(days=1),
+        )
+        c = consumo.creditos('deepseek-v4-flash', {
+            'entrada': 0, 'salida': 0, 'cache_lectura': 1_000_000,
+            'cache_escritura': 0, 'cache_escritura_1h': 0})
+        # 1M leídos de caché a US$0,014 el millón = 14.000 créditos.
+        self.assertEqual(c, 13_992)
+        self.assertAlmostEqual(c * 0.000001, 0.014, places=3)
+
+    def test_escribir_la_cache_de_una_hora_cuesta_el_doble(self):
+        """La de 5 minutos vale 1,25 de la entrada y la de 1 hora 2. Con un solo factor
+        la cuenta se quedaba 60% corta en cada escritura."""
+        cinco_min = consumo.creditos('claude-sonnet-4-6', {
+            'entrada': 0, 'salida': 0, 'cache_lectura': 0,
+            'cache_escritura': 100_000, 'cache_escritura_1h': 0})
+        una_hora = consumo.creditos('claude-sonnet-4-6', {
+            'entrada': 0, 'salida': 0, 'cache_lectura': 0,
+            'cache_escritura': 100_000, 'cache_escritura_1h': 100_000})
+        self.assertEqual(cinco_min, 375_000)
+        self.assertEqual(una_hora, 600_000)
+
+    def test_la_escritura_de_una_hora_no_se_cobra_dos_veces(self):
+        """`cache_escritura` es el TOTAL y `cache_escritura_1h` la parte de una hora.
+        Sumarlas cobraría la misma escritura dos veces."""
+        mixto = consumo.creditos('claude-sonnet-4-6', {
+            'entrada': 0, 'salida': 0, 'cache_lectura': 0,
+            'cache_escritura': 100_000, 'cache_escritura_1h': 40_000})
+        # 60.000 a 1,25 + 40.000 a 2, sobre US$3 el millón.
+        self.assertEqual(mixto, 60_000 * 3 * 1.25 + 40_000 * 3 * 2)
+
+    def test_anthropic_reporta_las_dos_escrituras_por_separado(self):
+        class Creacion:
+            ephemeral_1h_input_tokens = 4_000
+            ephemeral_5m_input_tokens = 1_000
+
+        class Uso:
+            input_tokens = 10
+            output_tokens = 20
+            cache_read_input_tokens = 0
+            cache_creation_input_tokens = 5_000
+            cache_creation = Creacion()
+
+        class Respuesta:
+            usage = Uso()
+
+        m = consumo.medir('anthropic', Respuesta())
+        self.assertEqual(m['cache_escritura'], 5_000)
+        self.assertEqual(m['cache_escritura_1h'], 4_000)
+
+    # ── El turno ──────────────────────────────────────────────────────
+
+    def test_el_turno_une_las_vueltas_de_una_misma_pregunta(self):
+        """Es la cifra que dice si el bucle de herramientas se va de las manos: sin
+        esto se puede sumar el gasto total, pero no cuántas vueltas dio una pregunta."""
+        class Uso:
+            input_tokens = 100
+            output_tokens = 10
+            cache_read_input_tokens = 0
+            cache_creation_input_tokens = 0
+
+        class Respuesta:
+            usage = Uso()
+
+        for _ in range(5):
+            consumo.registrar('anthropic', 'claude-sonnet-4-6', Respuesta(),
+                              organization=self.org, motivo='agente', turno='pregunta-1')
+        consumo.registrar('anthropic', 'claude-sonnet-4-6', Respuesta(),
+                          organization=self.org, motivo='agente', turno='pregunta-2')
+
+        vueltas = ConsumoTokens.objects.filter(turno='pregunta-1').count()
+        self.assertEqual(vueltas, 5)
+        self.assertEqual(ConsumoTokens.objects.filter(turno='pregunta-2').count(), 1)
 
     def test_el_estado_delata_los_modelos_sin_tarifa(self):
         """Si un modelo quedó sin precio, tiene que verse como cifra que falta y no

@@ -173,7 +173,7 @@ function ConnectModal({ open, connector, orgId, existingConn, onClose, onCreated
       const testRes = await api.testConnection(res.data.id);
       setTestResult(testRes.data);
       if (!testRes.data.success) {
-        await api.deleteConnection(res.data.id);
+        await api.descartarConnectionDePrueba(res.data.id);
       } else {
         // Si fue exitoso, guarda el id para no re-crear
         setConfig(p => ({ ...p, _tmp_id: res.data.id }));
@@ -419,11 +419,11 @@ function ConnectedRow({ conn, onDeleted, onSynced, onEdit }) {
 
   const handleDelete = async () => {
     try {
-      await api.deleteConnection(conn.id);
-      toast.info('Conexión eliminada');
+      await api.desactivarConnection(conn.id);
+      toast.info('Conexión desactivada. Lo que trajo se queda.');
       onDeleted(conn.id);
     } catch {
-      toast.error('No se pudo eliminar');
+      toast.error('No se pudo desactivar');
     }
   };
 
