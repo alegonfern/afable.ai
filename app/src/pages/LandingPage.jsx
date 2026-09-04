@@ -177,7 +177,7 @@ export default function LandingPage() {
     },
     {
       q: '¿Esto reemplaza a mi equipo?',
-      a: 'No reemplazamos personas, las hacemos 10X más eficientes. El agente se hace cargo de buscar, cruzar y repetir; tu equipo se queda con el criterio y la decisión. Nadie deja de trabajar: cada persona trabaja con más alcance del que tenía sola.',
+      a: 'No. Reemplazamos al que venía a implementar y se iba. El agente se hace cargo de buscar, cruzar y repetir; tu equipo se queda con el criterio y la decisión. Nadie deja de trabajar: cada persona trabaja con más alcance del que tenía sola.',
     },
     {
       q: '¿Necesito saber programar?',
@@ -311,13 +311,13 @@ export default function LandingPage() {
       <header className="lp-hero">
         <div className="lp-hero-inner">
           <div className="lp-hero-copy">
-            <h1>IA para <em>equipos.</em></h1>
-            <p className="lp-hero-sub">Agentes de IA conectados a los datos de tu empresa. Responden en el chat, ejecutan tareas y siguen trabajando cuando tú no estás.</p>
+            <h1>La IA de las empresas que <em>no tienen a nadie de tecnología.</em></h1>
+            <p className="lp-hero-sub">Suba sus documentos, conecte sus herramientas e invite a su equipo. Afable le arma los agentes que responden por usted: los contratos, las facturas, el informe del lunes.</p>
             <div className="lp-hero-ctas">
               <button className="lp-btn-pill lp-btn-pill--big" onClick={() => navigate('/register')}>Empezar gratis →</button>
             </div>
             <LandingLeadChat navigate={navigate} />
-            <div className="lp-hero-trust">Sin tarjeta de crédito · Listo en minutos · Funciona con los sistemas que ya usas</div>
+            <div className="lp-hero-trust">Sin código · Sin consultor · Funciona con las herramientas que ya usa</div>
           </div>
           <div className="lp-hero-art">
             <HeroScene />
@@ -332,8 +332,8 @@ export default function LandingPage() {
 
       {/* Statement — el eslogan */}
       <section className="lp-memory">
-        <h2 className="lp-display">No reemplazamos<br />personas.</h2>
-        <p className="lp-section-sub lp-center">Las hacemos 10X más eficientes. Cada persona del equipo trabaja con agentes que ya conocen tus datos, tus procesos y tus reglas — y resuelven en minutos lo que antes tomaba una tarde entera.</p>
+        <h2 className="lp-display">No reemplazamos<br />al empleado.</h2>
+        <p className="lp-section-sub lp-center">Reemplazamos al que venía a implementar y se iba. Armar un repositorio ordenado y conectarle una IA no es difícil de ejecutar: es difícil saber qué separar, qué subir y qué conectar. Eso es lo que hace Afable, y es lo que hasta ahora había que contratar.</p>
         <div className="lp-float-grid">
           {memoryCards.map((c) => (
             <div key={c.tag} className="lp-float-item">
@@ -420,7 +420,7 @@ export default function LandingPage() {
             <ul className="lp-plan-feat">
               <li>3 agentes activos</li>
               <li>10 conexiones de datos</li>
-              <li>5.000 mensajes/mes</li>
+              <li>500 preguntas al mes</li>
               <li>Workspaces abiertos y restringidos</li>
               <li>Disparadores programados</li>
               <li>Soporte por correo</li>
@@ -437,7 +437,7 @@ export default function LandingPage() {
               <li>Todo en Starter</li>
               <li>15 agentes activos</li>
               <li>50 conexiones de datos</li>
-              <li>50.000 mensajes/mes</li>
+              <li>3.000 preguntas al mes</li>
               <li>Sesiones de trabajo del equipo</li>
               <li>Disparadores por webhook y evento</li>
               <li>Roles y permisos por Workspace</li>
@@ -546,7 +546,7 @@ export default function LandingPage() {
 
           <div className="lp-footer-brand">
             <div className="lp-footer-logo"><Isotipo size={18} bgColor="#FFFFFF" /><span>Afable</span></div>
-            <p className="lp-footer-tagline">IA para equipos.</p>
+            <p className="lp-footer-tagline">La IA de su empresa.</p>
             <ul className="lp-footer-contact">
               <li><a href="mailto:hi@getafable.com">hi@getafable.com</a></li>
               <li>

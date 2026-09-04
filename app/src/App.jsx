@@ -24,6 +24,7 @@ import SeguridadPage from './pages/legal/SeguridadPage';
 import ChatPage from './pages/ChatPage';
 import ModelPage from './pages/ModelPage';
 import IntegrationsPage from './pages/IntegrationsPage';
+import BancoDePruebasPage from './pages/BancoDePruebasPage';
 import TablondePage from './pages/TablondePage';
 import ProfilePage from './pages/ProfilePage';
 import MiContextoPage from './pages/MiContextoPage';
@@ -101,6 +102,10 @@ export default function App() {
             <Route path="agentes/nuevo"      element={<AgenteNuevoPage />} />
             <Route path="agentes/:id/editar" element={<AgenteNuevoPage />} />
             <Route path="tablero"            element={<TablondePage />} />
+            {/* Banco de pruebas: interna. El servidor decide quién entra
+                (`CUENTAS_DE_PRUEBA`); acá la ruta existe para todos y quien no
+                corresponde recibe el 403 explicado, no una página en blanco. */}
+            <Route path="banco-de-pruebas"   element={<BancoDePruebasPage />} />
             {/* Archivos: EL lugar de los archivos de la empresa, con carpetas,
                 versiones y edición. La pestaña Documentos del hub redirige acá. */}
             <Route path="archivos"           element={<ArchivosPage />} />

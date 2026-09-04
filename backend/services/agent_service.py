@@ -156,6 +156,21 @@ def resolve_model(model: str = None) -> tuple[str, str]:
     return provider, resolved
 
 
+def modelo_autonomo() -> str:
+    """El modelo con el que Afable trabaja cuando nadie se lo pidió.
+
+    Todo lo que el producto hace por su cuenta —el informe que deja listo, el aviso que se
+    adelanta, la propuesta de un agente— sale de acá, y sale de lo más barato que hay. Es
+    trabajo que la casa paga: si corriera en el modelo del chat, el trabajo de fondo se
+    llevaría el presupuesto de quien sí está preguntando.
+
+    Se pasa EXPLÍCITAMENTE en cada llamada de esa clase, y no como default global, porque
+    `AI_PROVIDER` puede estar en otro proveedor: dejarlo librado al default haría que la
+    capa autónoma corriera en lo que esté configurado, que es justo lo que se quiere evitar.
+    """
+    return getattr(settings, 'MODELO_TRABAJO_AUTONOMO', 'deepseek-v4-flash')
+
+
 def chunk_text(text: str, size: int = 28):
     """Trocea texto para simular streaming cuando el proveedor no soporta streaming real."""
     buf = ''
@@ -534,7 +549,7 @@ def _provider_for_model(model: str) -> str:
     return 'ollama'
 
 
-def run_agent_live_events(history: list[dict], organization, system_prompt: str, model: str = None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None, system_persona: str = ''):
+def run_agent_live_events(history: list[dict], organization, system_prompt: str, model: str = None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None, system_persona: str = '', usuario=None):
     """
     Generador del agente con datos en vivo. Va emitiendo dicts de progreso
     {'status': '...'} mientras consulta los sistemas conectados vía tool-use, y al
@@ -544,14 +559,14 @@ def run_agent_live_events(history: list[dict], organization, system_prompt: str,
     """
     provider = _provider_for_model(model) if model else getattr(settings, 'AI_PROVIDER', 'ollama')
     if provider == 'anthropic':
-        yield from _run_anthropic_agent_live_events(history, system_prompt, organization, model, allowed_ids, allowed_doc_ids, agente, sesion, system_persona)
+        yield from _run_anthropic_agent_live_events(history, system_prompt, organization, model, allowed_ids, allowed_doc_ids, agente, sesion, system_persona, usuario)
     elif provider == 'deepseek':
-        yield from _run_deepseek_agent_events(history, _unir_sistema(system_prompt, system_persona), organization, model, allowed_ids, allowed_doc_ids, agente, sesion)
+        yield from _run_deepseek_agent_events(history, _unir_sistema(system_prompt, system_persona), organization, model, allowed_ids, allowed_doc_ids, agente, sesion, usuario)
     else:
-        yield from _run_ollama_agent_events(history, _unir_sistema(system_prompt, system_persona), organization, model, allowed_ids, allowed_doc_ids, agente, sesion)
+        yield from _run_ollama_agent_events(history, _unir_sistema(system_prompt, system_persona), organization, model, allowed_ids, allowed_doc_ids, agente, sesion, usuario)
 
 
-def run_agent_live(history: list[dict], organization, system_prompt: str, model: str = None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None, tocados: list = None, system_persona: str = '') -> str:
+def run_agent_live(history: list[dict], organization, system_prompt: str, model: str = None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None, tocados: list = None, system_persona: str = '', usuario=None) -> str:
     """Versión no-streaming: drena el generador y devuelve solo el texto final.
 
     `tocados`, si viene, se llena con los documentos que el agente dejó escritos. Es una
@@ -561,7 +576,7 @@ def run_agent_live(history: list[dict], organization, system_prompt: str, model:
     final = ''
     for event in run_agent_live_events(
         history, organization, system_prompt, model, allowed_ids, allowed_doc_ids, agente,
-        sesion, system_persona,
+        sesion, system_persona, usuario,
     ):
         if 'final' in event:
             final = event['final']
@@ -570,7 +585,7 @@ def run_agent_live(history: list[dict], organization, system_prompt: str, model:
     return final
 
 
-def _run_ollama_agent_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None):
+def _run_ollama_agent_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None, usuario=None):
     from services import agent_tools
 
     base_url, model, headers = _ollama_config(model)
@@ -627,7 +642,7 @@ def _run_ollama_agent_events(history, system_prompt, organization, model=None, a
                     continue
                 seen_calls.add(sig)
                 yield {'status': _tool_status(name, args)}
-                result = agent_tools.execute_tool(name, args, organization, provenance, allowed_ids, artifacts, allowed_doc_ids, agente, sesion)
+                result = agent_tools.execute_tool(name, args, organization, provenance, allowed_ids, artifacts, allowed_doc_ids, agente, sesion, usuario)
                 messages.append({"role": "tool", "content": _tool_result_json(result)})
 
         yield _evento_final(
@@ -643,7 +658,7 @@ def _run_ollama_agent_events(history, system_prompt, organization, model=None, a
         yield {'final': f"Error al consultar los sistemas: {str(e)}", 'documentos': list((artifacts or {}).get('documentos') or [])}
 
 
-def _run_deepseek_agent_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None):
+def _run_deepseek_agent_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None, usuario=None):
     """
     API de DeepSeek — compatible con el formato de chat completions de OpenAI.
     Reusa `tools_for_ollama` porque el esquema de herramientas es idéntico
@@ -725,7 +740,7 @@ def _run_deepseek_agent_events(history, system_prompt, organization, model=None,
                     continue
                 seen_calls.add(sig)
                 yield {'status': _tool_status(name, args)}
-                result = agent_tools.execute_tool(name, args, organization, provenance, allowed_ids, artifacts, allowed_doc_ids, agente, sesion)
+                result = agent_tools.execute_tool(name, args, organization, provenance, allowed_ids, artifacts, allowed_doc_ids, agente, sesion, usuario)
                 messages.append({
                     "role": "tool", "tool_call_id": tc.get('id'),
                     "content": _tool_result_json(result),
@@ -744,7 +759,7 @@ def _run_deepseek_agent_events(history, system_prompt, organization, model=None,
         yield {'final': f"Error al consultar los sistemas: {str(e)}", 'documentos': list((artifacts or {}).get('documentos') or [])}
 
 
-def _run_anthropic_agent_live_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None, system_persona: str = ''):
+def _run_anthropic_agent_live_events(history, system_prompt, organization, model=None, allowed_ids=None, allowed_doc_ids=None, agente=None, sesion=None, system_persona: str = '', usuario=None):
     from services import agent_tools
 
     tools = _tools_cacheadas(agent_tools.tools_for_anthropic(organization, allowed_ids, sesion))
@@ -780,7 +795,7 @@ def _run_anthropic_agent_live_events(history, system_prompt, organization, model
             for block in response.content:
                 if getattr(block, 'type', None) == "tool_use":
                     yield {'status': _tool_status(block.name, block.input)}
-                    result = agent_tools.execute_tool(block.name, block.input, organization, provenance, allowed_ids, artifacts, allowed_doc_ids, agente, sesion)
+                    result = agent_tools.execute_tool(block.name, block.input, organization, provenance, allowed_ids, artifacts, allowed_doc_ids, agente, sesion, usuario)
                     results.append({
                         "type": "tool_result",
                         "tool_use_id": block.id,

@@ -229,14 +229,21 @@ class AlcanceDeEspacioTests(TestCase):
             organization=self.org, title='Catálogo', file='y.pdf', extracted_text='precios',
         )
 
-        self.ventas = Agent.objects.create(organization=self.org, name='Ventas')
+        # El alcance documental sale de la CARPETA del agente; las conexiones, del Espacio.
+        from apps.archivos.models import Carpeta
+        self.carpeta_ventas = Carpeta.objects.create(organization=self.org, name='Ventas')
+        self.catalogo.carpeta = self.carpeta_ventas
+        self.catalogo.save(update_fields=['carpeta'])
+
+        self.ventas = Agent.objects.create(
+            organization=self.org, name='Ventas', carpeta=self.carpeta_ventas,
+        )
         self.espacio_ventas = Workspace.objects.create(organization=self.org, name='Ventas')
         self.espacio_ventas.connections.add(self.odoo)
-        self.espacio_ventas.documents.add(self.catalogo)
         self.espacio_ventas.agents.add(self.ventas)
 
     def test_un_agente_sin_espacio_no_queda_restringido(self):
-        """Compatibilidad: instalar Espacios no puede dejar ciegos a los agentes que ya existían."""
+        """Compatibilidad: un agente sin carpeta ni Espacio sigue viendo todo lo suyo."""
         suelto = Agent.objects.create(organization=self.org, name='Suelto')
         self.assertEqual(self.alcance(suelto), (None, None))
 
@@ -260,15 +267,56 @@ class AlcanceDeEspacioTests(TestCase):
         conns, _ = self.alcance(self.ventas)
         self.assertCountEqual(conns, [self.odoo.id, self.sap.id])
 
-    def test_un_espacio_vacio_deja_al_agente_sin_nada(self):
-        """El silencio es la respuesta correcta: no se cae de vuelta a toda la empresa."""
+    def test_un_espacio_vacio_deja_al_agente_sin_conexiones(self):
+        """El silencio es la respuesta correcta: no se cae de vuelta a toda la empresa.
+
+        Ojo con la segunda mitad: el agente está en un Espacio pero NO tiene carpeta, así
+        que su alcance documental es `None` —sin restricción— y no `[]`. No es un descuido:
+        desde el 31-08 los documentos los decide la carpeta, y este agente no eligió
+        ninguna. Restringirlo por un Espacio vacío lo dejaría mudo sin que nadie lo haya
+        pedido, que es justo lo que la compatibilidad evita.
+        """
         from apps.workspaces.models import Workspace
 
         pelado = Workspace.objects.create(organization=self.org, name='Recién creado')
         nuevo = Agent.objects.create(organization=self.org, name='Nuevo')
         pelado.agents.add(nuevo)
 
-        self.assertEqual(self.alcance(nuevo), ([], []))
+        conns, docs = self.alcance(nuevo)
+        self.assertEqual(conns, [])
+        self.assertIsNone(docs)
+
+    def test_una_carpeta_vacia_deja_al_agente_sin_documentos(self):
+        """Acá sí manda el silencio: la carpeta fue elegida, y está vacía."""
+        from apps.archivos.models import Carpeta
+
+        vacia = Carpeta.objects.create(organization=self.org, name='Recién creada')
+        nuevo = Agent.objects.create(organization=self.org, name='Nuevo', carpeta=vacia)
+
+        _, docs = self.alcance(nuevo)
+        self.assertEqual(docs, [])
+
+    def test_el_agente_alcanza_las_subcarpetas(self):
+        """Quien pregunta por Contabilidad espera que mire adentro de Contabilidad/Facturas."""
+        from apps.archivos.models import Carpeta
+        from apps.organizations.models import CompanyDocument
+
+        madre = Carpeta.objects.create(organization=self.org, name='Contabilidad')
+        hija = Carpeta.objects.create(organization=self.org, name='Facturas', parent=madre)
+        nieta = Carpeta.objects.create(organization=self.org, name='2026', parent=hija)
+
+        doc_hija = CompanyDocument.objects.create(
+            organization=self.org, title='Factura 1', file='f1.pdf', carpeta=hija,
+        )
+        doc_nieta = CompanyDocument.objects.create(
+            organization=self.org, title='Factura 2', file='f2.pdf', carpeta=nieta,
+        )
+        agente = Agent.objects.create(organization=self.org, name='Conta', carpeta=madre)
+
+        _, docs = self.alcance(agente)
+        self.assertCountEqual(docs, [doc_hija.id, doc_nieta.id])
+        # Y lo que está fuera de la rama no entra.
+        self.assertNotIn(self.contrato.id, docs)
 
     def test_el_prompt_no_nombra_los_documentos_de_otro_espacio(self):
         from apps.agents.views import _build_onboarding_context

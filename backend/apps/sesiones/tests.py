@@ -557,13 +557,17 @@ class LaSesionPrestaContextoTests(BaseSesiones):
         self.sesion.instrucciones_para_agentes = 'Acá hablamos del cliente Rever.'
         self.sesion.save(update_fields=['instrucciones_para_agentes'])
 
-        # Un agente ENCERRADO en un Espacio: es el caso donde ampliar importa.
+        # Un agente ENCERRADO en su carpeta: es el caso donde ampliar importa.
+        from apps.archivos.models import Carpeta
         self.espacio = Workspace.objects.create(organization=self.org, name='Ventas')
         self.espacio.agents.add(self.agente)
+        self.carpeta_del_agente = Carpeta.objects.create(organization=self.org, name='Ventas')
+        self.agente.carpeta = self.carpeta_del_agente
+        self.agente.save(update_fields=['carpeta'])
         self.doc_del_espacio = CompanyDocument.objects.create(
             organization=self.org, title='Catálogo', file='c.pdf', extracted_text='precios',
+            carpeta=self.carpeta_del_agente,
         )
-        self.espacio.documents.add(self.doc_del_espacio)
 
         self.archivo_de_la_sesion = CompanyDocument.objects.create(
             organization=self.org, sesion=self.sesion, title='Contrato Rever',

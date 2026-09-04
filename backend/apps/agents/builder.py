@@ -268,9 +268,28 @@ class AgenteConstructorListCreateView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # ⭐ De dónde cuelga. Es lo que impide volver al formulario en blanco: un agente
+        # nuevo nace sobre material que ya existe —una carpeta con documentos o una
+        # herramienta conectada— y nunca sobre la nada. La carpeta además le da el alcance
+        # y los permisos sin preguntarle nada al usuario.
+        carpeta = None
+        if request.data.get('carpeta'):
+            from apps.archivos.models import Carpeta
+            from apps.archivos.permisos import NIVEL_EDICION, nivel_sobre_carpeta
+
+            carpeta = Carpeta.objects.filter(
+                organization_id=org_id, pk=request.data['carpeta'],
+            ).first()
+            if carpeta is None:
+                return Response({'detail': 'No encuentro esa carpeta.'},
+                                status=status.HTTP_404_NOT_FOUND)
+            if nivel_sobre_carpeta(request.user, carpeta, membership) != NIVEL_EDICION:
+                return Response({'detail': 'No puedes crear un agente en esa carpeta.'},
+                                status=status.HTTP_403_FORBIDDEN)
+
         with transaction.atomic():
             agent = Agent.objects.create(
-                organization_id=org_id, created_by=request.user, **campos,
+                organization_id=org_id, created_by=request.user, carpeta=carpeta, **campos,
             )
             _enganchar(agent, request.data, membership)
             # Nace pendiente en Admin > Agentes: la empresa todavia no le dijo con

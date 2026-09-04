@@ -102,6 +102,17 @@ export default function Header({ open, handleDrawerToggle }) {
       .catch(() => setModels([]));
   }, []);
 
+  // ⛔ DESCONECTADOS el 2026-09-01, por decisión del usuario. NADA SE BORRÓ: los tres
+  // bloques quedan enteros en el render y vuelven poniendo su bandera en true.
+  //
+  // · El MODELO no va en la barra de arriba: es una decisión de la conversación o de la
+  //   configuración de un agente, no del encabezado de toda la app.
+  // · El ESPACIO y el BUSCADOR salen porque hoy no aportan: con el menú desconectado no
+  //   hay dónde ir ni qué acotar.
+  const MOSTRAR_SELECTOR_DE_MODELO = false;
+  const MOSTRAR_SELECTOR_DE_ESPACIO = false;
+  const MOSTRAR_BUSCADOR = false;
+
   // Modelo activo: el elegido por el usuario, o el default del backend.
   const activeId = aiModel || defaultModel;
   const activeModel = models.find(m => m.id === activeId) || null;
@@ -163,7 +174,8 @@ export default function Header({ open, handleDrawerToggle }) {
         {open && !matchDownLG ? <PanelLeftOpen size={18} /> : <MenuIcon size={18} />}
       </IconButton>
 
-      {/* Model selector */}
+      {/* Model selector — desconectado, ver las banderas arriba */}
+      {MOSTRAR_SELECTOR_DE_MODELO && (
       <Box
         onClick={(e) => setModelAnchorEl(e.currentTarget)}
         sx={{
@@ -189,6 +201,7 @@ export default function Header({ open, handleDrawerToggle }) {
         </Typography>
         <ChevronDown size={12} color={textMuted} />
       </Box>
+      )}
 
       <Menu
         anchorEl={modelAnchorEl}
@@ -266,9 +279,10 @@ export default function Header({ open, handleDrawerToggle }) {
           agentes se alcanzan, y eso vale para Archivos, Agentes y Sesiones igual. La
           empresa cambia una vez al año; el Workspace, varias veces al día — el que
           está siempre a la vista tiene que ser este. */}
-      <SelectorEspacio />
+      {MOSTRAR_SELECTOR_DE_ESPACIO && <SelectorEspacio />}
 
-      {/* Search pill — center */}
+      {/* Search pill — desconectado, ver las banderas arriba */}
+      {MOSTRAR_BUSCADOR && (
       <Box sx={{ flexGrow: 1, display: 'flex', justifyContent: 'center', px: 2 }}>
         <Box
           onClick={() => window.dispatchEvent(new CustomEvent('afable-open-search'))}
@@ -309,6 +323,7 @@ export default function Header({ open, handleDrawerToggle }) {
           </Typography>
         </Box>
       </Box>
+      )}
 
       {/* La campana, al lado del modo claro/oscuro: los dos son de la persona y no de
           la pantalla en la que está. */}

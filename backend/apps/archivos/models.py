@@ -50,6 +50,14 @@ class Carpeta(models.Model):
         help_text='Si esta en True, solo entran las personas con permiso.',
     )
 
+    # La carpeta privada de una persona, la que se le crea al entrar a la empresa. Es un
+    # flag y no una convencion de nombre porque el nombre lo pone la persona: buscarla por
+    # texto se rompe en cuanto alguien se cambia el nombre en su perfil.
+    personal = models.BooleanField(
+        default=False,
+        help_text='La carpeta privada de una persona, no una carpeta de la empresa.',
+    )
+
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
         null=True, blank=True, related_name='+',
@@ -97,6 +105,32 @@ class Carpeta(models.Model):
             cadena.append(nodo)
             nodo = nodo.parent
         return list(reversed(cadena))
+
+    def rama(self):
+        """Esta carpeta y todas las que cuelgan de ella, a cualquier profundidad.
+
+        Es lo que define el alcance de un agente anclado acá: quien pregunta por
+        Contabilidad espera que también mire adentro de Contabilidad/Conciliación,
+        porque para el que subió el archivo eso *es* Contabilidad.
+
+        Baja por niveles con una consulta por nivel, y no una por carpeta: un árbol
+        de pyme tiene decenas de nodos y tres o cuatro niveles, así que son tres o
+        cuatro consultas. Lleva la guarda de ciclo del resto del módulo — un `parent`
+        mal puesto colgaría la petición para siempre en vez de fallar.
+        """
+        vistos = {self.pk}
+        frontera = [self.pk]
+        while frontera:
+            hijas = list(
+                Carpeta.objects.filter(parent_id__in=frontera)
+                .exclude(pk__in=vistos)
+                .values_list('pk', flat=True)
+            )
+            if not hijas:
+                break
+            vistos.update(hijas)
+            frontera = hijas
+        return Carpeta.objects.filter(pk__in=vistos)
 
     def es_descendiente_de(self, otra):
         """Si `otra` está en la cadena de padres de esta carpeta.
@@ -298,3 +332,131 @@ class Permiso(models.Model):
     @property
     def puede_editar(self):
         return self.nivel == NIVEL_EDICION
+
+
+# ── Publicar: pedir, no publicar ──────────────────────────────────────────────
+
+PUBLICACION_PENDIENTE = 'pendiente'
+PUBLICACION_APROBADA = 'aprobada'
+PUBLICACION_RECHAZADA = 'rechazada'
+ESTADOS_DE_PUBLICACION = [
+    (PUBLICACION_PENDIENTE, 'Esperando respuesta'),
+    (PUBLICACION_APROBADA, 'Aprobada'),
+    (PUBLICACION_RECHAZADA, 'Rechazada'),
+]
+
+
+class SolicitudDePublicacion(models.Model):
+    """Alguien pide llevar un archivo suyo a la carpeta de la empresa.
+
+    ## Por qué se pide y no se publica
+
+    Todo lo que hay en la carpeta personal de alguien es privado. Cuando esa persona
+    quiere aportarlo al resto —que es el punto: que cada uno suba lo importante de su
+    área— no lo publica por su cuenta: lo propone, y un administrador o editor acepta.
+
+    Eso resuelve dos cosas de una vez. Evita el mismo documento subido cuatro veces por
+    cuatro personas, y evita que la carpeta de la empresa se llene de archivos con
+    nombres que solo entiende quien los subió. La calidad de ese repositorio es lo que
+    después determina si los agentes sirven o no: un agente no puede ser mejor que la
+    carpeta de la que cuelga.
+
+    ## El destino es parte de la solicitud
+
+    No se pide «publicar este archivo», se pide «publicar este archivo **en Contabilidad
+    / Facturas**». Y quien aprueba puede corregir el destino antes de aceptar. Así la
+    estructura se mantiene ordenada sin tener que enseñarle a nadie a ordenarla: el que
+    sabe dónde va cada cosa lo arregla en el momento de aprobar, no dos meses después.
+
+    ## Quién aprueba
+
+    Administradores **y editores**. Si solo aprobara el administrador —que en una empresa
+    chica es el dueño, y está ocupado— la carpeta de la empresa se quedaría vacía
+    esperando, que es exactamente como mueren los repositorios internos.
+    """
+
+    document = models.ForeignKey(
+        'organizations.CompanyDocument', on_delete=models.CASCADE,
+        related_name='solicitudes_de_publicacion',
+    )
+    solicitada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='publicaciones_pedidas',
+    )
+    # Dónde propone dejarlo quien lo pide.
+    destino = models.ForeignKey(
+        Carpeta, on_delete=models.CASCADE, related_name='publicaciones_propuestas',
+    )
+    # Dónde quedó de verdad. Distinto de `destino` cuando quien aprueba lo corrige, y es
+    # el registro de esa corrección: sirve para ver qué carpetas la gente no encuentra.
+    destino_final = models.ForeignKey(
+        Carpeta, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='publicaciones_recibidas',
+    )
+    nota = models.CharField(
+        max_length=300, blank=True,
+        help_text='Qué es esto y por qué le sirve al resto, en una línea.',
+    )
+
+    estado = models.CharField(
+        max_length=12, choices=ESTADOS_DE_PUBLICACION, default=PUBLICACION_PENDIENTE,
+    )
+    resuelta_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='publicaciones_resueltas',
+    )
+    respuesta = models.CharField(
+        max_length=300, blank=True,
+        help_text='Por qué se rechazó. Vacío en las aprobadas.',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = 'archivos_solicitudes_de_publicacion'
+        ordering = ['-created_at']
+        constraints = [
+            # Un documento no puede tener dos solicitudes abiertas a la vez: quien
+            # aprueba vería el mismo archivo dos veces sin saber cuál es la buena.
+            models.UniqueConstraint(
+                fields=['document'],
+                condition=models.Q(estado=PUBLICACION_PENDIENTE),
+                name='una_solicitud_abierta_por_documento',
+            ),
+        ]
+        verbose_name = 'Solicitud de publicación'
+        verbose_name_plural = 'Solicitudes de publicación'
+
+    def __str__(self):
+        return f'{self.document_id} → {self.destino_id} ({self.estado})'
+
+    def aprobar(self, user, destino=None):
+        """Mueve el documento a la carpeta y cierra la solicitud.
+
+        `destino` permite corregir el lugar propuesto. Mover el documento es todo lo que
+        hace falta para publicarlo: al salir de la carpeta personal —que es la
+        restringida— deja de aplicarle esa restricción y pasa a regirse por la del
+        destino, que es la de la empresa. No hay que tocar ningún permiso.
+        """
+        from django.utils import timezone
+
+        self.destino_final = destino or self.destino
+        self.document.carpeta = self.destino_final
+        self.document.save(update_fields=['carpeta'])
+
+        self.estado = PUBLICACION_APROBADA
+        self.resuelta_por = user
+        self.resolved_at = timezone.now()
+        self.save(update_fields=['destino_final', 'estado', 'resuelta_por', 'resolved_at'])
+        return self
+
+    def rechazar(self, user, respuesta=''):
+        """Cierra la solicitud sin mover nada. El archivo se queda donde estaba."""
+        from django.utils import timezone
+
+        self.estado = PUBLICACION_RECHAZADA
+        self.resuelta_por = user
+        self.respuesta = respuesta
+        self.resolved_at = timezone.now()
+        self.save(update_fields=['estado', 'resuelta_por', 'respuesta', 'resolved_at'])
+        return self

@@ -184,7 +184,6 @@ class WorkspaceListSerializer(serializers.ModelSerializer):
     def get_counts(self, obj):
         return {
             'connections': obj.connections.count(),
-            'documents': obj.documents.count(),
             'agents': obj.agents.count(),
             'members': obj.members.count(),
         }
@@ -194,13 +193,12 @@ class WorkspaceDetailSerializer(WorkspaceListSerializer):
     """El Espacio abierto: las tres pestañas en una sola respuesta."""
 
     connections = serializers.SerializerMethodField()
-    documents = serializers.SerializerMethodField()
     agents = serializers.SerializerMethodField()
     members = MemberUserSerializer(many=True, read_only=True)
 
     class Meta(WorkspaceListSerializer.Meta):
         fields = WorkspaceListSerializer.Meta.fields + [
-            'connections', 'documents', 'agents', 'members',
+            'connections', 'agents', 'members',
         ]
 
     def get_connections(self, obj):
@@ -208,12 +206,6 @@ class WorkspaceDetailSerializer(WorkspaceListSerializer):
             {'id': c.id, 'name': c.name, 'connector_type': c.connector_type,
              'category': c.category, 'is_active': c.is_active}
             for c in obj.connections.all()
-        ]
-
-    def get_documents(self, obj):
-        return [
-            {'id': d.id, 'title': d.title, 'category': d.category, 'source': d.source}
-            for d in obj.documents.all()
         ]
 
     def get_agents(self, obj):

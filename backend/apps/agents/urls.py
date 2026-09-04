@@ -17,6 +17,10 @@ from .admin_agents import AgenteAdminDetailView, AgentesAdminListView
 from .builder import (
     AgenteConstructorDetailView, AgenteConstructorListCreateView, OpcionesConstructorView,
 )
+from .propuestas import (
+    AceptarPropuestaView, OrigenesView, PropuestasView, RecomendacionesView,
+    RedactarPropuestaView,
+)
 
 urlpatterns = [
     path('mencionables/', MencionablesView.as_view(), name='mencionables'),
@@ -25,6 +29,16 @@ urlpatterns = [
     path('models/', AvailableModelsView.as_view(), name='available-models'),
     # La galeria de Agentes de la vista Trabajo (Favoritos / Todos / Editables por mi).
     path('gallery/', AgentGalleryView.as_view(), name='agent-gallery'),
+    # Los agentes que Afable propone sobre las carpetas que ya tienen material. Es el
+    # camino que reemplaza al formulario en blanco: sin repositorio no hay agente.
+    # Qué le conviene hacer ahora a quien pregunta. Se CALCULA: no gasta tokens.
+    path('recomendaciones/', RecomendacionesView.as_view(), name='recommendations'),
+    path('propuestas/', PropuestasView.as_view(), name='agent-proposals'),
+    # Sobre qué puede trabajar un agente nuevo: carpetas con material y herramientas
+    # conectadas. Sin esto, la única puerta era un formulario en blanco.
+    path('propuestas/origenes/', OrigenesView.as_view(), name='agent-origins'),
+    path('propuestas/redactar/', RedactarPropuestaView.as_view(), name='agent-proposal-draft'),
+    path('propuestas/aceptar/', AceptarPropuestaView.as_view(), name='agent-proposal-accept'),
     # Constructor: crear y editar un agente desde la app, sin codigo.
     path('constructor/', AgenteConstructorListCreateView.as_view(), name='agent-builder'),
     path('constructor/opciones/', OpcionesConstructorView.as_view(), name='agent-builder-options'),

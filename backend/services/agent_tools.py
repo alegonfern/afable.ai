@@ -387,6 +387,68 @@ def _tools_spec(org, allowed_ids=None, sesion=None):
             },
         },
         {
+            "name": "armar_estructura_inicial",
+            "description": (
+                "Arma la carpeta de la empresa y su árbol de carpetas según el rubro. Úsala "
+                "cuando alguien esté empezando y todavía no tenga nada ordenado, DESPUÉS de "
+                "preguntarle a qué se dedica la empresa. No la uses si ya hay carpetas "
+                "creadas. Solo funciona para administradores."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "rubro": {
+                        "type": "string",
+                        "enum": ["servicios", "comercio", "manufactura", "construccion", "general"],
+                        "description": (
+                            "A qué se dedica la empresa. 'servicios' para consultoras y "
+                            "estudios; 'comercio' para retail y distribución; 'manufactura' "
+                            "para producción; 'construccion' para obras; 'general' si no calza."
+                        ),
+                    },
+                },
+                "required": ["rubro"],
+            },
+        },
+        {
+            "name": "crear_carpeta",
+            "description": (
+                "Crea una carpeta. Úsala cuando el usuario diga que quiere guardar algo que no "
+                "tiene dónde ir. Si no dice dónde, pregúntale antes de inventar el lugar."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nombre": {"type": "string", "description": "Cómo se va a llamar"},
+                    "dentro_de": {
+                        "type": "string",
+                        "description": "Nombre de la carpeta que la contiene. Vacío = en la raíz.",
+                    },
+                },
+                "required": ["nombre"],
+            },
+        },
+        {
+            "name": "invitar_persona",
+            "description": (
+                "Invita a alguien del equipo por correo. Solo funciona para administradores. "
+                "Confirma el correo con el usuario antes de llamarla: un correo mal escrito "
+                "manda la invitación a un desconocido."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "correo": {"type": "string", "description": "Correo de la persona"},
+                    "rol": {
+                        "type": "string",
+                        "enum": ["miembro", "editor", "admin"],
+                        "description": "miembro lee; editor además edita; admin administra la empresa",
+                    },
+                },
+                "required": ["correo"],
+            },
+        },
+        {
             "name": "actualizar_documentos",
             "description": (
                 "Vuelve a bajar desde Google Drive los archivos conectados y devuelve el contenido "
@@ -548,7 +610,7 @@ ESCRIBEN_DOCUMENTO = {
 }
 
 
-def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None, artifacts: dict = None, allowed_doc_ids=None, agente=None, sesion=None) -> dict:
+def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None, artifacts: dict = None, allowed_doc_ids=None, agente=None, sesion=None, usuario=None) -> dict:
     """Ejecuta la herramienta y, si dejó algo escrito, lo anota en `artifacts`.
 
     El envoltorio existe para que anotar el documento tocado no dependa de acordarse en
@@ -556,6 +618,7 @@ def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None,
     """
     resultado = _ejecutar(
         name, args, org, provenance, allowed_ids, artifacts, allowed_doc_ids, agente, sesion,
+        usuario,
     )
 
     accion = ESCRIBEN_DOCUMENTO.get(name)
@@ -576,7 +639,7 @@ def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None,
     return resultado
 
 
-def _ejecutar(name: str, args: dict, org, provenance: list, allowed_ids=None, artifacts: dict = None, allowed_doc_ids=None, agente=None, sesion=None) -> dict:
+def _ejecutar(name: str, args: dict, org, provenance: list, allowed_ids=None, artifacts: dict = None, allowed_doc_ids=None, agente=None, sesion=None, usuario=None) -> dict:
     """Ejecuta una herramienta y registra procedencia en `provenance`.
     `allowed_ids` (si viene) limita a qué sistemas conectados puede acceder el agente.
     `allowed_doc_ids` hace lo mismo con los documentos: los dos salen del Espacio
@@ -584,7 +647,12 @@ def _ejecutar(name: str, args: dict, org, provenance: list, allowed_ids=None, ar
     `artifacts` (si viene) acumula figuras generadas: marcador → PNG base64.
     `agente` es quien está ejecutando: se usa para FIRMAR las versiones que escriba, así
     el historial de un documento dice qué agente lo tocó y no solo que "lo tocó la IA".
-    `sesion` es la Sesión de la conversación, si la hay: habilita anotar tareas ahí."""
+    `sesion` es la Sesión de la conversación, si la hay: habilita anotar tareas ahí.
+    `usuario` es **quien está preguntando**, y es obligatorio para todo lo que ESCRIBE
+    estructura o reparte acceso: sin él no se puede saber si esa persona tenía derecho a
+    hacerlo, y una herramienta de escritura sin esa comprobación convierte al chat en la
+    puerta de atrás de los permisos. Las herramientas de lectura no lo necesitan porque su
+    alcance ya viene acotado por `allowed_ids` / `allowed_doc_ids`."""
     args = _normalizar_args(name, args)
     now = datetime.now().strftime('%H:%M')
     try:
@@ -593,6 +661,15 @@ def _ejecutar(name: str, args: dict, org, provenance: list, allowed_ids=None, ar
 
         if name == 'run_python':
             return _run_python_tool(args or {}, org, provenance, allowed_ids, artifacts, now)
+
+        if name == 'armar_estructura_inicial':
+            return _armar_estructura_inicial(args or {}, org, usuario)
+
+        if name == 'crear_carpeta':
+            return _crear_carpeta(args or {}, org, usuario)
+
+        if name == 'invitar_persona':
+            return _invitar_persona(args or {}, org, usuario)
 
         if name == 'crear_tarea':
             return _crear_tarea(args or {}, sesion, agente, provenance, now)
@@ -1011,4 +1088,134 @@ def _escribir_documento(name, args, org, provenance, allowed_doc_ids, now, agent
         "ok": True, "id": doc.id, "titulo": doc.title, "version": version.numero,
         "nota": f'Guardado como versión {version.numero}. El equipo puede ver qué '
                 f'cambiaste y volver atrás.',
+    }
+
+
+# ── Construir desde la conversación ───────────────────────────────────────────
+#
+# Todo lo que sigue ESCRIBE. Es lo que convierte al chat en la puerta del producto en vez
+# de una ventana de preguntas: el usuario que no es técnico no tiene que encontrar la
+# pantalla, describe lo que quiere y pasa.
+#
+# ⚠️ La regla que las gobierna a todas: **el chat no puede ser la puerta de atrás de los
+# permisos.** Cada una comprueba el rol de quien pregunta antes de tocar nada, y para las
+# carpetas la comprobación la hace el mismo motor que usa la pantalla
+# (`apps.archivos.permisos`), no una copia — una regla repetida en dos lados es una regla
+# que en el segundo se olvida, y acá lo que se olvida es una fuga.
+
+def _membresia(org, usuario):
+    from apps.workspaces.models import Membership
+
+    if usuario is None or not getattr(usuario, 'is_authenticated', True):
+        return None
+    return Membership.objects.filter(organization=org, user=usuario).first()
+
+
+def _es_administrador(org, usuario):
+    from apps.workspaces.models import ROLE_ADMIN
+
+    m = _membresia(org, usuario)
+    return m is not None and m.role == ROLE_ADMIN
+
+
+def _armar_estructura_inicial(args, org, usuario):
+    """Crea la carpeta de la empresa y su árbol, según el rubro.
+
+    Es el momento en que Afable deja de ser una pantalla vacía. El agente pregunta a qué
+    se dedica la empresa y llama a esto: sale un repositorio armado, con las carpetas que
+    ese rubro necesita, en vez de un «cree su primera carpeta» que nadie sabe contestar.
+    """
+    from services.estructura_inicial import RUBROS, crear_estructura
+
+    if not _es_administrador(org, usuario):
+        return {"error": "Solo un administrador de la empresa puede armar la estructura."}
+
+    rubro = (args.get('rubro') or 'general').strip().lower()
+    validos = {clave for clave, _ in RUBROS}
+    if rubro not in validos:
+        return {"error": f"Rubro desconocido. Los que hay son: {', '.join(sorted(validos))}."}
+
+    root = crear_estructura(org, rubro, usuario)
+    hijas = list(root.hijas.order_by('name').values_list('name', flat=True))
+    return {
+        "carpeta": root.name,
+        "creadas": hijas,
+        "detalle": (
+            f"Listo: «{root.name}» quedó armada con {len(hijas)} carpetas. "
+            "Todo el equipo las puede leer y solo un administrador las modifica."
+        ),
+    }
+
+
+def _crear_carpeta(args, org, usuario):
+    """Una carpeta nueva, donde el usuario diga.
+
+    El permiso lo resuelve `apps.archivos.permisos`, el mismo módulo que usa la pantalla:
+    hace falta edición sobre la carpeta que la va a contener. Así el chat no puede crear
+    nada donde la persona no podría crearlo a mano.
+    """
+    from apps.archivos.models import Carpeta
+    from apps.archivos.permisos import NIVEL_EDICION, nivel_sobre_carpeta
+
+    nombre = (args.get('nombre') or '').strip()
+    if not nombre:
+        return {"error": "Falta el nombre de la carpeta."}
+
+    membership = _membresia(org, usuario)
+    if membership is None:
+        return {"error": "No puedo saber quién eres, así que no voy a crear carpetas."}
+
+    dentro = (args.get('dentro_de') or '').strip()
+    padre = None
+    if dentro:
+        padre = Carpeta.objects.filter(organization=org, name__iexact=dentro).first()
+        if padre is None:
+            return {"error": f"No encuentro una carpeta que se llame «{dentro}»."}
+
+    if nivel_sobre_carpeta(usuario, padre, membership) != NIVEL_EDICION:
+        donde = f'«{padre.name}»' if padre else 'la raíz'
+        return {"error": f"No tienes permiso para crear carpetas en {donde}."}
+
+    if Carpeta.objects.filter(organization=org, parent=padre, name=nombre).exists():
+        return {"error": f"Ya existe una carpeta «{nombre}» ahí."}
+
+    carpeta = Carpeta.objects.create(
+        organization=org, parent=padre, name=nombre, created_by=usuario,
+    )
+    return {"carpeta": carpeta.name, "ruta": carpeta.ruta(), "id": carpeta.id}
+
+
+def _invitar_persona(args, org, usuario):
+    """Invita a alguien por correo, con su rol.
+
+    Repartir acceso a los datos de la empresa es de administradores, se pida por la
+    pantalla o hablando.
+    """
+    from apps.workspaces.models import ROLE_CHOICES, ROLE_MEMBER, Invitation, Membership
+
+    if not _es_administrador(org, usuario):
+        return {"error": "Solo un administrador de la empresa puede invitar personas."}
+
+    correo = (args.get('correo') or '').strip().lower()
+    if '@' not in correo:
+        return {"error": "Ese no parece un correo."}
+
+    rol = (args.get('rol') or ROLE_MEMBER).strip().lower()
+    if rol not in {clave for clave, _ in ROLE_CHOICES}:
+        return {"error": f"Rol desconocido: {rol}."}
+
+    if Membership.objects.filter(organization=org, user__email__iexact=correo).exists():
+        return {"error": f"{correo} ya está en la empresa."}
+
+    pendiente = Invitation.objects.filter(
+        organization=org, email=correo, accepted_at__isnull=True, revoked_at__isnull=True,
+    ).first()
+    if pendiente is not None and pendiente.is_pending:
+        return {"error": f"Ya hay una invitación pendiente para {correo}."}
+
+    invitacion = Invitation.create_for(org, correo, role=rol, invited_by=usuario)
+    return {
+        "invitado": invitacion.email,
+        "rol": invitacion.role,
+        "detalle": f"Invitación enviada a {invitacion.email} como {invitacion.get_role_display().lower()}.",
     }

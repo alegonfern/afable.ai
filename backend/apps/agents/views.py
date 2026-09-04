@@ -1033,7 +1033,7 @@ class DirectChatView(APIView):
                 context.get('allowed_ids'), context.get('allowed_doc_ids'),
                 # Se llena con lo que el agente deje escrito, para que el chat pueda
                 # ofrecer abrirlo sin mandar a la persona a otra pantalla.
-                tocados=artefactos,
+                tocados=artefactos, usuario=request.user,
                 system_persona=context.get('system_persona', ''),
                 # Para firmar las versiones que escriba: el historial de un documento
                 # dice qué agente lo tocó, no solo que "lo tocó la IA".
@@ -1118,7 +1118,7 @@ class DirectChatView(APIView):
                 historia, context['org'], context['system_prompt'], modelo,
                 context.get('allowed_ids'), context.get('allowed_doc_ids'),
                 tocados=artefactos, agente=agente, sesion=conversation.sesion,
-                system_persona=context.get('system_persona', ''),
+                system_persona=context.get('system_persona', ''), usuario=request.user,
             )
         else:
             texto = chat_direct(historia, context['system_prompt'], modelo,
@@ -1271,7 +1271,7 @@ class DirectChatStreamView(APIView):
                 for event in run_agent_live_events(
                     full_history, org, system_prompt, model, allowed_ids, allowed_doc_ids,
                     agente=agent, sesion=conversation.sesion,
-                    system_persona=context.get('system_persona', ''),
+                    system_persona=context.get('system_persona', ''), usuario=request.user,
                 ):
                     if 'status' in event:
                         yield f"data: {json.dumps({'status': event['status']})}\n\n"

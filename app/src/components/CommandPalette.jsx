@@ -3,22 +3,45 @@ import { Box, Typography, InputBase, useTheme } from '@mui/material';
 import {
   MessageSquare, Bot, LayoutDashboard, Plug, Plus, Search,
   Settings, HelpCircle, Building2, User, Users,
+  FolderOpen, CheckSquare, Timer, BookOpen, CreditCard, Layers,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 
-const COMMANDS = [
+// ⭐ La paleta es la RED DE SEGURIDAD del menu. Cuando la barra bajo de trece
+// destinos a cuatro, lo que salio de ella no dejo de existir: sigue acá, y por eso
+// sacarlo del menu no fue esconderlo. Toda ruta de la app tiene que figurar en esta
+// lista — una pantalla sin ninguna forma de llegar es una pantalla que no existe.
+const COMANDOS_DESCONECTADOS = [
   { group: 'Navegación', icon: MessageSquare,  label: 'Chat',             shortcut: 'G C', action: '/app' },
-  { group: 'Navegación', icon: LayoutDashboard, label: 'Tablero',         shortcut: 'G T', action: '/app/tablero' },
   { group: 'Navegación', icon: Bot,            label: 'Agentes',          shortcut: 'G A', action: '/app/agentes' },
-  { group: 'Navegación', icon: Plug,           label: 'Conexiones',    shortcut: 'G I', action: '/app/contexto?tab=integraciones' },
-  { group: 'Navegación', icon: Building2,      label: 'Workspace',                         action: '/app/admin/workspace' },
+  { group: 'Navegación', icon: FolderOpen,     label: 'Archivos',         shortcut: 'G F', action: '/app/archivos' },
+  { group: 'Navegación', icon: Users,          label: 'Equipo',                            action: '/app/admin/personas' },
+  { group: 'Navegación', icon: Plug,           label: 'Conexiones',       shortcut: 'G I', action: '/app/contexto?tab=integraciones' },
+  { group: 'Navegación', icon: CheckSquare,    label: 'Tareas',                            action: '/app/tareas' },
+  { group: 'Navegación', icon: Timer,          label: 'Disparadores',                      action: '/app/automatizaciones' },
+  { group: 'Navegación', icon: Layers,         label: 'Espacios',                          action: '/app/contexto?tab=espacios' },
+  { group: 'Navegación', icon: LayoutDashboard, label: 'Tablero',         shortcut: 'G T', action: '/app/tablero' },
+  { group: 'Navegación', icon: BookOpen,       label: 'Contexto de la empresa',            action: '/app/contexto?tab=mi-contexto' },
+  { group: 'Navegación', icon: Bot,            label: 'Agentes (administración)',           action: '/app/admin/agentes' },
+  { group: 'Navegación', icon: Building2,      label: 'Su empresa',                        action: '/app/admin/workspace' },
+  { group: 'Navegación', icon: CreditCard,     label: 'Facturación',                       action: '/app/admin/facturacion' },
   { group: 'Navegación', icon: User,           label: 'Mi Perfil',                         action: '/app/perfil' },
-  { group: 'Navegación', icon: Users,          label: 'Equipo',                             action: '/app/equipo' },
   { group: 'Navegación', icon: Settings,       label: 'Configuración',                     action: '/app/configuracion' },
   { group: 'Navegación', icon: HelpCircle,     label: 'Ayuda',                             action: '/app/ayuda' },
+  { group: 'Navegación', icon: Settings,       label: 'Banco de pruebas',                  action: '/app/banco-de-pruebas' },
   { group: 'Acciones',   icon: Plus,           label: 'Nueva conversación',                action: 'new-chat' },
   { group: 'Acciones',   icon: Bot,            label: 'Crear agente',                      action: '/app/agentes/nuevo' },
+];
+
+// ⛔ DESCONECTADO el 2026-09-01: la paleta sería la puerta trasera a todo lo que se
+// sacó del menú. Queda solo lo que sigue vivo — el chat y la cuenta. Reconectar una
+// pantalla es mover su línea de `COMANDOS_DESCONECTADOS` a esta lista.
+const COMMANDS = [
+  { group: 'Navegación', icon: MessageSquare,  label: 'Chat',              shortcut: 'G C', action: '/app' },
+  { group: 'Navegación', icon: User,           label: 'Mi Perfil',                          action: '/app/perfil' },
+  { group: 'Navegación', icon: HelpCircle,     label: 'Ayuda',                              action: '/app/ayuda' },
+  { group: 'Acciones',   icon: Plus,           label: 'Nueva conversación',                 action: 'new-chat' },
 ];
 
 export default function CommandPalette({ open, onClose }) {

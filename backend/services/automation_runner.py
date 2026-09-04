@@ -44,6 +44,9 @@ def _run_prompt(user, organization, prompt: str, agent=None) -> str:
             model=ctx.get('agent_model'), allowed_ids=ctx.get('allowed_ids'),
             allowed_doc_ids=ctx.get('allowed_doc_ids'), agente=agent,
             system_persona=system_persona,
+            # Una automatización corre a nombre de quien la creó: sus permisos son los
+            # que valen, igual que si hubiera hecho la pregunta a mano.
+            usuario=user,
         )
     else:
         salida = chat_direct([{'role': 'user', 'content': prompt}], system_prompt,

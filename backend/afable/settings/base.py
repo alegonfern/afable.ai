@@ -140,6 +140,34 @@ ANTHROPIC_API_KEY = config('ANTHROPIC_API_KEY', default='')
 DEEPSEEK_API_KEY = config('DEEPSEEK_API_KEY', default='')
 DEEPSEEK_MODEL = config('DEEPSEEK_MODEL', default='deepseek-v4-flash')
 
+# ⭐ El modelo con el que Afable trabaja SOLO: los informes que deja hechos, los avisos que
+# se adelantan, las propuestas de agente. Es trabajo que el usuario no pidió, así que lo
+# paga la casa — y por eso va en lo más barato que hay, no en lo mejor.
+#
+# `deepseek-v4-flash` es el más económico de DeepSeek (US$0,22/0,66 por millón fuera de
+# hora punta, US$0,44/1,32 en punta; la tarifa cargada en `seed_tarifas` usa la de punta,
+# que es la que no subestima el gasto).
+#
+# ⚠️ Esto NO es el modelo del chat. Cuando la persona pregunta, responde el modelo que la
+# empresa tenga configurado; si alguien quiere uno mejor para su pregunta, eso se cobra
+# aparte. La separación importa: mezclar las dos cosas hace que el trabajo de fondo se
+# lleve el presupuesto del que sí está preguntando.
+MODELO_TRABAJO_AUTONOMO = config('MODELO_TRABAJO_AUTONOMO', default='deepseek-v4-flash')
+
+# Quién puede abrir el banco de pruebas (`apps/organizations/banco_de_pruebas.py`): una
+# pantalla interna que carga demos, arma estructuras y borra cosas de un botón.
+#
+# ⚠️ Es una LISTA DE CORREOS y no `is_staff` a propósito. Un flag de Django se otorga sin
+# pensar —al crear un superusuario, al depurar algo— y esta pantalla borra carpetas enteras.
+# Una lista hay que editarla, y quien la edita sabe lo que está habilitando.
+#
+# Vacía por defecto: en producción nadie entra salvo que se ponga el correo en el `.env`.
+CUENTAS_DE_PRUEBA = [
+    c.strip().lower()
+    for c in config('CUENTAS_DE_PRUEBA', default='').split(',')
+    if c.strip()
+]
+
 # Correo (automatizaciones/rutinas). Sin EMAIL_HOST_USER el backend es consola:
 # el correo se imprime en los logs — útil en desarrollo.
 EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')

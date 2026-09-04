@@ -119,6 +119,23 @@ export const api = {
   getBuilderOptions: (workspace) =>
     apiClient.get('/agents/constructor/opciones/', { params: { workspace } }),
   buildAgent: (data) => apiClient.post('/agents/constructor/', data),
+
+  // Los agentes que Afable propone sobre las carpetas que ya tienen material. La lista es
+  // barata; redactar cuesta una llamada al modelo, por eso se pide de a una.
+  // Qué le conviene hacer ahora a quien pregunta. Se CALCULA en el servidor a partir del
+  // estado real de la empresa: no gasta tokens. La IA entra recién si tocan una.
+  getRecomendaciones: (workspace) =>
+    apiClient.get('/agents/recomendaciones/', { params: { workspace } }),
+  // Sobre qué puede trabajar un agente nuevo: carpetas con material y herramientas
+  // conectadas. Es lo que reemplaza al formulario en blanco.
+  getOrigenesDeAgente: (workspace) =>
+    apiClient.get('/agents/propuestas/origenes/', { params: { workspace } }),
+  getPropuestasDeAgente: (workspace) =>
+    apiClient.get('/agents/propuestas/', { params: { workspace } }),
+  redactarPropuestaDeAgente: (workspace, carpeta) =>
+    apiClient.post('/agents/propuestas/redactar/', { workspace, carpeta }),
+  aceptarPropuestaDeAgente: (data) =>
+    apiClient.post('/agents/propuestas/aceptar/', data),
   getBuilderAgent: (id, workspace) =>
     apiClient.get(`/agents/constructor/${id}/`, { params: { workspace } }),
   updateBuilderAgent: (id, data) => apiClient.patch(`/agents/constructor/${id}/`, data),
@@ -151,7 +168,24 @@ export const api = {
   getConnections: () => apiClient.get('/organizations/connections/'),
   createConnection: (data) => apiClient.post('/organizations/connections/', data),
   updateConnection: (id, data) => apiClient.patch(`/organizations/connections/${id}/`, data),
-  deleteConnection: (id) => apiClient.delete(`/organizations/connections/${id}/`),
+  // ⭐ Esto NO borra: apaga el conector. Lo que entró por él se queda, porque borrarlo
+  // dejaría documentos sin origen y agentes apuntando a un sistema que ya no existe.
+  desactivarConnection: (id) => apiClient.delete(`/organizations/connections/${id}/`),
+  // La excepción: descartar el conector de PRUEBA cuando el test falla. Ese nunca llegó
+  // a ser un conector de la empresa, es un intento — y si se desactivara en vez de
+  // borrarse, cada credencial mal tipeada dejaría un fantasma en la lista.
+  descartarConnectionDePrueba: (id) =>
+    apiClient.delete(`/organizations/connections/${id}/?descartar=1`),
+  getCatalogoDeConectores: () => apiClient.get('/organizations/connections/catalogo/'),
+
+  // Banco de pruebas: recorrer estados del producto sin armarlos a mano. Solo responde a
+  // los correos de CUENTAS_DE_PRUEBA; para el resto es 403.
+  getBancoDePruebas: (workspace) =>
+    apiClient.get('/organizations/banco-de-pruebas/', { params: { workspace } }),
+  correrEnBancoDePruebas: (data) =>
+    apiClient.post('/organizations/banco-de-pruebas/', data),
+  cambiarEstadoConnection: (id, is_active) =>
+    apiClient.post(`/organizations/connections/${id}/estado/`, { is_active }),
   testConnection: (id) => apiClient.post(`/organizations/connections/${id}/test/`),
   syncConnection: (id) => apiClient.post(`/organizations/connections/${id}/sync/`),
   startGoogleDriveConnect: () => apiClient.get('/organizations/connections/google-drive/start/'),
