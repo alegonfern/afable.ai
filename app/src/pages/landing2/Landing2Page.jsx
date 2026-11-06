@@ -27,6 +27,7 @@ import { RecorteLoQueHizoHoy } from './escenas/VistaAgente';
 import { ModosAnimados, RegistroEnVivo } from './escenas/EscenasChicas';
 import { AgentesAnimados, DoloresAnimados } from './escenas/EscenasAgentes';
 import LogoNegro from './escenas/LogoNegro';
+import AsteriscoGiratorio from './escenas/AsteriscoGiratorio';
 import './Landing2Page.css';
 import './Landing2Sobrio.css';
 
@@ -327,6 +328,7 @@ export default function Landing2Page() {
   return (
     <div className="lp lp2">
       <MenuPrincipal />
+      <AsteriscoGiratorio />
 
       {/* 1 · Hero con marco: titular, descripción y botones centrados, y debajo la
           vista Agente de Finanzas sobre una pintura (detalle en HeroMarco.jsx). */}
