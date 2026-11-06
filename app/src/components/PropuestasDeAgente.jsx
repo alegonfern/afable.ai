@@ -93,7 +93,7 @@ export default function PropuestasDeAgente({ onCreado }) {
       border: `1px solid ${theme.palette.divider}`, bgcolor: bgSuave,
     }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-        <Sparkles size={15} color="#586AD0" />
+        <Sparkles size={15} color="var(--af-acento)" />
         <Typography sx={{ fontSize: '0.9rem', fontWeight: 600, color: 'text.primary' }}>
           {abierta ? `Un agente para ${abierta.nombre}` : 'Estas carpetas ya pueden tener agente'}
         </Typography>
@@ -115,7 +115,7 @@ export default function PropuestasDeAgente({ onCreado }) {
                   px: 1.5, py: 0.85, borderRadius: '8px', cursor: 'pointer',
                   fontFamily: 'inherit', fontSize: '0.875rem', color: 'text.primary',
                   bgcolor: 'transparent', border: `1px solid ${theme.palette.divider}`,
-                  '&:hover': { borderColor: '#586AD0' }, transition: 'border-color 0.12s',
+                  '&:hover': { borderColor: 'var(--af-acento)' }, transition: 'border-color 0.12s',
                 }}
               >
                 {c.nombre}
@@ -165,7 +165,7 @@ export default function PropuestasDeAgente({ onCreado }) {
               onClick={aceptar}
               disabled={creando || !borrador.nombre?.trim()}
               sx={{
-                textTransform: 'none', bgcolor: '#586AD0', color: '#fff',
+                textTransform: 'none', bgcolor: 'var(--af-acento)', color: 'var(--af-sobre-acento)',
                 px: 2, '&:hover': { bgcolor: '#4757b8' },
               }}
             >

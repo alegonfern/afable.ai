@@ -131,3 +131,33 @@ class AvisarNoPuedeVoltearLaAccionTests(BaseNotis):
             self.assertEqual(
                 avisar([self.beto], tipo=TIPO_MENSAJE, titulo='Algo'), 0,
             )
+
+
+class AvisosPorCorreoTests(TestCase):
+    """Los avisos sin leer salen por correo pasado un rato, una sola vez (25-10-2026)."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        self.ana = get_user_model().objects.create_user(username='ana@afable.test', email='ana@afable.test', password='x-12345678')
+
+    def _aviso(self, hace_min, **extra):
+        from datetime import timedelta
+        from django.utils import timezone
+        from .models import Notificacion
+        n = Notificacion.objects.create(user=self.ana, titulo='Revisa la respuesta de Afable', detalle='Confirmar OV-0001.',
+                                        enlace='/app/chat?conversation=1', **extra)
+        Notificacion.objects.filter(pk=n.pk).update(created_at=timezone.now() - timedelta(minutes=hace_min))
+        return n
+
+    def test_sale_solo_la_que_sigue_sin_leer_pasados_diez_minutos_y_una_vez(self):
+        from django.core import mail
+        from django.utils import timezone
+        from .correo import enviar_pendientes
+        self._aviso(15)
+        self._aviso(3)                      # muy reciente: todavía puede verla en la campana
+        self._aviso(15, leida=True)         # ya la leyó
+        self._aviso(60 * 24 * 5)            # demasiado vieja
+        self.assertEqual(enviar_pendientes(timezone.now()), 1)
+        self.assertEqual(mail.outbox[0].to, ['ana@afable.test'])
+        self.assertIn('/app/chat?conversation=1', mail.outbox[0].body)
+        self.assertEqual(enviar_pendientes(timezone.now()), 0)

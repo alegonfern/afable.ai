@@ -465,6 +465,22 @@ def _tools_spec(org, allowed_ids=None, sesion=None):
             },
         },
     ]
+    # Finanzas: solo si la empresa ya cargó algo del SII. Sin datos, ofrecerla haría que el
+    # modelo la invoque para responder "no hay datos".
+    from apps.finanzas import herramienta as finanzas
+    if finanzas.disponible_para(org):
+        todas.append(finanzas.ESPECIFICACION)
+        # Conciliar desde el chat (25-10-2026): con documentos cargados ya hay qué cruzar.
+        from apps.finanzas import herramienta_conciliar
+        todas.append(herramienta_conciliar.ESPECIFICACION)
+    # Compras y Ventas: siempre que haya empresa, porque desde el chat se crea la primera
+    # cotización (no solo se consulta lo que ya hay).
+    if org is not None:
+        from apps.comercial import herramienta as comercial
+        todas.append(comercial.ESPECIFICACION)
+        # La guía para bajar los libros del SII (25-10-2026): justo la necesita quien todavía
+        # no cargó nada, así que va siempre.
+        todas.append(GUIA_LIBROS_SII)
     if not sesion:
         todas = [t for t in todas if t['name'] not in SOLO_EN_SESION]
     if conns:
@@ -473,6 +489,23 @@ def _tools_spec(org, allowed_ids=None, sesion=None):
     # crear y editar archivos — y es todo lo que una empresa que solo subió documentos
     # necesita del agente.
     return [t for t in todas if t['name'] not in SOLO_CON_CONEXIONES]
+
+
+GUIA_LIBROS_SII = {
+    "name": "guia_libros_sii",
+    "description": (
+        "Muestra en la pantalla la guía paso a paso para bajar del SII el Registro de Compras, el de "
+        "Ventas o las boletas de honorarios recibidas, con el botón para subir el archivo ahí mismo. "
+        "Úsala cuando pregunten cómo cargar sus libros, cómo bajar el RCV o cómo alimentar Afable con "
+        "sus datos del SII. Después responde en una frase: la guía ya se ve."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {"libro": {"type": "string", "enum": ["compras", "ventas", "honorarios"],
+                                 "description": "el libro por el que preguntan (por defecto compras)"}},
+        "required": [],
+    },
+}
 
 
 def tools_for_ollama(org, allowed_ids=None, sesion=None):
@@ -636,6 +669,13 @@ def execute_tool(name: str, args: dict, org, provenance: list, allowed_ids=None,
                 'titulo': resultado.get('titulo') or '',
                 'accion': accion,
             })
+
+    # Lo que hizo o consultó en el ERP, como tarjeta para el chat (ver tarjetas_chat).
+    if name in ('compras_ventas', 'consultar_finanzas', 'conciliar_banco', 'guia_libros_sii') and artifacts is not None:
+        from services import tarjetas_chat
+        tarjeta = tarjetas_chat.de(name, args, resultado, org)
+        if tarjeta:
+            artifacts.setdefault('acciones', []).append(tarjeta)
     return resultado
 
 
@@ -661,6 +701,38 @@ def _ejecutar(name: str, args: dict, org, provenance: list, allowed_ids=None, ar
 
         if name == 'run_python':
             return _run_python_tool(args or {}, org, provenance, allowed_ids, artifacts, now)
+
+        if name == 'consultar_finanzas':
+            from apps.finanzas import herramienta as finanzas
+            resultado = finanzas.ejecutar(org, args or {})
+            provenance.append({
+                "system": 'Finanzas (SII y banco)', "category": "finanzas",
+                "tables": [(args or {}).get('consulta')], "rows": None, "at": now,
+            })
+            return resultado
+
+        if name == 'guia_libros_sii':
+            libro = (args or {}).get('libro')
+            return {'guia': libro if libro in ('compras', 'ventas', 'honorarios') else 'compras',
+                    'mostrada': True, 'nota': 'La guía ya está en la pantalla del usuario.'}
+
+        if name == 'conciliar_banco':
+            from apps.finanzas import herramienta_conciliar
+            resultado = herramienta_conciliar.ejecutar(org, args or {}, usuario)
+            provenance.append({
+                "system": 'Banco (conciliación)', "category": "finanzas",
+                "tables": [(args or {}).get('accion')], "rows": None, "at": now,
+            })
+            return resultado
+
+        if name == 'compras_ventas':
+            from apps.comercial import herramienta as comercial
+            resultado = comercial.ejecutar(org, args or {}, usuario)
+            provenance.append({
+                "system": 'Compras y Ventas', "category": "comercial",
+                "tables": [(args or {}).get('accion')], "rows": None, "at": now,
+            })
+            return resultado
 
         if name == 'armar_estructura_inicial':
             return _armar_estructura_inicial(args or {}, org, usuario)

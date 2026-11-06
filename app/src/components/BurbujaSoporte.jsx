@@ -76,10 +76,11 @@ export default function BurbujaSoporte() {
         onClick={() => setAbierta(true)}
         title="Escribir a soporte"
         sx={{
-          position: 'fixed', right: 20, bottom: 20, zIndex: 1200,
-          width: 44, height: 44, bgcolor: '#586AD0', color: '#fff',
+          // En el teléfono, más chica y más pegada a la esquina: tapa menos contenido.
+          position: 'fixed', right: { xs: 12, sm: 20 }, bottom: { xs: 12, sm: 20 }, zIndex: 1200,
+          width: { xs: 38, sm: 44 }, height: { xs: 38, sm: 44 }, bgcolor: 'var(--af-acento)', color: 'var(--af-sobre-acento)',
           boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
-          '&:hover': { bgcolor: '#2F42A6' },
+          '&:hover': { bgcolor: 'var(--af-acento-hover)' },
         }}
       >
         <LifeBuoy size={20} />
@@ -102,7 +103,7 @@ export default function BurbujaSoporte() {
         display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1.5,
         borderBottom: `1px solid ${borde}`,
       }}>
-        <LifeBuoy size={16} color="#586AD0" />
+        <LifeBuoy size={16} color="var(--af-acento)" />
         <Typography sx={{ flex: 1, fontSize: '0.9375rem', fontWeight: 600 }}>Soporte</Typography>
         <IconButton size="small" onClick={cerrar} sx={{ color: textMuted }}>
           <X size={15} />

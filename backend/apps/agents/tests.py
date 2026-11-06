@@ -1038,3 +1038,48 @@ class BuscarConversacionesTests(TestCase):
     def test_sin_texto_devuelve_el_historial(self):
         r = self._buscar(self.duena)
         self.assertIn(self.mio.id, [c['id'] for c in r.data])
+
+
+class PantallaDelPanelLateralTests(TestCase):
+    """El chat del panel lateral manda la pantalla abierta; el prompt la recibe recortada."""
+
+    def test_sin_pantalla_no_agrega_nada(self):
+        from apps.agents.views import _bloque_pantalla
+        self.assertEqual(_bloque_pantalla(None), '')
+        self.assertEqual(_bloque_pantalla('   '), '')
+
+    def test_con_pantalla_la_nombra_y_la_recorta(self):
+        from apps.agents.views import _bloque_pantalla
+        self.assertIn('«Contabilidad › Documentos»', _bloque_pantalla('Contabilidad ›\n Documentos'))
+        self.assertLess(len(_bloque_pantalla('x' * 5000)), 600)
+
+
+class ContextoDelPanelLateralTests(TestCase):
+    """Cada pantalla de trabajo del panel lateral recupera su propio hilo."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from rest_framework.test import APIClient
+        self.user = get_user_model().objects.create_user(username='ctx@afable.test', email='ctx@afable.test', password='x-12345678')
+        self.otro = get_user_model().objects.create_user(username='otro@afable.test', email='otro@afable.test', password='x-12345678')
+        from apps.agents.models import Conversation
+        org = Organization.objects.create(owner=self.user, name='Empresa')
+        agente = Agent.objects.create(organization=org, name='Afable')
+        Conversation.objects.create(agent=agente, user=self.user, contexto='empresa:ventas', title='v')
+        Conversation.objects.create(agent=agente, user=self.user, title='normal')
+        Conversation.objects.create(agent=agente, user=self.otro, contexto='empresa:ventas', title='ajena')
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    def test_filtra_por_contexto_y_solo_los_propios(self):
+        r = self.client.get('/api/v1/agents/conversations/', {'contexto': 'empresa:ventas'})
+        self.assertEqual([c['title'] for c in r.data], ['v'])
+
+    def test_sin_contexto_lista_todo_lo_propio(self):
+        r = self.client.get('/api/v1/agents/conversations/')
+        self.assertEqual(sorted(c['title'] for c in r.data), ['normal', 'v'])
+
+    def test_la_lista_dice_el_contexto_de_cada_hilo(self):
+        # La barra lateral lo usa para mostrar de qué módulo es cada conversación.
+        r = self.client.get('/api/v1/agents/conversations/')
+        self.assertEqual({c['title']: c['contexto'] for c in r.data}, {'v': 'empresa:ventas', 'normal': ''})

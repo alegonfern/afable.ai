@@ -36,6 +36,56 @@ class Command(BaseCommand):
 
         sync_due_connections()
 
+        # Las automatizaciones de los módulos (Finanzas, PMV): una vez al día desde las 8:00.
+        try:
+            from apps.finanzas.automatizaciones import correr_pendientes
+            correr_pendientes(now)
+        except Exception as e:                       # una falla acá no frena las demás
+            self.stdout.write(self.style.ERROR(f'  automatizaciones de módulos: {e}'))
+
+        # Los avisos que siguen sin leer, también por correo (notificaciones/correo.py).
+        try:
+            from apps.notificaciones.correo import enviar_pendientes
+            enviados = enviar_pendientes(now)
+            if enviados:
+                self.stdout.write(f'  avisos por correo: {enviados}')
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f'  avisos por correo: {e}'))
+
+        # La facturación electrónica: subir al SII lo emitido y consultar cómo le fue.
+        try:
+            from apps.dte.motor import procesar
+            movidos = procesar(now)
+            if movidos:
+                self.stdout.write(f'  envíos al SII: {movidos}')
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f'  envíos al SII: {e}'))
+
+        # Las casillas de intercambio: los documentos que mandan los proveedores (cada 15 min).
+        try:
+            from apps.dte.intercambio import procesar_casillas
+            llegados = procesar_casillas(now)
+            if llegados:
+                self.stdout.write(f'  documentos recibidos: {llegados}')
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f'  casillas de intercambio: {e}'))
+
+        # Los conectores que corren solos (HubSpot, SII · Libros contables).
+        try:
+            from apps.conectores.servicio import procesar_programadas
+            corridos = procesar_programadas(now)
+            if corridos:
+                self.stdout.write(f'  conectores: {corridos}')
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f'  conectores: {e}'))
+
+        # El dólar y la UF del día, para las cotizaciones y órdenes en otra moneda.
+        try:
+            from apps.comercial.cambio import actualizar_hoy
+            actualizar_hoy(timezone.localdate())
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f'  tipos de cambio: {e}'))
+
         for automation in Automation.objects.filter(is_active=True)\
                                             .select_related('user', 'organization', 'connection'):
             if not automation.is_due(now):

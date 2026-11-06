@@ -28,9 +28,8 @@ from services.agent_service import chat_direct, stream_direct, resolve_model
 
 
 def _conversation_title(agent, message: str) -> str:
-    """Título del historial: el agente con que se habló + el tema."""
-    if agent is not None and agent.name and agent.name != 'Afable Assistant':
-        return f'{agent.name} · {message[:60]}'
+    """Título del historial: el tema. Hasta el 25-10-2026 llevaba delante el agente con que se
+    habló; desde que el chat opera el ERP y los agentes no se ofrecen, ese prefijo era ruido."""
     return message[:80]
 
 
@@ -528,6 +527,29 @@ fuente — el sistema la añade automáticamente con la tabla y la hora reales.
             'eso, dilo con claridad y menciona que se conecta desde Espacios › Conexiones. '
             'Nunca inventes una cifra.\n'
         )
+        # Finanzas (PMV, 17-10-2026): lo que la empresa cargó del SII y sus cartolas. Va aparte
+        # de los sistemas conectados: una empresa sin ERP igual tiene sus ventas y su IVA acá.
+        from apps.finanzas import herramienta as finanzas_tool
+        if finanzas_tool.disponible_para(org):
+            bloque_sistemas += (
+                '\nTIENES ADEMÁS la herramienta consultar_finanzas, con lo que la empresa cargó '
+                'del SII (Registro de Compras y Ventas, boletas de honorarios) y sus cartolas: '
+                'ventas, gastos, ganancia, margen, IVA y F29, quién le debe y a quién le debe, '
+                'caja y cuánto puede retirar, gasto por categoría, proyectos y conciliación. Para '
+                'esas preguntas ÚSALA antes de responder, aunque no haya un sistema conectado: '
+                'esos datos sí los tienes. Responde con las cifras que devuelve, en pesos '
+                'chilenos, y aclara que el F29 es una provisión estimada.\n'
+            )
+        # Las tarjetas del chat (25-10-2026, services/tarjetas_chat.py): lo que consulta o hace en
+        # el ERP ya se ve dibujado. Si además lo escribe, la respuesta sale dos veces.
+        bloque_sistemas += (
+            '\nCÓMO SE VE TU RESPUESTA: lo que consultes o hagas con compras_ventas, '
+            'consultar_finanzas o conciliar_banco la pantalla lo muestra como TARJETA (el documento con sus líneas y '
+            'total, la lista con sus montos, las cifras, y lo que pide confirmación con botones '
+            'Confirmar y Cancelar). No repitas esa lista ni esos montos uno por uno y no escribas '
+            'rutas /app/...: responde en una a tres frases con lo importante o con lo que sigue. '
+            'Si algo necesita confirmación, pregúntalo en una frase: la persona contesta con el botón.\n'
+        )
 
         return {
             # Se llamaba 'connected_systems', y desde que el agente corre con
@@ -864,7 +886,8 @@ Acciones y cuándo usarlas:
 
 - Navegar a sección: cuando el usuario quiera ir a una parte de la app
   → __ACTION__{"type":"navigate","path":"/app/agentes"}__
-  Rutas válidas: /app, /app/agentes, /app/contexto, /app/tablero
+  Rutas válidas: /app, /app/ventas, /app/ventas/cotizaciones, /app/ventas/ordenes, /app/ventas/por-facturar, /app/compras, /app/compras/ordenes, /app/inventario, /app/contabilidad, /app/finanzas
+  (las herramientas de Compras y Ventas devuelven un `enlace` a la ficha: úsalo como path)
 
 IMPORTANTE: Solo incluye __ACTION__ cuando el usuario PIDE EXPLÍCITAMENTE hacer algo. Para preguntas o análisis normales, responde sin acción.
 
@@ -970,7 +993,8 @@ class DirectChatView(APIView):
             agent = _agente_inicial(request, message, espacio, default_agent, sesion)
             conversation = Conversation.objects.create(
                 agent=agent, user=request.user, workspace=espacio, sesion=sesion,
-                title=_conversation_title(agent, message))
+                title=_conversation_title(agent, message),
+                contexto=str(request.data.get('contexto') or '').strip()[:120])
 
         from .menciones import agentes_mencionados, personas_mencionadas
 
@@ -1175,6 +1199,20 @@ class ChatAttachmentView(APIView):
         })
 
 
+def _bloque_pantalla(pantalla):
+    """El chat del panel lateral manda la pantalla que el usuario tiene abierta
+    ("Contabilidad › Documentos › libro de compras"). Sin ella, "esto" o "este mes" no se
+    entienden. Llega del navegador: se recorta y se usa solo como referencia."""
+    pantalla = ' '.join(str(pantalla or '').split())[:200]
+    if not pantalla:
+        return ''
+    return (
+        f'\n\nEL USUARIO TE ESCRIBE DESDE LA PANTALLA «{pantalla}» DE AFABLE, con ella abierta al '
+        'lado. Si dice "esto", "aquí", "este mes" o "estos documentos", se refiere a lo que ve '
+        'en esa pantalla. Si necesitas los números, búscalos con tus herramientas; no los inventes.'
+    )
+
+
 class DirectChatStreamView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -1196,7 +1234,8 @@ class DirectChatStreamView(APIView):
             agent = _agente_inicial(request, message, espacio, default_agent, sesion)
             conversation = Conversation.objects.create(
                 agent=agent, user=request.user, workspace=espacio, sesion=sesion,
-                title=_conversation_title(agent, message))
+                title=_conversation_title(agent, message),
+                contexto=str(request.data.get('contexto') or '').strip()[:120])
 
         from .menciones import agentes_mencionados, personas_mencionadas
 
@@ -1237,7 +1276,7 @@ class DirectChatStreamView(APIView):
             request.user, agent, mention_system_id, consulta=message,
             sesion=conversation.sesion,
         )
-        system_prompt = context['system_prompt']
+        system_prompt = context['system_prompt'] + _bloque_pantalla(request.data.get('pantalla'))
         full_history = list(conversation.messages.values('role', 'content').order_by('created_at'))
 
         conv_id = conversation.id
@@ -1261,6 +1300,10 @@ class DirectChatStreamView(APIView):
         def event_stream():
             accumulated = []
             artefactos = []
+            acciones = []
+            # Los pasos que dio, en orden: la tarjeta de progreso del chat los muestra mientras
+            # trabaja y quedan guardados con la respuesta (25-10-2026).
+            pasos = []
             yield f"data: {json.dumps({'conversation_id': conv_id, 'model': resolved_model, 'agent': agente_payload})}\n\n"
 
             if mode == 'con_herramientas':
@@ -1274,12 +1317,18 @@ class DirectChatStreamView(APIView):
                     system_persona=context.get('system_persona', ''), usuario=request.user,
                 ):
                     if 'status' in event:
+                        if not pasos or pasos[-1] != event['status']:
+                            pasos.append(event['status'])
                         yield f"data: {json.dumps({'status': event['status']})}\n\n"
                     elif 'final' in event:
                         full_text = event['final']
                         artefactos = list(event.get('documentos') or [])
+                        acciones = list(event.get('acciones') or [])
                 accumulated.append(full_text)
                 clean_stream = _strip_action(full_text)
+                # Las tarjetas van ANTES del texto: lo que hizo se ve mientras lo cuenta.
+                if acciones:
+                    yield f"data: {json.dumps({'acciones': acciones})}\n\n"
                 for piece in _chunk_text(clean_stream):
                     yield f"data: {json.dumps({'chunk': piece})}\n\n"
             else:
@@ -1314,7 +1363,7 @@ class DirectChatStreamView(APIView):
             respuesta = Message.objects.create(
                 conversation_id=conv_id, role='assistant', content=clean_response,
                 agent_id=agent_id, model_used=resolved_model, fuentes=fuentes,
-                artefactos=artefactos,
+                artefactos=artefactos, acciones=acciones, pasos=pasos,
             )
             Conversation.objects.filter(pk=conv_id).update()
 
@@ -1325,6 +1374,8 @@ class DirectChatStreamView(APIView):
                 'done': True,
                 'model': resolved_model,
                 'artefactos': artefactos,
+                'acciones': acciones,
+                'pasos': pasos,
                 'user_message_id': user_message_id,
                 'message_id': respuesta.id,
                 # En qué se apoyó, para poder abrirlo de un clic sin recargar el hilo.
@@ -1333,6 +1384,16 @@ class DirectChatStreamView(APIView):
 
             if action_result:
                 done_payload['action'] = action_result
+            # "Revisa la respuesta de Afable": la campana y, si se fue a otra pestaña, el navegador.
+            # Solo cuando la respuesta espera algo de quien preguntó —un botón que apretar, como
+            # Confirmar o Cancelar—; una respuesta que solo informa no lo amerita.
+            espera = next((a for a in acciones if a.get('tipo') in ('confirmar', 'elegir')), None)
+            if espera:
+                from apps.notificaciones.avisos import avisar_respuesta
+                aviso = avisar_respuesta(user, Conversation.objects.select_related('agent').get(pk=conv_id),
+                                         espera.get('texto') or clean_response)
+                if aviso:
+                    done_payload['notificacion_id'] = aviso.id
 
             yield f"data: {json.dumps(done_payload)}\n\n"
 
@@ -1354,9 +1415,17 @@ def modelos_disponibles():
     import requests
 
     provider = getattr(settings, 'AI_PROVIDER', 'ollama')
-    default_model = (getattr(settings, 'OLLAMA_CLOUD_MODEL', '')
-                     if provider == 'ollama_cloud'
-                     else getattr(settings, 'OLLAMA_MODEL', ''))
+    # El default es el del proveedor configurado. Antes solo miraba Ollama: con
+    # AI_PROVIDER=deepseek o anthropic el selector marcaba como default un modelo que el
+    # backend no estaba usando.
+    if provider == 'deepseek':
+        default_model = getattr(settings, 'DEEPSEEK_MODEL', 'deepseek-v4-flash')
+    elif provider == 'anthropic':
+        default_model = getattr(settings, 'ANTHROPIC_MODEL', '')
+    elif provider == 'ollama_cloud':
+        default_model = getattr(settings, 'OLLAMA_CLOUD_MODEL', '')
+    else:
+        default_model = getattr(settings, 'OLLAMA_MODEL', '')
     models, seen = [], set()
 
     # El modelo de embeddings vive en el mismo Ollama y por lo tanto sale en
@@ -1387,7 +1456,8 @@ def modelos_disponibles():
     add(getattr(settings, 'OLLAMA_CLOUD_MODEL', ''), 'cloud')
 
     # Asegura que el default esté presente
-    add(default_model, 'cloud' if provider == 'ollama_cloud' else 'local')
+    add(default_model, provider if provider in ('deepseek', 'anthropic')
+        else 'cloud' if provider == 'ollama_cloud' else 'local')
 
     # Anthropic y DeepSeek — solo aparecen en el selector si hay API key configurada.
     # Solo el modelo del techo: ofrecer Opus o Sonnet cuando el backend los va a
@@ -1618,6 +1688,11 @@ class UserConversationListView(APIView):
             convs = hilos_alcanzables(request.user)
         else:
             convs = Conversation.objects.filter(user=request.user)
+
+        # El panel lateral pide el hilo de su pantalla de trabajo (ver `Conversation.contexto`).
+        contexto = (request.query_params.get('contexto') or '').strip()
+        if contexto:
+            convs = convs.filter(contexto=contexto)
 
         q = (request.query_params.get('q') or '').strip()
         if q:

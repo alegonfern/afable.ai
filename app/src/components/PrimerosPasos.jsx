@@ -108,7 +108,7 @@ export default function PrimerosPasos() {
         sx={{
           mt: 1.5, height: 4, borderRadius: 2,
           bgcolor: d ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-          '& .MuiLinearProgress-bar': { bgcolor: '#586AD0', borderRadius: 2 },
+          '& .MuiLinearProgress-bar': { bgcolor: 'var(--af-acento)', borderRadius: 2 },
         }}
       />
 
@@ -124,7 +124,7 @@ export default function PrimerosPasos() {
                   display: 'flex', gap: 1.5, alignItems: 'flex-start',
                   px: 1.25, py: 1, borderRadius: '8px',
                   cursor: paso.hecho ? 'default' : 'pointer',
-                  bgcolor: destacado ? (d ? 'rgba(88,106,208,0.10)' : 'rgba(88,106,208,0.06)') : 'transparent',
+                  bgcolor: destacado ? (d ? 'color-mix(in srgb, var(--af-acento) 10%, transparent)' : 'color-mix(in srgb, var(--af-acento) 6%, transparent)') : 'transparent',
                   '&:hover': paso.hecho ? {} : { bgcolor: d ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)' },
                   transition: 'background-color .12s',
                 }}
@@ -135,11 +135,11 @@ export default function PrimerosPasos() {
                   sx={{
                     mt: '2px', width: 17, height: 17, borderRadius: '50%', flexShrink: 0,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    bgcolor: paso.hecho ? '#586AD0' : 'transparent',
+                    bgcolor: paso.hecho ? 'var(--af-acento)' : 'transparent',
                     border: paso.hecho ? 'none' : `1.5px solid ${d ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.2)'}`,
                   }}
                 >
-                  {paso.hecho && <Check size={11} color="#fff" strokeWidth={3} />}
+                  {paso.hecho && <Check size={11} color="var(--af-sobre-acento)" strokeWidth={3} />}
                 </Box>
 
                 <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -168,7 +168,7 @@ export default function PrimerosPasos() {
                     <Typography
                       onClick={(e) => { e.stopPropagation(); cargarEjemplo(); }}
                       sx={{
-                        fontSize: '0.8125rem', fontWeight: 600, color: '#586AD0',
+                        fontSize: '0.8125rem', fontWeight: 600, color: 'var(--af-acento)',
                         mt: 0.75, cursor: 'pointer', '&:hover': { textDecoration: 'underline' },
                       }}
                     >
@@ -187,8 +187,11 @@ export default function PrimerosPasos() {
                 {!paso.hecho && (
                   <Typography
                     sx={{
-                      fontSize: '0.8125rem', fontWeight: 600, color: '#586AD0',
+                      fontSize: '0.8125rem', fontWeight: 600, color: 'var(--af-acento)',
                       flexShrink: 0, whiteSpace: 'nowrap',
+                      // En el teléfono la fila entera ya es el botón: el texto de la acción
+                      // solo le quitaba ancho al título.
+                      display: { xs: 'none', sm: 'block' },
                     }}
                   >
                     {paso.accion} →

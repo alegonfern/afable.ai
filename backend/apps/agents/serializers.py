@@ -39,7 +39,7 @@ class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
         fields = ['id', 'role', 'content', 'agent', 'agent_name', 'agent_handle',
-                  'autor', 'fuentes', 'artefactos', 'model_used', 'created_at']
+                  'autor', 'fuentes', 'artefactos', 'acciones', 'pasos', 'model_used', 'created_at']
         read_only_fields = ['id', 'created_at']
 
     def get_autor(self, obj):
@@ -80,9 +80,11 @@ class ConversationListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Conversation
+        # `contexto`: el hilo del panel lateral de un módulo ("<empresa>:<módulo>"); la barra
+        # lo usa para decir de qué módulo es cada conversación del historial.
         fields = ['id', 'agent', 'agent_name', 'title', 'last_message',
                   'sesion', 'sesion_nombre', 'sesion_slug', 'compartido_conmigo',
-                  'autor_nombre', 'created_at', 'updated_at']
+                  'autor_nombre', 'contexto', 'created_at', 'updated_at']
 
     def get_compartido_conmigo(self, obj):
         quien = getattr(self.context.get('request'), 'user', None)

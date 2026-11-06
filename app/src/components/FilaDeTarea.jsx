@@ -26,7 +26,7 @@ export const ESTADOS = [
 
 export const COLOR_DE_ESTADO = {
   pendiente: { fg: '#f0b429', bg: 'rgba(240, 180, 41, 0.14)' },
-  en_curso: { fg: '#586AD0', bg: 'rgba(88, 106, 208, 0.16)' },
+  en_curso: { fg: 'var(--af-acento)', bg: 'color-mix(in srgb, var(--af-acento) 16%, transparent)' },
   lista: { fg: '#34D399', bg: 'rgba(52, 211, 153, 0.14)' },
 };
 
@@ -74,7 +74,7 @@ export default function FilaDeTarea({
                 size="small" variant="outlined" clickable
                 component={Link} to={`/app/sesiones/${t.sesion.slug}?tab=tareas`}
                 label={t.sesion.name}
-                sx={{ fontSize: '0.75rem', borderColor: '#586AD0', color: '#9BA6E3' }}
+                sx={{ fontSize: '0.75rem', borderColor: 'var(--af-acento)', color: 'var(--af-acento-suave)' }}
               />
             )}
             {t.assignee_name && (
@@ -116,7 +116,7 @@ export default function FilaDeTarea({
             title={`Pedirle a ${t.agent_name} que la haga`} size="small"
           >
             {corriendo
-              ? <CircularProgress size={16} sx={{ color: '#586AD0' }} />
+              ? <CircularProgress size={16} sx={{ color: 'var(--af-acento)' }} />
               : <Play size={15} />}
           </IconButton>
         )}
@@ -139,7 +139,7 @@ export default function FilaDeTarea({
             sx={{
               border: 'none', bgcolor: 'transparent', p: 0, cursor: 'pointer',
               fontFamily: 'inherit', fontSize: '0.8125rem', fontWeight: 600,
-              color: '#9BA6E3', '&:hover': { textDecoration: 'underline' },
+              color: 'var(--af-acento-suave)', '&:hover': { textDecoration: 'underline' },
             }}
           >
             {abierta ? 'Ocultar lo que hizo' : `Ver lo que hizo ${t.agent_name || 'el agente'}`}

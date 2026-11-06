@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
 import Cookies from 'js-cookie';
 import {
   Box, Typography, IconButton, TextField,
@@ -9,16 +9,18 @@ import {
   Send, Paperclip, AtSign, User, Sparkles,
   Database, FileText, TrendingUp, BarChart2, Users,
   Copy, ThumbsUp, ChevronDown, AlertCircle, RefreshCw,
-  ArrowUpRight, X, Plug, GitBranch, Pencil,
+  ArrowUpRight, X, Plug, GitBranch, Pencil, ArrowUp,
 } from 'lucide-react';
 import { useNavigate, useLocation, useOutletContext } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { AfableMark } from '../components/Logo';
+import { Entra } from '../components/Animado';
 import { api } from '../services/api';
-import AgentesGaleria from './trabajo/AgentesGaleria';
-import SelectorAgente from './trabajo/SelectorAgente';
-import MencionAgentes, { aplicarMencion, detectarMencion, filtrarAgentes }
-  from '../components/MencionAgentes';
+import TarjetasDelChat from '../components/TarjetasDelChat';
+import IsotipoPensando from '../components/IsotipoPensando';
+import PasosDelChat from '../components/PasosDelChat';
+import { avisarRespuesta, pedirPermisoDeAvisos } from '../services/avisoRespuesta';
+import PanelNecesitaAccion from '../components/PanelNecesitaAccion';
 import { useApp } from '../context/AppContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { DocumentoAlLado, TarjetaDeArtefacto } from '../components/DocumentoDelChat';
@@ -27,8 +29,6 @@ import remarkGfm from 'remark-gfm';
 import Cookies2 from 'js-cookie';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001/api/v1';
-
-const CONNECTOR_ICONS = { odoo: '🟢', mssql: '🔷', postgresql: '🐘', csv: '📄' };
 
 
 const TERMINAL_STEPS = [
@@ -60,15 +60,15 @@ function MarkdownContent({ content }) {
         borderRadius: '8px', p: 1.5, mb: 1, overflowX: 'auto', '& code': { bgcolor: 'transparent', p: 0 } },
       '& table': { width: '100%', borderCollapse: 'collapse', mb: 1.5, fontSize: '0.83rem',
         borderRadius: '8px', overflow: 'hidden', border: `1px solid ${theme.palette.divider}` },
-      '& th': { bgcolor: d ? 'rgba(88, 106, 208,0.1)' : 'rgba(88, 106, 208,0.06)',
+      '& th': { bgcolor: d ? 'color-mix(in srgb, var(--af-acento) 10%, transparent)' : 'color-mix(in srgb, var(--af-acento) 6%, transparent)',
         px: 1.5, py: 0.875, textAlign: 'left', fontWeight: 600, fontSize: '0.78rem',
-        borderBottom: `1px solid ${theme.palette.divider}`, color: d ? '#9BA6E3' : '#586AD0' },
+        borderBottom: `1px solid ${theme.palette.divider}`, color: d ? 'var(--af-acento-suave)' : 'var(--af-acento)' },
       '& td': { px: 1.5, py: 0.75, borderBottom: `1px solid ${theme.palette.divider}` },
       '& tr:last-child td': { borderBottom: 'none' },
       '& tr:hover td': { bgcolor: d ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)' },
-      '& blockquote': { borderLeft: '3px solid #586AD0', pl: 1.5, ml: 0, color: theme.palette.text.secondary, fontStyle: 'italic' },
+      '& blockquote': { borderLeft: '3px solid var(--af-acento)', pl: 1.5, ml: 0, color: theme.palette.text.secondary, fontStyle: 'italic' },
       '& strong': { fontWeight: 600, color: theme.palette.text.primary },
-      '& a': { color: '#586AD0', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } },
+      '& a': { color: 'var(--af-acento)', textDecoration: 'none', '&:hover': { textDecoration: 'underline' } },
       '& img': { maxWidth: '100%', borderRadius: '10px', my: 1, display: 'block',
         border: `1px solid ${theme.palette.divider}`, bgcolor: '#ffffff', p: 0.75 },
     }}>
@@ -86,10 +86,10 @@ function ThinkingLoader({ step, label }) {
   const text = label || TERMINAL_STEPS[Math.min(step, TERMINAL_STEPS.length - 1)];
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1, px: 1.5,
-      bgcolor: d ? 'rgba(88, 106, 208,0.06)' : 'rgba(88, 106, 208,0.04)',
-      border: '1px solid rgba(88, 106, 208,0.15)', borderRadius: '10px', width: 'fit-content', maxWidth: 400 }}>
-      <CircularProgress size={12} thickness={5} sx={{ color: '#586AD0' }} />
-      <Typography sx={{ fontSize: '0.78rem', color: '#9BA6E3', fontFamily: '"JetBrains Mono","Fira Code",monospace' }}>
+      bgcolor: d ? 'color-mix(in srgb, var(--af-acento) 6%, transparent)' : 'color-mix(in srgb, var(--af-acento) 4%, transparent)',
+      border: '1px solid color-mix(in srgb, var(--af-acento) 15%, transparent)', borderRadius: '10px', width: 'fit-content', maxWidth: 400 }}>
+      <CircularProgress size={12} thickness={5} sx={{ color: 'var(--af-acento)' }} />
+      <Typography sx={{ fontSize: '0.78rem', color: 'var(--af-acento-suave)', fontFamily: '"JetBrains Mono","Fira Code",monospace' }}>
         {text}
       </Typography>
     </Box>
@@ -122,7 +122,7 @@ function SourceBadge({ content, fuentes, navigate }) {
             sx={{
               display: 'inline-flex', alignItems: 'center', gap: 0.4,
               px: 0.75, py: 0.15, borderRadius: '5px', cursor: 'pointer',
-              fontSize: '0.7rem', color: '#9BA6E3',
+              fontSize: '0.7rem', color: 'var(--af-acento-suave)',
               border: '1px solid rgba(155, 166, 227, 0.3)',
               '&:hover': { bgcolor: 'rgba(155, 166, 227, 0.12)' },
             }}
@@ -176,7 +176,7 @@ function AttachmentBadge({ content }) {
 }
 
 // ── Message bubble ────────────────────────────────────────────────────────────
-function MessageBubble({ msg, onReintentar, onRamificar, onEditar, yoId, navigate, onAbrirDoc }) {
+function MessageBubble({ msg, onReintentar, onRamificar, onEditar, onResponder, yoId, navigate, onAbrirDoc }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const [copied, setCopied] = useState(false);
@@ -227,6 +227,8 @@ function MessageBubble({ msg, onReintentar, onRamificar, onEditar, yoId, navigat
     </Box>
   );
 
+  if (!isUser && msg.streaming && !cleanContent && !msg.acciones?.length) return null;
+
   if (isUser) return (
     <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2, gap: 1.25, alignItems: 'flex-start',
       '&:hover .acciones-usuario': { opacity: 1 } }}>
@@ -238,7 +240,7 @@ function MessageBubble({ msg, onReintentar, onRamificar, onEditar, yoId, navigat
             <IconButton
               size="small"
               onClick={() => { setBorrador(stripAttachment(msg.content)); setEditando(true); }}
-              sx={{ color: 'text.disabled', '&:hover': { color: '#9BA6E3' }, p: 0.4 }}
+              sx={{ color: 'text.disabled', '&:hover': { color: 'var(--af-acento-suave)' }, p: 0.4 }}
             >
               <Pencil size={11} />
             </IconButton>
@@ -249,43 +251,33 @@ function MessageBubble({ msg, onReintentar, onRamificar, onEditar, yoId, navigat
         {/* Quien pregunto. Solo cuando NO fui yo: en un hilo propio, firmar cada
             mensaje con el nombre de uno mismo es ruido. */}
         {msg.autor && !esMio && (
-          <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: '#9BA6E3', mb: 0.4, textAlign: 'right' }}>
+          <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--af-acento-suave)', mb: 0.4, textAlign: 'right' }}>
             {msg.autor.nombre}
           </Typography>
         )}
-        <Box sx={{ bgcolor: esMio ? '#586AD0' : (d ? '#33365e' : '#c7cdf0'),
-          color: esMio ? '#fff' : (d ? '#e8e8ea' : '#1a1a1a'),
-          px: 2, py: 1.25, borderRadius: '14px 14px 4px 14px', fontSize: '0.88rem', lineHeight: 1.65 }}>
+        <Box sx={{ bgcolor: d ? '#232326' : '#f2f2f4', color: d ? '#e8e8ea' : '#1a1a1a',
+          px: 2, py: 1.1, borderRadius: '14px', fontSize: '0.9rem', lineHeight: 1.6 }}>
           {stripAttachment(msg.content)}
           <AttachmentBadge content={msg.content} />
         </Box>
       </Box>
-      <Avatar sx={{ width: 28, height: 28, bgcolor: d ? '#2a2a2a' : '#e5e5e5', flexShrink: 0, mt: 0.25 }}>
-        <User size={14} color={d ? '#aaa' : '#666'} />
-      </Avatar>
     </Box>
   );
 
   return (
     <Box sx={{ display: 'flex', gap: 1.5, mb: 2.5, alignItems: 'flex-start' }}>
-      <Box sx={{ width: 28, height: 28, borderRadius: '8px', flexShrink: 0, mt: 0.25,
-        background: 'linear-gradient(135deg, #586AD0 0%, #2F42A6 100%)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <AfableMark size={14} color="#fff" />
+      <Box sx={{ width: 28, height: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <IsotipoPensando girando={false} size={20} />
       </Box>
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        {/* Quien contesto ESTE mensaje. En un hilo pueden haber contestado
-            varios agentes, y sin la firma todas las respuestas parecen del
-            ultimo que quedo seleccionado. */}
-        {(msg.agent_name || msg.agent_handle) && (
-          <Typography sx={{ fontSize: '0.72rem', fontWeight: 600, color: '#9BA6E3', mb: 0.4 }}>
-            {msg.agent_handle ? `@${msg.agent_handle}` : msg.agent_name}
-          </Typography>
-        )}
-        <Box sx={{ bgcolor: d ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
-          border: `1px solid ${theme.palette.divider}`,
-          borderRadius: '4px 14px 14px 14px', px: 2, py: 1.5,
-          fontSize: '0.88rem', color: theme.palette.text.primary }}>
+        {/* Lo que hizo o consultó en el ERP, como en la animación de la landing: va antes
+            del texto, que lo cuenta (components/TarjetasDelChat). */}
+        {/* Cómo llegó a la respuesta: los pasos, plegados (components/PasosDelChat). */}
+        <PasosDelChat pasos={msg.pasos} />
+        <TarjetasDelChat acciones={msg.acciones} onResponder={onResponder} animar={Boolean(msg.nuevo)} />
+        {(cleanContent || msg.streaming) && (
+        <Box sx={{ px: 0.25, py: 0.25,
+          fontSize: '0.9rem', color: theme.palette.text.primary }}>
           {msg.streaming ? (
             <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
               <Typography sx={{ fontSize: '0.88rem', color: 'text.primary', lineHeight: 1.7 }}>
@@ -293,7 +285,7 @@ function MessageBubble({ msg, onReintentar, onRamificar, onEditar, yoId, navigat
               </Typography>
               <Box sx={{ display: 'flex', gap: '3px', alignItems: 'center', ml: 0.5, mt: 0.5, flexShrink: 0 }}>
                 {[0,1,2].map(i => (
-                  <Box key={i} sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: '#586AD0',
+                  <Box key={i} sx={{ width: 4, height: 4, borderRadius: '50%', bgcolor: 'var(--af-acento)',
                     animation: 'blink 1.2s ease-in-out infinite', animationDelay: `${i*0.2}s`,
                     '@keyframes blink': { '0%,100%': { opacity: 0.3 }, '50%': { opacity: 1 } } }} />
                 ))}
@@ -306,11 +298,11 @@ function MessageBubble({ msg, onReintentar, onRamificar, onEditar, yoId, navigat
             <TarjetaDeArtefacto artefactos={msg.artefactos} onAbrir={onAbrirDoc} />
           )}
         </Box>
+        )}
         {!msg.streaming && (
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 0.5 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <SourceBadge content={msg.content || ''} fuentes={msg.fuentes} navigate={navigate} />
-              <ModelBadge model={msg.model || msg.model_used} />
             </Box>
             <Box sx={{ display: 'flex', gap: 0.5 }}>
               <Tooltip title={copied ? '¡Copiado!' : 'Copiar'} placement="top">
@@ -322,7 +314,7 @@ function MessageBubble({ msg, onReintentar, onRamificar, onEditar, yoId, navigat
               {onReintentar && (
                 <Tooltip title="Volver a preguntar lo mismo" placement="top">
                   <IconButton size="small" onClick={onReintentar}
-                    sx={{ color: 'text.disabled', '&:hover': { color: '#9BA6E3' }, p: 0.4 }}>
+                    sx={{ color: 'text.disabled', '&:hover': { color: 'var(--af-acento-suave)' }, p: 0.4 }}>
                     <RefreshCw size={11} />
                   </IconButton>
                 </Tooltip>
@@ -330,7 +322,7 @@ function MessageBubble({ msg, onReintentar, onRamificar, onEditar, yoId, navigat
               {onRamificar && (
                 <Tooltip title="Seguir por otro camino desde acá, sin perder este" placement="top">
                   <IconButton size="small" onClick={onRamificar}
-                    sx={{ color: 'text.disabled', '&:hover': { color: '#9BA6E3' }, p: 0.4 }}>
+                    sx={{ color: 'text.disabled', '&:hover': { color: 'var(--af-acento-suave)' }, p: 0.4 }}>
                     <GitBranch size={11} />
                   </IconButton>
                 </Tooltip>
@@ -348,246 +340,51 @@ function MessageBubble({ msg, onReintentar, onRamificar, onEditar, yoId, navigat
   );
 }
 
-// ── KPI Card ──────────────────────────────────────────────────────────────────
-function KpiCard({ conn }) {
-  const theme = useTheme();
-  const d = theme.palette.mode === 'dark';
-  const icon = CONNECTOR_ICONS[conn.connector_type] || '🔌';
-  const isError = conn.status === 'error';
-
-  return (
-    <Box sx={{
-      p: 2, borderRadius: '10px',
-      bgcolor: d ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
-      border: `1px solid ${isError ? 'rgba(239,68,68,0.2)' : theme.palette.divider}`,
-      borderLeft: `3px solid ${isError ? '#f87171' : '#34D399'}`,
-      minWidth: 200, flex: 1,
-    }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-          <Typography sx={{ fontSize: '1rem', lineHeight: 1 }}>{icon}</Typography>
-          <Typography sx={{ fontSize: '0.78rem', fontWeight: 600, color: 'text.primary' }}>
-            {conn.name}
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          {!isError && <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#34D399' }} />}
-          {isError && <AlertCircle size={12} color="#f87171" />}
-          <Typography sx={{ fontSize: '0.65rem', color: 'text.disabled' }}>
-            {conn.last_updated}
-          </Typography>
-        </Box>
-      </Box>
-
-      {isError ? (
-        <Typography sx={{ fontSize: '0.75rem', color: '#f87171' }}>
-          Error de conexión
-        </Typography>
-      ) : conn.kpis.length === 0 ? (
-        <Typography sx={{ fontSize: '0.75rem', color: 'text.disabled' }}>
-          Sin datos — sincroniza el sistema
-        </Typography>
-      ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-          {conn.kpis.map((kpi, i) => (
-            <Box key={i} sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1 }}>
-              <Typography sx={{ fontSize: '0.72rem', color: 'text.disabled', flexShrink: 0 }}>
-                {kpi.label}
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                {kpi.alert && <AlertCircle size={11} color="#fbbf24" />}
-                <Typography sx={{ fontSize: '0.82rem', fontWeight: 600,
-                  color: kpi.alert ? '#fbbf24' : 'text.primary', fontVariantNumeric: 'tabular-nums' }}>
-                  {kpi.value}
-                </Typography>
-                {kpi.trend && (
-                  <Typography sx={{ fontSize: '0.68rem', color: '#34D399' }}>{kpi.trend}</Typography>
-                )}
-              </Box>
-            </Box>
-          ))}
-        </Box>
-      )}
-    </Box>
-  );
-}
-
-// ── Welcome / Dashboard ───────────────────────────────────────────────────────
-// ⭐ La primera entrada. Quien llega no sabe qué pedir — y decirle «escriba su pregunta»
-// frente a un cursor parpadeando es la versión moderna de la carpeta vacía. Cada atajo
-// es una frase que la persona podría haber dicho, escrita por ella: se manda al chat tal
-// cual, y de ahí en adelante el agente usa sus herramientas (armar la estructura,
-// invitar, crear carpetas) para hacerlo de verdad.
-//
-// El primero va destacado porque es el que hace el trabajo grande; los otros son las
-// salidas para quien llega con otra intención — el impaciente que solo quiere subir un
-// archivo, el que ya tiene su Odoo andando, el que viene a mirar.
-const ATAJOS = [
-  { texto: 'Empecemos: ayúdame a armar mi empresa', principal: true },
-  { texto: '¿Qué puedo hacer en Afable?' },
-  { texto: 'Quiero subir un documento y preguntarle' },
-  { texto: 'Quiero invitar a alguien de mi equipo' },
-  { texto: 'Quiero conectar un sistema que ya uso' },
-  { texto: 'Tengo una duda' },
+// ── Bienvenida ────────────────────────────────────────────────────────────────
+// El chat vacío (25-10-2026), como el de la animación de la landing: lo principal es
+// pedirle cosas al ERP. Las sugerencias son las mismas del panel lateral de cada módulo
+// (layout/Dashboard/ChatLateral.jsx).
+const SUGERENCIAS = [
+  '¿Cómo va mi empresa este mes?',
+  '¿Qué órdenes de venta me faltan por facturar?',
+  '¿Qué productos están bajo el stock mínimo?',
+  '¿Cuánto IVA tengo que pagar este mes?',
+  '¿Quién me debe y desde cuándo?',
+  '¿Qué tengo que pagar esta semana?',
 ];
 
-function WelcomeScreen({ onPreguntar }) {
-  const theme = useTheme();
-  // Lo que le conviene hacer a esta persona ahora, calculado en el servidor sin gastar
-  // tokens. Si viene vacío no se dibuja nada: un producto que siempre tiene algo que
-  // decirte deja de decir algo cuando importa.
-  const [sugerencias, setSugerencias] = useState([]);
-  const d = theme.palette.mode === 'dark';
-  const navigate = useNavigate();
-  const [dashboard, setDashboard] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const slug = localStorage.getItem('afable_workspace_slug');
-    if (slug) {
-      api.getRecomendaciones(slug)
-        .then(({ data }) => setSugerencias(data.recomendaciones || []))
-        .catch(() => setSugerencias([]));
-    }
-  }, []);
-
-  useEffect(() => {
-    api.getDashboard()
-      .then(r => setDashboard(r.data))
-      .catch(() => setDashboard({ connections: [] }))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const hasConnections = dashboard?.connections?.length > 0;
-
+function Bienvenida({ onPreguntar }) {
   return (
-    // Sin scroll propio: esta pantalla vive DENTRO de la caja de mensajes, que ya
-    // scrollea. Con `overflowY: auto` acá quedaban dos contenedores con scroll uno
-    // dentro del otro y, con la galería de agentes larga, dos barras a la vez.
-    // `1 0 auto` para que no se encoja: crece con las tarjetas y scrollea el padre.
-    <Box sx={{ flex: '1 0 auto', px: { xs: 2, sm: 3, md: 4 }, py: 3, maxWidth: 820, mx: 'auto', width: '100%' }}>
-
-      {/* Header */}
-      <Box sx={{ mb: 3 }}>
-        <Typography sx={{ fontSize: '1.35rem', fontWeight: 700, color: 'text.primary', letterSpacing: '-0.3px', mb: 0.4 }}>
-          {dashboard?.org_name ? `${dashboard.org_name}` : '¿En qué puedo ayudarte?'}
+    <Box sx={{ flex: '1 0 auto', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+      px: { xs: 2, sm: 3, md: 4 }, pb: 2, maxWidth: 780, mx: 'auto', width: '100%' }}>
+      <Entra>
+        <Typography sx={{ fontSize: { xs: '1.5rem', md: '1.85rem' }, fontWeight: 600, letterSpacing: '-0.03em', mb: 2 }}>
+          Pídale algo a <Box component="span" sx={{ fontStyle: 'italic', pr: '0.1em', background: 'var(--af-degradado)', WebkitBackgroundClip: 'text',
+            backgroundClip: 'text', color: 'transparent' }}>Afable</Box>
         </Typography>
-        <Typography sx={{ fontSize: '0.83rem', color: 'text.disabled' }}>
-          {hasConnections
-            ? `${dashboard.connections.length} sistema${dashboard.connections.length > 1 ? 's' : ''} conectado${dashboard.connections.length > 1 ? 's' : ''} · datos en tiempo real`
-            : 'Conecta tu ERP o base de datos para ver datos en tiempo real'}
-        </Typography>
+      </Entra>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+        {SUGERENCIAS.map((texto, i) => (
+          <Entra key={texto} retraso={0.04 * i}>
+            <Box component="button" onClick={() => onPreguntar(texto)} sx={{
+              px: 1.75, py: 0.85, borderRadius: '999px', cursor: 'pointer', fontFamily: 'inherit', fontSize: '0.86rem',
+              color: 'text.secondary', bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider',
+              transition: 'all 0.12s', '&:hover': { color: 'text.primary', borderColor: 'var(--af-color)' },
+            }}>
+              {texto}
+            </Box>
+          </Entra>
+        ))}
       </Box>
-
-      {/* Lo que le conviene hacer ahora. Va ANTES de los atajos generales porque está
-          calculado sobre su empresa: «Facturación ya tiene 12 documentos» le habla a
-          usted, «¿qué puedo hacer acá?» le habla a cualquiera. */}
-      {onPreguntar && sugerencias.length > 0 && (
-        <Box sx={{ mb: 3 }}>
-          {sugerencias.map((s) => (
-            <Box
-              key={s.clave}
-              component="button"
-              onClick={() => onPreguntar(s.mensaje)}
-              sx={{
-                display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
-                px: 1.75, py: 1.25, mb: 1, borderRadius: '9px', fontFamily: 'inherit',
-                bgcolor: 'transparent', border: `1px solid ${theme.palette.divider}`,
-                '&:hover': { borderColor: '#586AD0' }, transition: 'border-color 0.12s',
-              }}
-            >
-              <Typography sx={{ fontSize: '0.9375rem', color: 'text.primary' }}>
-                {s.texto}
-              </Typography>
-              {s.detalle && (
-                <Typography sx={{ fontSize: '0.8125rem', color: 'text.disabled' }}>
-                  {s.detalle}
-                </Typography>
-              )}
-            </Box>
-          ))}
-        </Box>
-      )}
-
-      {/* Los atajos de la primera entrada */}
-      {onPreguntar && (
-        <Box sx={{ mb: 3.5 }}>
-          <Typography sx={{ fontSize: '0.9rem', color: 'text.secondary', mb: 1.5 }}>
-            Cuénteme de su empresa y la dejamos andando. O empiece por donde quiera:
-          </Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {ATAJOS.map((a) => (
-              <Box
-                key={a.texto}
-                component="button"
-                onClick={() => onPreguntar(a.texto)}
-                sx={{
-                  px: 1.75, py: 0.85, borderRadius: '999px', cursor: 'pointer',
-                  fontFamily: 'inherit', fontSize: '0.855rem',
-                  fontWeight: a.principal ? 600 : 400,
-                  color: a.principal ? 'primary.contrastText' : 'text.secondary',
-                  bgcolor: a.principal ? 'primary.main' : 'transparent',
-                  border: `1px solid ${a.principal ? 'transparent' : theme.palette.divider}`,
-                  transition: 'all 0.12s',
-                  '&:hover': {
-                    bgcolor: a.principal ? 'primary.dark' : theme.palette.action.hover,
-                    color: a.principal ? 'primary.contrastText' : 'text.primary',
-                  },
-                }}
-              >
-                {a.texto}
-              </Box>
-            ))}
-          </Box>
-        </Box>
-      )}
-
-      {/* KPI Panel — la diferencia real vs ChatGPT */}
-      {loading ? (
-        <Box sx={{ display: 'flex', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
-          {[1,2].map(i => (
-            <Box key={i} sx={{ flex: 1, minWidth: 200, p: 2, borderRadius: '10px', border: `1px solid ${theme.palette.divider}` }}>
-              <Skeleton variant="text" width="60%" height={16} sx={{ mb: 1.5 }} />
-              <Skeleton variant="text" width="40%" height={24} />
-              <Skeleton variant="text" width="70%" height={14} sx={{ mt: 0.75 }} />
-            </Box>
-          ))}
-        </Box>
-      ) : hasConnections ? (
-        <Box sx={{ display: 'flex', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
-          {dashboard.connections.map(conn => (
-            <KpiCard key={conn.connection_id} conn={conn} />
-          ))}
-        </Box>
-      ) : (
-        <Box sx={{ mb: 3, p: 2.5, borderRadius: '10px',
-          bgcolor: d ? 'rgba(88, 106, 208,0.05)' : 'rgba(88, 106, 208,0.03)',
-          border: '1px dashed rgba(88, 106, 208,0.25)',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-          <Box>
-            <Typography sx={{ fontSize: '0.85rem', fontWeight: 600, color: 'text.primary', mb: 0.25 }}>
-              Sin sistemas conectados
-            </Typography>
-            <Typography sx={{ fontSize: '0.78rem', color: 'text.disabled' }}>
-              Conecta Odoo, SAP u otra base de datos para ver KPIs en tiempo real aquí.
-            </Typography>
-          </Box>
-          <Box onClick={() => navigate('/app/contexto?tab=integraciones')} sx={{
-            display: 'flex', alignItems: 'center', gap: 0.5, cursor: 'pointer',
-            color: '#9BA6E3', fontSize: '0.78rem', fontWeight: 500, flexShrink: 0,
-            '&:hover': { color: '#586AD0' },
-          }}>
-            Conectar <ArrowUpRight size={13} />
-          </Box>
-        </Box>
-      )}
-
-      {/* Los agentes, en cualquier chat: es la misma galeria de la home de Trabajo.
-          Abrir un chat nuevo y poder elegir con quien hablar es parte de la vista. */}
-      <AgentesGaleria />
     </Box>
   );
 }
+
+// Lo que se estaba viendo al salir del chat (25-10-2026): la conversación y hasta dónde se había
+// bajado. La página se desmonta al ir a un módulo; sin esto, al volver se rearmaba vacía, cargaba
+// el hilo y bajaba animada hasta el final, que se veía como un salto. El "+" de la barra entra con
+// `state.nueva` y empieza de cero.
+const memoria = { convId: null, messages: [], scrollTop: null };
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 export default function ChatPage() {
@@ -611,26 +408,27 @@ export default function ChatPage() {
   // personal. Una ref se lee al instante.
   const sesionDelHilo = useRef(null);
 
-  const [messages, setMessages] = useState([]);
+  // ¿Se vuelve a lo que se estaba viendo? Solo si no se pidió otra conversación ni una nueva.
+  const restaurado = useRef(null);
+  if (restaurado.current === null) {
+    const pedida = location.state?.conversationId || new URLSearchParams(location.search).get('conversation');
+    if (location.state?.nueva) Object.assign(memoria, { convId: null, messages: [], scrollTop: null });
+    restaurado.current = !location.state?.nueva && memoria.messages.length > 0
+      && (!pedida || Number(pedida) === memoria.convId);
+  }
+  const [messages, setMessages] = useState(() => (restaurado.current ? memoria.messages : []));
   const [input, setInput] = useState('');
-  const [convId, setConvId] = useState(null);
+  const [convId, setConvId] = useState(() => (restaurado.current ? memoria.convId : null));
   const [loading, setLoading] = useState(false);
   const [thinkStep, setThinkStep] = useState(0);
   const [liveStatus, setLiveStatus] = useState(null);
   const [showThinking, setShowThinking] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
-  const [activeAgent, setActiveAgent] = useState(null);   // {id, name} si se entra desde un agente
-  const [galeriaAbierta, setGaleriaAbierta] = useState(false); // vitrina desplegada en el compositor
-  // Mencionar un agente con @: la lista de la empresa y lo que se esta tipeando.
-  const [agentesMencionables, setAgentesMencionables] = useState([]);
-  const [mencion, setMencion] = useState(null);      // { consulta, desde } o null
-  const [mencionIdx, setMencionIdx] = useState(0);
+  // Sube después de cada respuesta: el panel de la derecha se pone al día con lo que hizo.
+  const [refrescoPanel, setRefrescoPanel] = useState(0);
 
   const [attachment, setAttachment] = useState(null);     // {name, extracted_text, error}
   const [attaching, setAttaching] = useState(false);
-  const [systems, setSystems] = useState(null);           // null = aún no cargados
-  const [mentionAnchorEl, setMentionAnchorEl] = useState(null);
-  const [mentionedSystem, setMentionedSystem] = useState(null); // {id, name, connector_type}
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -655,13 +453,6 @@ export default function ChatPage() {
     }
   }, []);
 
-  const openMention = useCallback((e) => {
-    setMentionAnchorEl(e.currentTarget);
-    if (systems === null) {
-      api.getConnections().then(r => setSystems(r.data || [])).catch(() => setSystems([]));
-    }
-  }, [systems]);
-
   useEffect(() => {
     // Por `state` cuando se navega desde dentro de la app, y por `?conversation=`
     // para que la conversación tenga una URL que se pueda enlazar y pegar. Sin lo
@@ -672,49 +463,69 @@ export default function ChatPage() {
     if (cid && cid !== convId) {
       api.getConversationMessages(cid)
         .then(r => {
+          saltoRef.current = true;   // un hilo que se abre aparece ya abajo, sin animar
           setMessages(r.data.messages || r.data || []);
           setConvId(cid);
-          // El agente lo manda la conversación: si no se sincroniza acá, queda
-          // el de la conversación anterior y al escribir se le cambiaría el
-          // agente a este hilo sin que nadie lo pidiera.
-          setActiveAgent(r.data.agent ? { id: r.data.agent, name: r.data.agent_name } : null);
-          setTimeout(scrollToBottom, 100);
         })
         .catch(() => {});
     }
-    // Entrada desde "Chatear" en un agente: reabre SU conversación (única por
-    // agente), no una en blanco — así el historial queda diferenciado y
-    // persiste entre visitas al mismo agente.
-    if (location.state?.agentId && !cid) {
-      const { agentId, agentName } = location.state;
-      setActiveAgent({ id: agentId, name: agentName });
-      // Una pregunta de ejemplo llega ESCRITA en el compositor, no mandada: quien la
-      // eligió todavía puede cambiarle una palabra antes de enviarla, que es lo que hace
-      // que el ejemplo enseñe en vez de solo demostrar.
-      if (location.state.pregunta) setInput(location.state.pregunta);
-      api.getAgentConversations(agentId)
-        .then(r => {
-          const existing = (r.data || [])[0]; // ordenado por -updated_at
-          if (existing) {
-            return api.getConversationMessages(existing.id).then(m => {
-              setMessages(m.data.messages || m.data || []);
-              setConvId(existing.id);
-              setTimeout(scrollToBottom, 100);
-            });
-          }
-          setMessages([]);
-          setConvId(null);
-        })
-        .catch(() => { setMessages([]); setConvId(null); });
-    }
   }, [location.state, location.search]);
 
-  const scrollToBottom = useCallback(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), []);
-  useEffect(() => { scrollToBottom(); }, [messages.length]);
+  const scrollToBottom = useCallback((behavior = 'smooth') => messagesEndRef.current?.scrollIntoView({ behavior }), []);
+  // Bajar suave es para los mensajes nuevos. Al volver al chat se queda donde estaba, y un hilo
+  // recién abierto aparece ya abajo.
+  const saltoRef = useRef(false);
+  // Se baja solo cuando de verdad cambió la cantidad de mensajes: comparar con el largo anterior
+  // (y no con una marca de "primera vez") aguanta que React corra los efectos dos veces.
+  const largoPrevio = useRef(messages.length);
+  useEffect(() => {
+    if (messages.length === largoPrevio.current) return;
+    largoPrevio.current = messages.length;
+    if (saltoRef.current) {
+      saltoRef.current = false;
+      requestAnimationFrame(() => scrollToBottom('auto'));
+      return;
+    }
+    scrollToBottom();
+  }, [messages.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useLayoutEffect(() => {
+    if (restaurado.current && memoria.scrollTop != null && messagesBoxRef.current) {
+      messagesBoxRef.current.scrollTop = memoria.scrollTop;
+    }
+  }, []);
+
+  // El "+" estando ya en el chat: la página no se rearma, así que se empieza de cero aquí.
+  const llegada = useRef(location.key);
+  useEffect(() => {
+    if (!location.state?.nueva || location.key === llegada.current) return;
+    Object.assign(memoria, { convId: null, messages: [], scrollTop: null });
+    setMessages([]);
+    setConvId(null);
+    setInput('');
+  }, [location.key]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Lo que se está viendo queda guardado para la vuelta.
+  useEffect(() => {
+    memoria.messages = messages.filter((m) => !m.streaming);
+    memoria.convId = convId;
+  }, [messages, convId]);
+
+  // Si se salió mientras Afable respondía, al volver se trae la respuesta terminada.
+  useEffect(() => {
+    if (!restaurado.current || !memoria.convId) return;
+    api.getConversationMessages(memoria.convId)
+      .then((r) => {
+        const frescos = r.data.messages || r.data || [];
+        if (frescos.length !== memoria.messages.length) setMessages(frescos);
+      })
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleScroll = () => {
     const el = messagesBoxRef.current;
     if (!el) return;
+    memoria.scrollTop = el.scrollTop;
     setShowScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 200);
   };
 
@@ -722,11 +533,10 @@ export default function ChatPage() {
     const msg = (text || input).trim();
     if (!msg || loading) return;
     setInput('');
+    pedirPermisoDeAvisos();
 
     const pendingAttachment = attachment && !attachment.error ? attachment : null;
-    const pendingSystemId = mentionedSystem?.id;
     setAttachment(null);
-    setMentionedSystem(null);
 
     const finalMessage = pendingAttachment
       ? `${msg}\n\n[[ARCHIVO_ADJUNTO:${pendingAttachment.name}]]\n${pendingAttachment.extracted_text}\n[[/ARCHIVO_ADJUNTO]]`
@@ -738,7 +548,8 @@ export default function ChatPage() {
     setMessages(prev => [
       ...prev,
       { role: 'user', content: finalMessage, id: uid },
-      { role: 'assistant', content: '', id: aid, streaming: true },
+      // `nuevo`: la respuesta de esta visita; sus tarjetas se animan (la factura, por ejemplo).
+      { role: 'assistant', content: '', id: aid, streaming: true, nuevo: true },
     ]);
     setLoading(true);
     setShowThinking(true);
@@ -758,10 +569,6 @@ export default function ChatPage() {
           message: finalMessage,
           conversation_id: convId,
           model: aiModel || undefined,
-          system_id: pendingSystemId || undefined,
-          // Va siempre: al iniciar define el agente del hilo, y en un hilo abierto
-          // permite conmutar de agente sin perder la conversación.
-          agent_id: activeAgent?.id || undefined,
           // El Espacio activo: la conversación nueva queda ahí, a la vista de
           // quienes pertenecen al Espacio. Sin Espacio, el hilo es personal.
           workspace: slug || undefined,
@@ -774,6 +581,7 @@ export default function ChatPage() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let accumulated = '';
+      let convActual = convId;   // la conversación de esta respuesta, para el aviso
 
       while (true) {
         const { done, value } = await reader.read();
@@ -783,19 +591,19 @@ export default function ChatPage() {
           if (!line.startsWith('data: ')) continue;
           try {
             const data = JSON.parse(line.slice(6));
+            if (data.conversation_id) convActual = data.conversation_id;
             if (data.conversation_id && data.conversation_id !== convId) {
               setConvId(data.conversation_id);
               // Recien creada: la barra tiene que reflejarla sin recargar. La
               // comparacion es para no avisar en cada trozo del stream.
               window.dispatchEvent(new Event('afable-conversaciones'));
             }
-            if (data.agent) {
-              // Si el usuario menciono a otro agente, el backend ya decidio: la
-              // barra y la firma del mensaje tienen que reflejar a QUIEN contesta.
-              setActiveAgent({ id: data.agent.id, name: data.agent.name });
-              setMessages(prev => prev.map(m => m.id === aid
-                ? { ...m, agent_name: data.agent.name, agent_handle: data.agent.handle }
-                : m));
+            if (data.acciones && !data.done) {
+              // Lo que hizo en el ERP llega antes del texto: las tarjetas aparecen primero.
+              clearInterval(thinkIntervalRef.current);
+              setShowThinking(false);
+              setLiveStatus(null);
+              setMessages(prev => prev.map(m => m.id === aid ? { ...m, acciones: data.acciones } : m));
             }
             if (data.model) {
               setMessages(prev => prev.map(m => m.id === aid ? { ...m, model: data.model } : m));
@@ -805,6 +613,12 @@ export default function ChatPage() {
               clearInterval(thinkIntervalRef.current);
               setLiveStatus(data.status);
               setShowThinking(true);
+              // Cada estado nuevo es un paso de la tarjeta de progreso.
+              setMessages(prev => prev.map(m => {
+                if (m.id !== aid) return m;
+                const pasos = m.pasos || [];
+                return pasos[pasos.length - 1] === data.status ? m : { ...m, pasos: [...pasos, data.status] };
+              }));
             }
             if (data.chunk) {
               accumulated += data.chunk;
@@ -831,6 +645,8 @@ export default function ChatPage() {
                     // tiraba: la cita que se abre de un clic solo aparecía al recargar,
                     // o sea justo cuando ya nadie va a comprobar el dato.
                     fuentes: data.fuentes || [],
+                    acciones: data.acciones || m.acciones || [],
+                    pasos: data.pasos || m.pasos || [],
                   };
                 }
                 if (m.id === uid && data.user_message_id) {
@@ -839,6 +655,12 @@ export default function ChatPage() {
                 return m;
               }));
               if (data.artefactos?.length) setRefrescoDoc((n) => n + 1);
+              setRefrescoPanel((n) => n + 1);
+              const conversacion = convActual;
+              avisarRespuesta({
+                notificacionId: data.notificacion_id, conversacionId: conversacion, detalle: accumulated,
+                alAbrir: () => navigate(`/app/chat?conversation=${conversacion}`),
+              });
               if (data.action?.type === 'navigate') navigate(data.action.path);
               if (data.action?.type === 'save_document' && data.action?.success) {
                 setSavedDoc({ title: data.action.document_title });
@@ -857,7 +679,7 @@ export default function ChatPage() {
       setShowThinking(false);
       setLoading(false);
     }
-  }, [input, convId, loading, navigate, aiModel, activeAgent, attachment, mentionedSystem]);
+  }, [input, convId, loading, navigate, aiModel, attachment, slug, espacioSlug]);
 
   /**
    * Vuelve a hacer la misma pregunta.
@@ -929,80 +751,15 @@ export default function ChatPage() {
     }
   }, [location.state, location.pathname, navigate, sendMessage]);
 
-  // Los agentes de la empresa, para el autocompletado de `@`. Se piden una vez:
-  // la lista cambia poco y no vale la pena volver a consultarla por cada tecla.
-  useEffect(() => {
-    let vivo = true;
-    if (!slug) return undefined;
-    // La Sesión, si el hilo está en una: es lo que decide si hay personas a quien
-    // mencionar. En un hilo privado no hay nadie, y ofrecer nombres ahí prometería un
-    // aviso que no va a llegar.
-    api.getMencionables(slug, sesionDelHilo.current || undefined)
-      .then(({ data }) => { if (vivo) setAgentesMencionables(data.mencionables || []); })
-      .catch(() => {});
-    return () => { vivo = false; };
-  }, [slug, convId]);
-
-  const sugerencias = mencion ? filtrarAgentes(agentesMencionables, mencion.consulta) : [];
-
-  const handleInputChange = (e) => {
-    const texto = e.target.value;
-    setInput(texto);
-    const detectada = detectarMencion(texto, e.target.selectionStart ?? texto.length);
-    setMencion(detectada);
-    setMencionIdx(0);
-  };
-
-  const elegirMencion = (agente) => {
-    const { texto, cursor } = aplicarMencion(input, mencion, agente.handle);
-    setInput(texto);
-    setMencion(null);
-    // El agente mencionado pasa a ser el del hilo, para que la barra de arriba
-    // no siga diciendo que se habla con otro.
-    setActiveAgent({ id: agente.id, name: agente.name });
-    requestAnimationFrame(() => {
-      inputRef.current?.focus();
-      inputRef.current?.setSelectionRange?.(cursor, cursor);
-    });
-  };
+  const handleInputChange = (e) => setInput(e.target.value);
 
   const handleKeyDown = (e) => {
-    // Con la lista de menciones abierta, el teclado es de la lista: Enter elige
-    // un agente en vez de mandar el mensaje a medio escribir.
-    if (mencion && sugerencias.length) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setMencionIdx((i) => (i + 1) % sugerencias.length);
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setMencionIdx((i) => (i - 1 + sugerencias.length) % sugerencias.length);
-        return;
-      }
-      if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault();
-        elegirMencion(sugerencias[mencionIdx]);
-        return;
-      }
-      if (e.key === 'Escape') { e.preventDefault(); setMencion(null); return; }
-    }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
 
   return (
     <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', flex: 1, minWidth: 0, bgcolor: 'background.default', overflow: 'hidden' }}>
-
-      {activeAgent && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 3, py: 1,
-          borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'rgba(88, 106, 208,0.05)' }}>
-          <AfableMark size={14} color="#9BA6E3" />
-          <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>
-            Hablando con el agente <strong style={{ color: '#9BA6E3' }}>{activeAgent.name}</strong>
-          </Typography>
-        </Box>
-      )}
 
       {/* Messages / Welcome */}
       <Box ref={messagesBoxRef} onScroll={handleScroll}
@@ -1011,12 +768,13 @@ export default function ChatPage() {
         // empuja el compositor fuera de la pantalla.
         sx={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', position: 'relative' }}>
         {messages.length === 0 ? (
-          <WelcomeScreen onPreguntar={sendMessage} />
+          <Bienvenida onPreguntar={sendMessage} />
         ) : (
           <Box sx={{ px: { xs: 2, sm: 3, md: 4 }, py: 3, maxWidth: 780, width: '100%', mx: 'auto' }}>
             {messages.map((msg, idx) => (
+              // Cada mensaje nuevo entra subiendo un poco (components/Animado).
+              <Entra key={msg.id || idx}>
               <MessageBubble
-                key={msg.id || idx}
                 msg={msg}
                 yoId={currentUser?.id}
                 navigate={navigate}
@@ -1038,23 +796,40 @@ export default function ChatPage() {
                     ? (texto) => editar(msg, texto)
                     : undefined
                 }
+                // Confirmar o cancelar desde la tarjeta: solo en la última respuesta.
+                onResponder={
+                  msg.role === 'assistant' && idx === messages.length - 1 && !loading
+                    ? (texto) => sendMessage(texto)
+                    : undefined
+                }
               />
+              </Entra>
             ))}
             {showThinking && (
-              <Box sx={{ mb: 2.5, display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
-                <Box sx={{ width: 28, height: 28, borderRadius: '8px', flexShrink: 0,
-                  background: 'linear-gradient(135deg, #586AD0 0%, #2F42A6 100%)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <AfableMark size={14} color="#fff" />
-                </Box>
-                <ThinkingLoader step={thinkStep} label={liveStatus} />
-              </Box>
+              messages[messages.length - 1]?.pasos?.length ? (
+                // Con pasos reales: la tarjeta de progreso, desplegada mientras trabaja.
+                <Entra sx={{ mb: 2.5, display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                  <Box sx={{ width: 28, height: 28, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <IsotipoPensando girando={false} size={20} />
+                  </Box>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <PasosDelChat pasos={messages[messages.length - 1].pasos} trabajando />
+                  </Box>
+                </Entra>
+              ) : (
+                <Entra sx={{ mb: 2.5, display: 'flex', gap: 1.5, alignItems: 'center' }}>
+                  <IsotipoPensando size={22} />
+                  <Typography sx={{ fontSize: '0.86rem', color: 'text.secondary' }}>
+                    {liveStatus || TERMINAL_STEPS[Math.min(thinkStep, TERMINAL_STEPS.length - 1)]}
+                  </Typography>
+                </Entra>
+              )
             )}
             <div ref={messagesEndRef} />
           </Box>
         )}
         {showScrollBtn && (
-          <Box onClick={scrollToBottom} sx={{ position: 'sticky', bottom: 16, display: 'flex', justifyContent: 'center' }}>
+          <Box onClick={() => scrollToBottom()} sx={{ position: 'sticky', bottom: 16, display: 'flex', justifyContent: 'center' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5,
               bgcolor: d ? '#333' : '#fff', border: `1px solid ${theme.palette.divider}`,
               borderRadius: '20px', px: 1.5, py: 0.4, cursor: 'pointer',
@@ -1070,17 +845,12 @@ export default function ChatPage() {
       <Box sx={{ flexShrink: 0, px: { xs: 2, sm: 3, md: 4 }, pt: 1.5, pb: 2.5, maxWidth: 780, width: '100%', mx: 'auto' }}>
         <Box sx={{
           position: 'relative',
-          border: `1.5px solid ${loading ? 'rgba(88, 106, 208,0.4)' : theme.palette.divider}`,
-          borderRadius: '14px', bgcolor: d ? 'rgba(255,255,255,0.03)' : '#fff',
-          transition: 'border-color 0.2s', '&:focus-within': { borderColor: 'rgba(88, 106, 208,0.5)' },
+          border: `1.5px solid ${loading ? 'color-mix(in srgb, var(--af-acento) 40%, transparent)' : theme.palette.divider}`,
+          borderRadius: '18px', bgcolor: d ? 'rgba(255,255,255,0.03)' : '#fff',
+          transition: 'border-color 0.2s', '&:focus-within': { borderColor: 'color-mix(in srgb, var(--af-acento) 50%, transparent)' },
           boxShadow: d ? 'none' : '0 2px 12px rgba(0,0,0,0.06)',
         }}>
-          {mencion && (
-            <MencionAgentes
-              agentes={sugerencias} indice={mencionIdx} onElegir={elegirMencion}
-            />
-          )}
-          {(attachment || attaching || mentionedSystem) && (
+          {(attachment || attaching) && (
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, px: 2, pt: 1.25 }}>
               {attaching && (
                 <Chip size="small" icon={<CircularProgress size={11} sx={{ color: 'inherit' }} />}
@@ -1093,15 +863,10 @@ export default function ChatPage() {
                   onDelete={() => setAttachment(null)} deleteIcon={<X size={12} />}
                   sx={{ fontSize: '0.72rem' }} />
               )}
-              {mentionedSystem && (
-                <Chip size="small" icon={<AtSign size={12} />} label={mentionedSystem.name}
-                  onDelete={() => setMentionedSystem(null)} deleteIcon={<X size={12} />}
-                  sx={{ fontSize: '0.72rem', bgcolor: 'rgba(88, 106, 208,0.12)', color: '#586AD0' }} />
-              )}
             </Box>
           )}
           <TextField inputRef={inputRef} multiline maxRows={6} fullWidth
-            placeholder="Escriba un mensaje, o @ para llamar a un agente"
+            placeholder="Pídale algo a Afable…"
             value={input} onChange={handleInputChange}
             onKeyDown={handleKeyDown} disabled={loading}
             variant="standard" InputProps={{ disableUnderline: true }}
@@ -1110,76 +875,34 @@ export default function ChatPage() {
                 '&::placeholder': { color: theme.palette.text.disabled } } }} />
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.5, pb: 1 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              {/* Con quien se esta hablando, en cualquier conversacion. Es lo que
-                  distingue esto de un chat generico: el agente siempre a la vista
-                  y siempre cambiable. */}
-              <SelectorAgente
-                agenteActivo={activeAgent}
-                abierto={galeriaAbierta}
-                onToggle={() => setGaleriaAbierta(v => !v)}
-              />
-              {/* En que Espacio se esta trabajando: acota los agentes que se
-                  ofrecen y donde queda guardada la conversacion. */}
-              <Box sx={{ width: '1px', height: 16, bgcolor: 'divider', mx: 0.25 }} />
               <input ref={fileInputRef} type="file" hidden onChange={handleFileChange}
-                accept=".pdf,.docx,.txt,.csv,.md,.xlsx,.xls,image/*" />
+                accept=".pdf,.xml,.docx,.txt,.csv,.md,.xlsx,.xls,image/*" />
               <Tooltip title="Adjuntar archivo">
                 <IconButton size="small" disabled={attaching} onClick={() => fileInputRef.current?.click()}
                   sx={{ color: 'text.disabled', '&:hover': { color: 'text.secondary' }, p: 0.5 }}>
                   <Paperclip size={15} />
                 </IconButton>
               </Tooltip>
-              <Tooltip title="Mencionar sistema">
-                <IconButton size="small" onClick={openMention}
-                  sx={{ color: 'text.disabled', '&:hover': { color: 'text.secondary' }, p: 0.5 }}>
-                  <AtSign size={15} />
-                </IconButton>
-              </Tooltip>
-              <Menu anchorEl={mentionAnchorEl} open={!!mentionAnchorEl} onClose={() => setMentionAnchorEl(null)}>
-                {systems === null && <MenuItem disabled>Cargando sistemas...</MenuItem>}
-                {systems && systems.length === 0 && <MenuItem disabled>No hay sistemas conectados</MenuItem>}
-                {systems && systems.map(s => (
-                  <MenuItem key={s.id} onClick={() => { setMentionedSystem(s); setMentionAnchorEl(null); }}>
-                    <Plug size={13} style={{ marginRight: 8 }} /> {s.name}
-                  </MenuItem>
-                ))}
-              </Menu>
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              {loading && <Typography sx={{ fontSize: '0.72rem', color: '#9BA6E3' }}>Analizando datos...</Typography>}
+
               <Tooltip title="Enviar (Enter)">
                 <span>
                   <IconButton size="small" onClick={() => sendMessage()}
                     disabled={!input.trim() || loading}
-                    sx={{ bgcolor: input.trim() && !loading ? '#586AD0' : 'transparent',
-                      color: input.trim() && !loading ? '#fff' : 'text.disabled',
-                      border: `1px solid ${input.trim() && !loading ? '#586AD0' : theme.palette.divider}`,
-                      borderRadius: '8px', p: 0.6,
-                      '&:hover': input.trim() && !loading ? { bgcolor: '#2F42A6' } : {},
+                    sx={{ bgcolor: input.trim() && !loading ? 'var(--af-acento)' : 'action.disabledBackground',
+                      color: input.trim() && !loading ? 'var(--af-sobre-acento)' : 'text.disabled',
+                      borderRadius: '50%', width: 32, height: 32,
+                      '&:hover': input.trim() && !loading ? { bgcolor: 'var(--af-acento-hover)' } : {},
+                      '&.Mui-disabled': { bgcolor: 'action.disabledBackground' },
                       transition: 'all 0.15s' }}>
-                    <Send size={14} />
+                    <ArrowUp size={16} />
                   </IconButton>
                 </span>
               </Tooltip>
             </Box>
           </Box>
 
-          {/* La vitrina de Agentes se despliega DENTRO del compositor, bajo la
-              fila del selector: la caja de escribir crece y muestra las
-              tarjetas. No es un panel flotante encima de la pantalla. */}
-          <Collapse in={galeriaAbierta} timeout={220} unmountOnExit>
-            <Box sx={{
-              borderTop: `1px solid ${theme.palette.divider}`,
-              px: 2, pt: 1.75, pb: 2,
-              maxHeight: 340, overflowY: 'auto',
-            }}>
-              <AgentesGaleria
-                embebida
-                filtrarPorEspacio
-                onElegir={(a) => { setActiveAgent(a); setGaleriaAbierta(false); }}
-              />
-            </Box>
-          </Collapse>
         </Box>
         <Typography sx={{ fontSize: '0.68rem', color: 'text.disabled', textAlign: 'center', mt: 1 }}>
           Afable responde con datos reales de sus sistemas. Compruebe con la fuente lo que sea crítico.
@@ -1187,6 +910,10 @@ export default function ChatPage() {
       </Box>
 
     </Box>
+
+    {/* Necesita acción y Caja, como en la animación de la landing. Cede el lugar al
+        documento abierto: dos paneles dejarían la conversación en una franja. */}
+    {!docAlLado && !focusMode && <PanelNecesitaAccion slug={slug} refresco={refrescoPanel} />}
 
     {/* El documento al lado de la conversación. Se abre desde la tarjeta del mensaje:
         revisar lo que el agente escribió no debería costar salir del chat. */}

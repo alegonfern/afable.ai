@@ -46,6 +46,9 @@ class Notificacion(models.Model):
     enlace = models.CharField(max_length=300, blank=True)
 
     leida = models.BooleanField(default=False)
+    # Cuándo salió también por correo (25-10-2026, notificaciones/correo.py): solo si sigue sin leer
+    # un rato después. Vacío = no se ha mandado.
+    correo_enviado_en = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

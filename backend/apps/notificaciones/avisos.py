@@ -6,7 +6,7 @@ basta olvidarla una vez para que la campana se llene de ruido propio y se deje d
 """
 import logging
 
-from .models import Notificacion
+from .models import TIPO_AGENTE, Notificacion
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,25 @@ def avisar(destinatarios, *, tipo, titulo, detalle='', enlace='', organization=N
         return 0
 
     return len(unicos)
+
+
+def avisar_respuesta(usuario, conversation, texto):
+    """Afable respondió en el chat con algo que espera a quien preguntó (25-10-2026): un botón
+    como Confirmar o Cancelar. "Revisa la respuesta de Afable", con lo que hay que decidir.
+
+    Va a quien preguntó, que no la escribió él: la escribió Afable. Devuelve la notificación
+    (o None) porque la pantalla la marca leída al instante si la persona estaba mirando; solo
+    queda sin leer —y salta la del navegador— si se fue a otra pestaña mientras esperaba.
+    """
+    try:
+        return Notificacion.objects.create(
+            user=usuario, organization=getattr(conversation.agent, 'organization', None), tipo=TIPO_AGENTE,
+            titulo='Revisa la respuesta de Afable', detalle=(texto or conversation.title or '')[:300],
+            enlace=f'/app/chat?conversation={conversation.id}',
+        )
+    except Exception:
+        logger.exception('No se pudo avisar la respuesta del chat')
+        return None
 
 
 def avisar_del_mensaje(conversation, autor, texto, excepto_a=None):

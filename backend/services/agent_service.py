@@ -500,11 +500,47 @@ def _tool_result_json(result: dict) -> str:
 
 
 def _tool_status(name: str, args: dict) -> str:
+    """El paso en curso, con el agente del módulo que lo hace delante (25-10-2026):
+    "Agente de Ventas · Emitiendo la factura electrónica…". La pantalla separa las dos partes."""
+    from services.tarjetas_chat import agente_de
+    texto = _estado_base(name, args)
+    agente = agente_de(name, args)
+    return f'{agente} · {texto}' if agente else texto
+
+
+def _estado_base(name: str, args: dict) -> str:
     """Mensaje de progreso legible para el usuario según la herramienta en curso."""
     a = args or {}
     system = a.get('system') or ''
     if name == 'list_systems':
         return 'Revisando los sistemas conectados…'
+    if name == 'compras_ventas':
+        accion = a.get('accion') or ''
+        if accion in ('facturar', 'facturar_directo') and a.get('confirmado'):
+            return 'Emitiendo la factura electrónica…'
+        if accion == 'registrar_factura_proveedor' and a.get('confirmado'):
+            return 'Registrando la factura en el Libro de Compras…'
+        if accion in ('crear_cotizacion', 'confirmar', 'cancelar', 'registrar_entrega', 'crear_contacto', 'crear_producto'):
+            return 'Trabajando en compras y ventas…' if a.get('confirmado') or accion.startswith('crear') else 'Preparando el cambio…'
+        return 'Revisando compras y ventas…'
+    if name == 'guia_libros_sii':
+        return 'Preparando la guía…'
+    if name == 'conciliar_banco':
+        accion = a.get('accion') or ''
+        if accion == 'pendientes':
+            return 'Revisando lo que falta conciliar…'
+        if accion == 'cruzar':
+            return 'Cruzando el banco con las facturas…'
+        return 'Conciliando…' if a.get('confirmado') else 'Preparando el cambio…'
+    if name == 'consultar_finanzas':
+        return {
+            'resumen_mes': 'Revisando los números del mes…', 'f29': 'Calculando el F29…',
+            'por_cobrar': 'Revisando quién le debe…', 'por_pagar': 'Revisando lo que debe pagar…',
+            'caja': 'Revisando la caja…', 'gasto_por_categoria': 'Revisando el gasto por categoría…',
+            'margen_proyectos': 'Revisando el margen de cada proyecto…',
+            'conciliacion': 'Revisando la conciliación con el banco…',
+            'documentos': 'Revisando los documentos…', 'ventas': 'Revisando las ventas…',
+        }.get(a.get('consulta'), 'Revisando las finanzas…')
     if name == 'list_tables':
         return f'Explorando las tablas de {system}…' if system else 'Explorando las tablas disponibles…'
     if name == 'describe_table':
@@ -904,6 +940,8 @@ def _evento_final(text: str, provenance: list, artifacts: dict = None) -> dict:
     return {
         'final': _finalize(text, provenance, artifacts),
         'documentos': list((artifacts or {}).get('documentos') or []),
+        # Las tarjetas de lo que hizo en el ERP (services/tarjetas_chat.py).
+        'acciones': list((artifacts or {}).get('acciones') or []),
     }
 
 

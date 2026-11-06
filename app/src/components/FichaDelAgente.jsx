@@ -143,7 +143,7 @@ export default function FichaDelAgente({ agenteId, workspace, onCerrar }) {
                 <Box
                   component="span"
                   onClick={() => { onCerrar?.(); navigate('/app/archivos'); }}
-                  sx={{ color: '#586AD0', fontWeight: 600, cursor: 'pointer' }}
+                  sx={{ color: 'var(--af-acento)', fontWeight: 600, cursor: 'pointer' }}
                 >
                   Suba un documento
                 </Box>{' '}
@@ -190,8 +190,8 @@ export default function FichaDelAgente({ agenteId, workspace, onCerrar }) {
                     px: 1.25, py: 1, borderRadius: '10px',
                     border: `1px solid ${theme.palette.divider}`,
                     '&:hover': {
-                      borderColor: '#586AD0',
-                      bgcolor: d ? 'rgba(88,106,208,0.10)' : 'rgba(88,106,208,0.05)',
+                      borderColor: 'var(--af-acento)',
+                      bgcolor: d ? 'color-mix(in srgb, var(--af-acento) 10%, transparent)' : 'color-mix(in srgb, var(--af-acento) 5%, transparent)',
                     },
                   }}
                 >

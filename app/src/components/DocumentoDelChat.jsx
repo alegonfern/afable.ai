@@ -50,9 +50,9 @@ export function TarjetaDeArtefacto({ artefactos, onAbrir }) {
           sx={{
             display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer',
             px: 1.25, py: 0.9, borderRadius: '10px',
-            border: `1px solid ${d ? 'rgba(155,166,227,0.28)' : 'rgba(88,106,208,0.25)'}`,
-            bgcolor: d ? 'rgba(88,106,208,0.10)' : 'rgba(88,106,208,0.05)',
-            '&:hover': { bgcolor: d ? 'rgba(88,106,208,0.18)' : 'rgba(88,106,208,0.10)' },
+            border: `1px solid ${d ? 'rgba(155,166,227,0.28)' : 'color-mix(in srgb, var(--af-acento) 25%, transparent)'}`,
+            bgcolor: d ? 'color-mix(in srgb, var(--af-acento) 10%, transparent)' : 'color-mix(in srgb, var(--af-acento) 5%, transparent)',
+            '&:hover': { bgcolor: d ? 'color-mix(in srgb, var(--af-acento) 18%, transparent)' : 'color-mix(in srgb, var(--af-acento) 10%, transparent)' },
           }}
         >
           <FileText size={15} color="#7B8AE0" />

@@ -87,7 +87,7 @@ export default function MencionAgentes({ agentes, indice, onElegir }) {
             onMouseDown={(e) => { e.preventDefault(); onElegir(a); }}
             sx={{
               display: 'flex', alignItems: 'center', gap: 1.25, px: 1.5, py: 0.9, cursor: 'pointer',
-              bgcolor: i === indice ? (d ? 'rgba(255,255,255,0.06)' : 'rgba(88,106,208,0.08)') : 'transparent',
+              bgcolor: i === indice ? (d ? 'rgba(255,255,255,0.06)' : 'color-mix(in srgb, var(--af-acento) 8%, transparent)') : 'transparent',
             }}
           >
             {/* La cara del agente, o la silueta de una persona. Se distinguen de un
@@ -99,7 +99,7 @@ export default function MencionAgentes({ agentes, indice, onElegir }) {
               fontSize: 12, lineHeight: 1, color: '#fff',
               bgcolor: esPersona
                 ? (d ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.14)')
-                : (cara.icon ? `${cara.accent}26` : (cara.accent || '#586AD0')),
+                : (cara.icon ? `${cara.accent}26` : (cara.accent || 'var(--af-acento)')),
               border: !esPersona && cara.icon ? `1px solid ${cara.accent}59` : 'none',
             }}>
               {esPersona

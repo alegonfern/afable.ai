@@ -172,6 +172,10 @@ class Conversation(models.Model):
     # escrito alguien — y "lo escribió una persona" contra "lo trajo un agente solo" es
     # justo la diferencia que hay que poder ver.
     autonoma = models.BooleanField(default=False)
+    # El chat del panel lateral guarda un hilo por pantalla de trabajo ("empresa:ventas",
+    # "empresa:general"): al volver a abrir el panel ahí, sigue la misma conversación.
+    # Vacío = una conversación del chat normal.
+    contexto = models.CharField(max_length=120, blank=True, default='', db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -219,6 +223,13 @@ class Message(models.Model):
     # agente escribe un documento, lo menciona en una frase, y la persona tiene que ir a
     # buscarlo a otra pantalla y confiar en que está.
     artefactos = models.JSONField(default=list, blank=True)
+    # ⭐ Lo que hizo o consultó en el ERP, como tarjetas para el chat (25-10-2026): el
+    # documento creado, lo que pide confirmación, los números consultados. Se guardan para
+    # que sigan ahí al volver a abrir la conversación. Ver services/tarjetas_chat.py.
+    acciones = models.JSONField(default=list, blank=True)
+    # Los pasos que dio para responder ("Revisando las ventas…", "Emitiendo la factura…"): la
+    # tarjeta de progreso del chat, plegada, para ver cómo llegó a la respuesta.
+    pasos = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -14,7 +14,8 @@ _MAX_EXTRACTED_CHARS = 20000  # tope defensivo: evita que un PDF gigante infle e
 _IMAGE_TYPES = {'image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'}
 _PDF_TYPES = {'application/pdf'}
 _DOCX_TYPES = {'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
-_TEXT_TYPES = {'text/plain', 'text/csv', 'text/markdown'}
+# application/xml: el XML de una factura electrónica (DTE), para registrarla desde el chat.
+_TEXT_TYPES = {'text/plain', 'text/csv', 'text/markdown', 'application/xml'}
 _XLSX_TYPES = {
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'application/vnd.ms-excel',
