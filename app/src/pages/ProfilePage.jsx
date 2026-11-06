@@ -29,12 +29,12 @@ const CAMPOS_PERSONALES = [
 ];
 
 const SectionLabel = ({ children, muted }) => (
-  <Typography sx={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#586AD0', mb: 1.5 }}>
+  <Typography sx={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--af-acento)', mb: 1.5 }}>
     {children}
   </Typography>
 );
 
-export default function ProfilePage() {
+export default function ProfilePage({ embebido = false }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
 
@@ -42,7 +42,7 @@ export default function ProfilePage() {
   const textSemi = d ? 'rgba(255,255,255,0.70)' : 'rgba(0,0,0,0.70)';
   const bgInput = d ? 'rgba(255,255,255,0.04)' : theme.palette.background.paper;
   const bgChip = d ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
-  const bgChipActive = 'rgba(88, 106, 208,0.12)';
+  const bgChipActive = 'color-mix(in srgb, var(--af-acento) 12%, transparent)';
   const borderColor = theme.palette.divider;
   const bgCard = d ? 'rgba(255,255,255,0.04)' : theme.palette.background.paper;
 
@@ -54,10 +54,10 @@ export default function ProfilePage() {
       color: theme.palette.text.primary,
       '& fieldset': { borderColor },
       '&:hover fieldset': { borderColor: d ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)' },
-      '&.Mui-focused fieldset': { borderColor: '#586AD0' },
+      '&.Mui-focused fieldset': { borderColor: 'var(--af-acento)' },
     },
     '& .MuiInputLabel-root': { color: textMuted, fontSize: '0.875rem' },
-    '& .MuiInputLabel-root.Mui-focused': { color: '#9BA6E3' },
+    '& .MuiInputLabel-root.Mui-focused': { color: 'var(--af-acento-suave)' },
     '& .MuiInputBase-input.Mui-disabled': { color: textMuted, WebkitTextFillColor: textMuted },
   };
 
@@ -67,6 +67,7 @@ export default function ProfilePage() {
   const [role, setRole]             = useState('');
   const [customRole, setCustomRole] = useState('');
   const [department, setDepartment] = useState('');
+  const [telefono, setTelefono]     = useState('');
   const [objectives, setObjectives] = useState('');
   const [responseStyle, setResponseStyle] = useState('ejecutivo');
   const [contexto, setContexto]     = useState({ about_me: '', priorities: '', custom_instructions: '' });
@@ -82,6 +83,7 @@ export default function ProfilePage() {
       setLastName(u.last_name || '');
       setObjectives(u.objectives || '');
       setDepartment(u.department || '');
+      setTelefono(u.telefono || '');
       setResponseStyle(u.response_style || 'ejecutivo');
       if (u.role) {
         if (ROLES.slice(0, -1).includes(u.role)) {
@@ -131,7 +133,7 @@ export default function ProfilePage() {
       // Los dos van juntos: para quien usa la app es UNA pantalla, aunque atrás sean
       // dos modelos (User y UserContext).
       await Promise.all([
-        api.updateProfile({ first_name: firstName, last_name: lastName, role: finalRole, department, objectives, response_style: responseStyle }),
+        api.updateProfile({ first_name: firstName, last_name: lastName, role: finalRole, department, telefono, objectives, response_style: responseStyle }),
         api.updateUserContext(contexto),
       ]);
       toast.success('Perfil actualizado. La IA usará tu contexto en las próximas conversaciones.');
@@ -144,9 +146,9 @@ export default function ProfilePage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-      <PageHeader title="Mi Perfil" backLabel="Inicio" back="/app" />
+      {!embebido && <PageHeader title="Mi Perfil" backLabel="Inicio" back="/app" />}
 
-      <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 640 }}>
+      <Box sx={embebido ? { maxWidth: 640 } : { p: { xs: 2, sm: 3 }, maxWidth: 640 }}>
 
         {/* ── Sección 1: Info personal ── */}
         <SectionLabel>Información personal</SectionLabel>
@@ -154,7 +156,7 @@ export default function ProfilePage() {
           <Box sx={{ position: 'relative', flexShrink: 0 }}>
             <Avatar
               src={user?.avatar_url}
-              sx={{ width: 72, height: 72, bgcolor: '#586AD0', fontSize: '1.5rem', fontWeight: 700, border: `2px solid rgba(88, 106, 208,0.3)` }}
+              sx={{ width: 72, height: 72, bgcolor: 'var(--af-acento)', fontSize: '1.5rem', fontWeight: 700, border: `2px solid color-mix(in srgb, var(--af-acento) 30%, transparent)` }}
             >
               {!user?.avatar_url && getInitials()}
             </Avatar>
@@ -171,7 +173,7 @@ export default function ProfilePage() {
               }}
             >
               {uploading
-                ? <CircularProgress size={12} sx={{ color: '#9BA6E3' }} />
+                ? <CircularProgress size={12} sx={{ color: 'var(--af-acento-suave)' }} />
                 : <Camera size={12} color={textMuted} />}
             </Box>
             <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleAvatarChange} />
@@ -201,10 +203,10 @@ export default function ProfilePage() {
               sx={{
                 px: 1.5, py: 0.6, borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem',
                 bgcolor: role === r ? bgChipActive : bgChip,
-                border: `1px solid ${role === r ? '#586AD0' : borderColor}`,
-                color: role === r ? '#9BA6E3' : textSemi,
+                border: `1px solid ${role === r ? 'var(--af-acento)' : borderColor}`,
+                color: role === r ? 'var(--af-acento-suave)' : textSemi,
                 transition: 'all 0.12s',
-                '&:hover': { borderColor: 'rgba(88, 106, 208,0.4)', color: theme.palette.text.primary },
+                '&:hover': { borderColor: 'color-mix(in srgb, var(--af-acento) 40%, transparent)', color: theme.palette.text.primary },
               }}
             >
               {r}
@@ -220,6 +222,14 @@ export default function ProfilePage() {
           label="Área o Departamento"
           value={department} onChange={e => setDepartment(e.target.value)}
           placeholder="Ej: Finanzas, Tecnología, Comercial..."
+          size="small" fullWidth sx={{ ...inputSx, mb: 2 }}
+        />
+
+        <TextField
+          label="WhatsApp"
+          value={telefono} onChange={e => setTelefono(e.target.value.replace(/[^\d+ ]/g, '').slice(0, 20))}
+          placeholder="+56 9 1234 5678"
+          helperText="Para recibir por WhatsApp los avisos de las automatizaciones que siga."
           size="small" fullWidth sx={{ ...inputSx, mb: 2 }}
         />
 
@@ -269,12 +279,12 @@ export default function ProfilePage() {
               sx={{
                 flex: '1 1 160px', p: 2, borderRadius: '8px', cursor: 'pointer',
                 bgcolor: responseStyle === s.value ? bgChipActive : bgCard,
-                border: `1px solid ${responseStyle === s.value ? '#586AD0' : borderColor}`,
+                border: `1px solid ${responseStyle === s.value ? 'var(--af-acento)' : borderColor}`,
                 transition: 'all 0.12s',
-                '&:hover': { borderColor: 'rgba(88, 106, 208,0.3)' },
+                '&:hover': { borderColor: 'color-mix(in srgb, var(--af-acento) 30%, transparent)' },
               }}
             >
-              <Box sx={{ color: responseStyle === s.value ? '#9BA6E3' : textMuted, mb: 0.75 }}>
+              <Box sx={{ color: responseStyle === s.value ? 'var(--af-acento-suave)' : textMuted, mb: 0.75 }}>
                 {s.icon}
               </Box>
               <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: responseStyle === s.value ? theme.palette.text.primary : textSemi, mb: 0.25 }}>
@@ -293,10 +303,10 @@ export default function ProfilePage() {
           sx={{
             width: '100%', py: 1.25, borderRadius: '8px', border: 'none',
             cursor: saving ? 'default' : 'pointer',
-            bgcolor: saving ? 'rgba(88, 106, 208,0.4)' : '#586AD0',
-            color: '#fff', fontSize: '0.875rem', fontWeight: 600,
+            bgcolor: saving ? 'color-mix(in srgb, var(--af-acento) 40%, transparent)' : 'var(--af-acento)',
+            color: 'var(--af-sobre-acento)', fontSize: '0.875rem', fontWeight: 600,
             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1,
-            '&:hover:not(:disabled)': { bgcolor: '#2F42A6' },
+            '&:hover:not(:disabled)': { bgcolor: 'var(--af-acento-hover)' },
             transition: 'background 0.15s',
           }}
         >

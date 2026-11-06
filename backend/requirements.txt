@@ -23,3 +23,7 @@ google-auth>=2.34.0
 google-auth-oauthlib>=1.2.0
 google-api-python-client>=2.140.0
 reportlab>=4.0.0
+# Facturador electrónico (apps/dte): XML, C14N y validación contra los XSD del SII.
+lxml>=5.2.0
+# El timbre electrónico (PDF417) en el PDF de cada DTE.
+pdf417gen>=0.8.0

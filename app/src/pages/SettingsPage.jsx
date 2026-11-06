@@ -10,14 +10,14 @@ import PageHeader from '../components/PageHeader';
 
 const Section = ({ title, children }) => (
   <Box sx={{ mb: 4 }}>
-    <Typography sx={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#586AD0', mb: 2 }}>
+    <Typography sx={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--af-acento)', mb: 2 }}>
       {title}
     </Typography>
     {children}
   </Box>
 );
 
-export default function SettingsPage() {
+export default function SettingsPage({ embebido = false }) {
   const theme = useTheme();
   const { mode, toggleMode } = useThemeMode();
   const d = mode === 'dark';
@@ -42,10 +42,10 @@ export default function SettingsPage() {
       fontSize: '0.875rem',
       '& fieldset': { borderColor },
       '&:hover fieldset': { borderColor: d ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)' },
-      '&.Mui-focused fieldset': { borderColor: '#586AD0' },
+      '&.Mui-focused fieldset': { borderColor: 'var(--af-acento)' },
     },
     '& .MuiInputLabel-root': { color: textMuted, fontSize: '0.875rem' },
-    '& .MuiInputLabel-root.Mui-focused': { color: '#9BA6E3' },
+    '& .MuiInputLabel-root.Mui-focused': { color: 'var(--af-acento-suave)' },
     '& .MuiInputBase-input': { color: theme.palette.text.primary },
   };
 
@@ -77,9 +77,9 @@ export default function SettingsPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
-      <PageHeader title="Configuración" backLabel="Inicio" back="/app" />
+      {!embebido && <PageHeader title="Configuración" backLabel="Inicio" back="/app" />}
 
-      <Box sx={{ p: { xs: 2, sm: 3 }, maxWidth: 560, width: '100%', mx: 'auto' }}>
+      <Box sx={embebido ? { maxWidth: 560, width: '100%' } : { p: { xs: 2, sm: 3 }, maxWidth: 560, width: '100%', mx: 'auto' }}>
 
         {/* ── Apariencia ── */}
         <Section title="Apariencia">
@@ -104,8 +104,8 @@ export default function SettingsPage() {
               checked={d}
               onChange={toggleMode}
               sx={{
-                '& .MuiSwitch-switchBase.Mui-checked': { color: '#586AD0' },
-                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#586AD0' },
+                '& .MuiSwitch-switchBase.Mui-checked': { color: 'var(--af-acento)' },
+                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: 'var(--af-acento)' },
               }}
             />
           </Box>
@@ -184,10 +184,10 @@ export default function SettingsPage() {
               sx={{
                 alignSelf: 'flex-start', display: 'flex', alignItems: 'center', gap: 1,
                 px: 2, py: 0.875, borderRadius: '6px', border: 'none',
-                bgcolor: saving ? 'rgba(88, 106, 208,0.45)' : '#586AD0',
-                color: '#fff', fontSize: '0.875rem', fontWeight: 600,
+                bgcolor: saving ? 'color-mix(in srgb, var(--af-acento) 45%, transparent)' : 'var(--af-acento)',
+                color: 'var(--af-sobre-acento)', fontSize: '0.875rem', fontWeight: 600,
                 cursor: saving ? 'default' : 'pointer',
-                '&:hover:not(:disabled)': { bgcolor: '#2F42A6' },
+                '&:hover:not(:disabled)': { bgcolor: 'var(--af-acento-hover)' },
                 '&:disabled': { bgcolor: bgHover, color: textMuted, cursor: 'default' },
                 transition: 'background 0.15s',
               }}

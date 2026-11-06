@@ -10,8 +10,10 @@ import { useNavigate } from 'react-router-dom';
  * @param {string}   back        — ruta a la que navega ← (default: -1 en historial)
  * @param {string}   backLabel   — texto del breadcrumb padre
  * @param {ReactNode} actions    — botones / controles a la derecha
+ * @param {Array}    crumbs      — niveles intermedios [{ label, to }] entre el inicio y el
+ *                                 título: Inicio / Contabilidad / Documentos
  */
-export default function PageHeader({ title, back, backLabel = 'Inicio', actions }) {
+export default function PageHeader({ title, back, backLabel = 'Inicio', actions, crumbs = [] }) {
   const theme = useTheme();
   const navigate = useNavigate();
   const d = theme.palette.mode === 'dark';
@@ -76,6 +78,26 @@ export default function PageHeader({ title, back, backLabel = 'Inicio', actions 
         <Typography sx={{ fontSize: '0.8125rem', color: d ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)' }}>
           /
         </Typography>
+        {crumbs.map((c) => (
+          <Box key={c.label} sx={{ display: 'contents' }}>
+            <Typography
+              onClick={() => c.to && navigate(c.to)}
+              sx={{
+                fontSize: '0.8125rem',
+                color: d ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.5)',
+                cursor: c.to ? 'pointer' : 'default',
+                '&:hover': c.to ? { color: theme.palette.text.primary } : {},
+                transition: 'color 0.12s',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {c.label}
+            </Typography>
+            <Typography sx={{ fontSize: '0.8125rem', color: d ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)' }}>
+              /
+            </Typography>
+          </Box>
+        ))}
         <Typography
           sx={{
             fontSize: '0.9375rem',

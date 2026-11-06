@@ -28,9 +28,9 @@ function FlowNode({ icon, label, active, d }) {
     <Box sx={{
       display: 'inline-flex', alignItems: 'center', gap: 0.6, px: 1.25, py: 0.5,
       borderRadius: '999px', fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap',
-      border: `1px solid ${active ? '#586AD0' : (d ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)')}`,
-      bgcolor: active ? 'rgba(88,106,208,0.15)' : 'transparent',
-      color: active ? (d ? '#9BA6E3' : '#586AD0') : (d ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'),
+      border: `1px solid ${active ? 'var(--af-acento)' : (d ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)')}`,
+      bgcolor: active ? 'color-mix(in srgb, var(--af-acento) 15%, transparent)' : 'transparent',
+      color: active ? (d ? 'var(--af-acento-suave)' : 'var(--af-acento)') : (d ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)'),
     }}>
       {icon} {label}
     </Box>
@@ -62,10 +62,10 @@ export default function AutomationsPage() {
       borderRadius: '8px', fontSize: '0.875rem', color: theme.palette.text.primary,
       '& fieldset': { borderColor },
       '&:hover fieldset': { borderColor: d ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)' },
-      '&.Mui-focused fieldset': { borderColor: '#586AD0' },
+      '&.Mui-focused fieldset': { borderColor: 'var(--af-acento)' },
     },
     '& .MuiInputLabel-root': { color: textMuted, fontSize: '0.875rem' },
-    '& .MuiInputLabel-root.Mui-focused': { color: '#9BA6E3' },
+    '& .MuiInputLabel-root.Mui-focused': { color: 'var(--af-acento-suave)' },
   };
 
   const emptyForm = {
@@ -227,9 +227,9 @@ export default function AutomationsPage() {
 
   const btnPrimary = {
     px: 2.5, py: 0.9, borderRadius: '8px', border: 'none', cursor: 'pointer',
-    bgcolor: '#586AD0', color: '#fff', fontSize: '0.85rem', fontWeight: 600,
+    bgcolor: 'var(--af-acento)', color: 'var(--af-sobre-acento)', fontSize: '0.85rem', fontWeight: 600,
     display: 'inline-flex', alignItems: 'center', gap: 0.75,
-    '&:hover': { bgcolor: '#2F42A6' }, '&:disabled': { bgcolor: 'rgba(88,106,208,0.4)', cursor: 'default' },
+    '&:hover': { bgcolor: 'var(--af-acento-hover)' }, '&:disabled': { bgcolor: 'color-mix(in srgb, var(--af-acento) 40%, transparent)', cursor: 'default' },
   };
 
   return (
@@ -256,7 +256,7 @@ export default function AutomationsPage() {
           <Box sx={{ p: 2.5, mb: 3, borderRadius: '10px', bgcolor: bgCard, border: `1px solid ${borderColor}`, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
 
             {/* ── Vista previa del flujo (se arma solo, en vivo) ── */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', p: 1.5, borderRadius: '8px', bgcolor: d ? 'rgba(88,106,208,0.06)' : 'rgba(88,106,208,0.05)', border: `1px dashed ${d ? 'rgba(88,106,208,0.35)' : 'rgba(88,106,208,0.3)'}` }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', p: 1.5, borderRadius: '8px', bgcolor: d ? 'color-mix(in srgb, var(--af-acento) 6%, transparent)' : 'color-mix(in srgb, var(--af-acento) 5%, transparent)', border: `1px dashed ${d ? 'color-mix(in srgb, var(--af-acento) 35%, transparent)' : 'color-mix(in srgb, var(--af-acento) 30%, transparent)'}` }}>
               <FlowNode icon={<MessageSquare size={13} />} label={form.prompt.trim() ? 'Prompt listo' : 'Prompt'} active={!!form.prompt.trim()} d={d} />
               <ArrowRight size={13} color={textMuted} />
               <FlowNode icon={isEvent ? <Zap size={13} /> : <Clock size={13} />} label={isEvent ? 'Evento' : 'Programado'} active d={d} />
@@ -307,9 +307,9 @@ export default function AutomationsPage() {
                     sx={{
                       display: 'inline-flex', alignItems: 'center', gap: 0.75, px: 1.75, py: 0.8,
                       borderRadius: '8px', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
-                      border: `1px solid ${form.trigger_type === opt.value ? '#586AD0' : borderColor}`,
-                      bgcolor: form.trigger_type === opt.value ? 'rgba(88,106,208,0.12)' : 'transparent',
-                      color: form.trigger_type === opt.value ? (d ? '#9BA6E3' : '#586AD0') : textSemi,
+                      border: `1px solid ${form.trigger_type === opt.value ? 'var(--af-acento)' : borderColor}`,
+                      bgcolor: form.trigger_type === opt.value ? 'color-mix(in srgb, var(--af-acento) 12%, transparent)' : 'transparent',
+                      color: form.trigger_type === opt.value ? (d ? 'var(--af-acento-suave)' : 'var(--af-acento)') : textSemi,
                     }}
                   >
                     {opt.icon} {opt.label}
@@ -370,9 +370,9 @@ export default function AutomationsPage() {
                         sx={{
                           px: 1.25, py: 0.6, borderRadius: '8px', cursor: 'pointer',
                           fontSize: '0.78rem', fontWeight: 600, minWidth: 44,
-                          border: `1px solid ${puesto ? '#586AD0' : borderColor}`,
-                          bgcolor: puesto ? 'rgba(88,106,208,0.12)' : 'transparent',
-                          color: puesto ? (d ? '#9BA6E3' : '#586AD0') : textSemi,
+                          border: `1px solid ${puesto ? 'var(--af-acento)' : borderColor}`,
+                          bgcolor: puesto ? 'color-mix(in srgb, var(--af-acento) 12%, transparent)' : 'transparent',
+                          color: puesto ? (d ? 'var(--af-acento-suave)' : 'var(--af-acento)') : textSemi,
                         }}
                       >
                         {dia}
@@ -408,7 +408,7 @@ export default function AutomationsPage() {
             {isWebhook && (
               <Box sx={{
                 p: 1.75, borderRadius: '10px',
-                border: `1px dashed ${borderColor}`, bgcolor: 'rgba(88,106,208,0.05)',
+                border: `1px dashed ${borderColor}`, bgcolor: 'color-mix(in srgb, var(--af-acento) 5%, transparent)',
               }}>
                 <Typography sx={{ fontSize: '0.8rem', color: textSemi, fontWeight: 600, mb: 0.4 }}>
                   Se crea con una dirección propia
@@ -522,7 +522,7 @@ export default function AutomationsPage() {
 
         {/* ── Listado ── */}
         {loading ? (
-          <CircularProgress size={20} sx={{ color: '#9BA6E3' }} />
+          <CircularProgress size={20} sx={{ color: 'var(--af-acento-suave)' }} />
         ) : autos.length === 0 ? (
           <Box sx={{ textAlign: 'center', py: 6, color: textMuted }}>
             <Timer size={32} style={{ opacity: 0.4, marginBottom: 8 }} />
@@ -545,7 +545,7 @@ export default function AutomationsPage() {
                     </Typography>
                     <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', mt: 0.25 }}>
                       {auto.trigger_type === 'event' && (
-                        <Typography sx={{ fontSize: '0.72rem', color: d ? '#9BA6E3' : '#586AD0', display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                        <Typography sx={{ fontSize: '0.72rem', color: d ? 'var(--af-acento-suave)' : 'var(--af-acento)', display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
                           <Zap size={11} /> {EVENT_LABELS[auto.event_type] || auto.event_type}
                           {auto.event_config?.table ? ` («${auto.event_config.table}»)` : ''}
                           {auto.connection_name ? ` en ${auto.connection_name}` : ''}
@@ -559,7 +559,7 @@ export default function AutomationsPage() {
                           es lo que hace que el equipo se entere, y el correo es el aviso
                           de al lado. Un encargo sin ninguno de los dos no se puede crear. */}
                       {auto.sesion_name && (
-                        <Typography sx={{ fontSize: '0.72rem', color: '#9BA6E3', display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                        <Typography sx={{ fontSize: '0.72rem', color: 'var(--af-acento-suave)', display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
                           <Users size={11} /> publica en {auto.sesion_name}
                           {auto.crear_tarea ? ' y anota la tarea' : ''}
                           {auto.agent_name ? ` · ${auto.agent_name}` : ''}
@@ -594,7 +594,7 @@ export default function AutomationsPage() {
                           sx={{
                             display: 'inline-flex', alignItems: 'center', border: 'none',
                             bgcolor: 'transparent', cursor: 'pointer', color: textMuted, p: 0.25,
-                            '&:hover': { color: d ? '#9BA6E3' : '#586AD0' },
+                            '&:hover': { color: d ? 'var(--af-acento-suave)' : 'var(--af-acento)' },
                           }}
                         >
                           <Copy size={11} />
@@ -608,14 +608,14 @@ export default function AutomationsPage() {
                   <Box
                     component="button" onClick={() => handleRunNow(auto)} disabled={runningId === auto.id}
                     title="Ejecutar ahora"
-                    sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1.5, py: 0.6, borderRadius: '6px', cursor: 'pointer', border: `1px solid ${borderColor}`, bgcolor: 'transparent', color: textSemi, fontSize: '0.75rem', fontWeight: 600, '&:hover': { borderColor: '#586AD0', color: '#9BA6E3' } }}
+                    sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1.5, py: 0.6, borderRadius: '6px', cursor: 'pointer', border: `1px solid ${borderColor}`, bgcolor: 'transparent', color: textSemi, fontSize: '0.75rem', fontWeight: 600, '&:hover': { borderColor: 'var(--af-acento)', color: 'var(--af-acento-suave)' } }}
                   >
-                    {runningId === auto.id ? <CircularProgress size={12} sx={{ color: '#9BA6E3' }} /> : <Play size={12} />}
+                    {runningId === auto.id ? <CircularProgress size={12} sx={{ color: 'var(--af-acento-suave)' }} /> : <Play size={12} />}
                     {runningId === auto.id ? 'Ejecutando...' : 'Ejecutar ahora'}
                   </Box>
                   <Switch
                     size="small" checked={auto.is_active} onChange={() => handleToggle(auto)}
-                    sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#586AD0' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#586AD0' } }}
+                    sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: 'var(--af-acento)' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: 'var(--af-acento)' } }}
                   />
                   <Box
                     onClick={() => handleDelete(auto.id)}

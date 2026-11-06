@@ -52,7 +52,7 @@ function MapView({ entities, edges, pos, dims, selected, setSelected, theme }) {
         return (
           <g key={e.id} onClick={() => setSelected(e.id)} style={{ cursor: 'pointer' }}>
             <rect x={p.x} y={p.y} width={p.w} height={p.h} rx="12"
-              fill={cardBg} stroke={active ? '#586AD0' : theme.palette.divider} strokeWidth={active ? 2 : 1.2} />
+              fill={cardBg} stroke={active ? 'var(--af-acento)' : theme.palette.divider} strokeWidth={active ? 2 : 1.2} />
             <circle cx={p.x + 16} cy={p.y + p.h / 2} r="4" fill={e.color} />
             <text x={p.x + 30} y={p.y + 24} fontSize="13" fontWeight="600"
               fill={theme.palette.text.primary} fontFamily="'Sora','Inter',sans-serif">{e.table}</text>
@@ -106,7 +106,7 @@ function DetailPanel({ entity, edges, entitiesById, theme }) {
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
             {rels.map((r, i) => (
               <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: '0.78rem' }}>
-                <Typography sx={{ color: '#586AD0' }}>→</Typography>
+                <Typography sx={{ color: 'var(--af-acento)' }}>→</Typography>
                 <Typography sx={{ fontWeight: 600, fontSize: '0.78rem' }}>{r.to}</Typography>
                 {r.via && <Typography sx={{ color: 'text.disabled', fontSize: '0.72rem', fontFamily: "'JetBrains Mono',monospace" }}>{r.via}</Typography>}
               </Box>
@@ -241,7 +241,7 @@ export default function ModelPage() {
           <>
             {hasModel && segmented}
             <Button variant="contained" size="small" startIcon={<Plus size={15} />} onClick={() => navigate('/app/contexto?tab=integraciones')}
-              sx={{ bgcolor: '#586AD0', textTransform: 'none', fontWeight: 500, boxShadow: 'none', '&:hover': { bgcolor: '#6B4CE8', boxShadow: 'none' } }}>
+              sx={{ bgcolor: 'var(--af-acento)', textTransform: 'none', fontWeight: 500, boxShadow: 'none', '&:hover': { bgcolor: 'var(--af-acento-hover)', boxShadow: 'none' } }}>
               Conectar
             </Button>
           </>
@@ -250,11 +250,11 @@ export default function ModelPage() {
 
       <Box sx={{ pt: 3, pb: 5, px: { xs: 2, sm: 3 }, width: '100%', maxWidth: 1180, mx: 'auto' }}>
         {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', pt: 8 }}><CircularProgress sx={{ color: '#586AD0' }} /></Box>
+          <Box sx={{ display: 'flex', justifyContent: 'center', pt: 8 }}><CircularProgress sx={{ color: 'var(--af-acento)' }} /></Box>
         ) : !hasModel ? (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: 2.5, textAlign: 'center' }}>
-            <Box sx={{ width: 64, height: 64, borderRadius: '16px', bgcolor: 'rgba(88, 106, 208,0.1)', border: '0.5px solid rgba(88, 106, 208,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Boxes size={30} color="#9BA6E3" />
+            <Box sx={{ width: 64, height: 64, borderRadius: '16px', bgcolor: 'color-mix(in srgb, var(--af-acento) 10%, transparent)', border: '0.5px solid color-mix(in srgb, var(--af-acento) 20%, transparent)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Boxes size={30} color="var(--af-acento-suave)" />
             </Box>
             <Box>
               <Typography sx={{ fontWeight: 700, fontSize: '1.1rem', mb: 0.75 }}>Aún no hay un modelo</Typography>
@@ -263,7 +263,7 @@ export default function ModelPage() {
               </Typography>
             </Box>
             <Button startIcon={<Plus size={16} />} onClick={() => navigate('/app/contexto?tab=integraciones')}
-              sx={{ bgcolor: '#586AD0', color: '#fff', borderRadius: '9px', fontWeight: 600, px: 2.5, py: 1, '&:hover': { bgcolor: '#2F42A6' } }}>
+              sx={{ bgcolor: 'var(--af-acento)', color: 'var(--af-sobre-acento)', borderRadius: '9px', fontWeight: 600, px: 2.5, py: 1, '&:hover': { bgcolor: 'var(--af-acento-hover)' } }}>
               Conectar un sistema
             </Button>
           </Box>
@@ -307,7 +307,7 @@ export default function ModelPage() {
 
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 3 }}>
               {[
-                { icon: <Zap size={15} color="#586AD0" />, text: 'Habilita preguntas en lenguaje natural con la fuente citada' },
+                { icon: <Zap size={15} color="var(--af-acento)" />, text: 'Habilita preguntas en lenguaje natural con la fuente citada' },
                 { icon: <ShieldCheck size={15} color="#22C55E" />, text: 'Los datos no se almacenan: se consultan en vivo' },
               ].map((c, i) => (
                 <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.75, py: 1,

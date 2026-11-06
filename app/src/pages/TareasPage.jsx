@@ -209,7 +209,7 @@ export default function TareasPage() {
 
         {datos === null ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
-            <CircularProgress size={22} sx={{ color: '#586AD0' }} />
+            <CircularProgress size={22} sx={{ color: 'var(--af-acento)' }} />
           </Box>
         ) : visibles.length === 0 ? (
           <Stack spacing={1.5} sx={{ py: 4, alignItems: 'flex-start' }}>
@@ -221,7 +221,7 @@ export default function TareasPage() {
                 dentro de una Sesión, y desde acá eso no se adivina. */}
             <Typography sx={{ fontSize: '0.875rem', color: textMuted }}>
               Las tareas se crean dentro de una{' '}
-              <Box component={Link} to="/app/contexto?tab=espacios" sx={{ color: '#9BA6E3', fontWeight: 600 }}>
+              <Box component={Link} to="/app/contexto?tab=espacios" sx={{ color: 'var(--af-acento-suave)', fontWeight: 600 }}>
                 Sesión
               </Box>
               , en su pestaña Tareas.

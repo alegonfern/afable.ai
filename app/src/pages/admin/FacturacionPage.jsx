@@ -57,7 +57,7 @@ const formatearFecha = (iso) =>
  * Una pasarela sin credenciales cargadas no se ofrece (`proveedores` lo dice el
  * backend): un botón que revienta al apretarlo es peor que un botón que no está.
  */
-export default function FacturacionPage() {
+export default function FacturacionPage({ embebido = false }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const { slug, esAdmin, loading: cargandoWorkspace } = useWorkspace();
@@ -166,7 +166,7 @@ export default function FacturacionPage() {
   if (cargandoWorkspace || cargando) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', pt: 12 }}>
-        <CircularProgress size={26} sx={{ color: '#586AD0' }} />
+        <CircularProgress size={26} sx={{ color: 'var(--af-acento)' }} />
       </Box>
     );
   }
@@ -202,17 +202,24 @@ export default function FacturacionPage() {
   );
 
   return (
-    <Box sx={{ maxWidth: 1000, mx: 'auto', px: { xs: 2.5, md: 5 }, py: { xs: 4, md: 6 }, width: '100%' }}>
-      <CreditCard size={24} color={textSemi} strokeWidth={1.75} />
-      <Typography
-        sx={{ fontFamily: DISPLAY, fontSize: '1.875rem', fontWeight: 600, mt: 1.5, letterSpacing: '-0.01em' }}
-      >
-        Facturación
-      </Typography>
-      <Typography sx={{ color: textMuted, fontSize: '0.9375rem', mt: 0.75 }}>
-        El plan es de la empresa, no de una persona: todo el equipo queda cubierto con una
-        sola suscripción.
-      </Typography>
+    <Box sx={embebido ? { maxWidth: 1000, width: '100%' } : { maxWidth: 1000, mx: 'auto', px: { xs: 2.5, md: 5 }, py: { xs: 4, md: 6 }, width: '100%' }}>
+      {!embebido && (
+        <>
+          <CreditCard size={24} color={textSemi} strokeWidth={1.75} />
+          <Typography
+            sx={{ fontFamily: DISPLAY, fontSize: '1.875rem', fontWeight: 600, mt: 1.5, letterSpacing: '-0.01em' }}
+          >
+            Facturación
+          </Typography>
+        </>
+      )}
+      {/* En Configuración el título y la explicación los pone la página. */}
+      {!embebido && (
+        <Typography sx={{ color: textMuted, fontSize: '0.9375rem', mt: 0.75 }}>
+          El plan es de la empresa, no de una persona: todo el equipo queda cubierto con una
+          sola suscripción.
+        </Typography>
+      )}
 
       {/* ── El plan actual ───────────────────────────────────────────────────── */}
       <Seccion
@@ -284,7 +291,7 @@ export default function FacturacionPage() {
               <Box
                 key={plan.id}
                 sx={{
-                  border: `1px solid ${actual ? '#586AD0' : borde}`,
+                  border: `1px solid ${actual ? 'var(--af-acento)' : borde}`,
                   borderRadius: '10px', p: 2.25,
                   display: 'flex', flexDirection: 'column', gap: 1,
                 }}
@@ -303,7 +310,7 @@ export default function FacturacionPage() {
                 </Typography>
 
                 {actual ? (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, color: '#586AD0' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, color: 'var(--af-acento)' }}>
                     <Check size={15} />
                     <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600 }}>Su plan</Typography>
                   </Box>

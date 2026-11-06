@@ -25,7 +25,7 @@ export default function SelectorAgente({ agenteActivo, abierto = false, onToggle
       sx={{
         display: 'flex', alignItems: 'center', gap: 0.6,
         px: 0.875, py: 0.4, borderRadius: '6px', cursor: 'pointer',
-        color: agenteActivo ? '#9BA6E3' : textMuted,
+        color: agenteActivo ? 'var(--af-acento-suave)' : textMuted,
         fontSize: '0.8125rem', fontWeight: 500, maxWidth: 190,
         bgcolor: abierto ? (d ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)') : 'transparent',
         '&:hover': { bgcolor: d ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)' },

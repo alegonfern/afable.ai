@@ -83,7 +83,7 @@ export default function HabilidadesTab({ agentes = [] }) {
   if (cargando) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
-        <CircularProgress size={22} sx={{ color: '#586AD0' }} />
+        <CircularProgress size={22} sx={{ color: 'var(--af-acento)' }} />
       </Box>
     );
   }

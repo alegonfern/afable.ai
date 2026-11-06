@@ -8,7 +8,7 @@ import { useApp } from '../context/AppContext';
 
 function SectionLabel({ children }) {
   return (
-    <Typography sx={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#586AD0', mb: 1.5 }}>
+    <Typography sx={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--af-acento)', mb: 1.5 }}>
       {children}
     </Typography>
   );
@@ -31,10 +31,10 @@ export default function ContextoPage({ hideHeader = false }) {
       bgcolor: bgInput, borderRadius: '8px', fontSize: '0.875rem', color: theme.palette.text.primary,
       '& fieldset': { borderColor },
       '&:hover fieldset': { borderColor: d ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)' },
-      '&.Mui-focused fieldset': { borderColor: '#586AD0' },
+      '&.Mui-focused fieldset': { borderColor: 'var(--af-acento)' },
     },
     '& .MuiInputLabel-root': { color: textMuted, fontSize: '0.875rem' },
-    '& .MuiInputLabel-root.Mui-focused': { color: '#9BA6E3' },
+    '& .MuiInputLabel-root.Mui-focused': { color: 'var(--af-acento-suave)' },
   };
 
   const [cubicles, setCubicles] = useState([]);
@@ -153,20 +153,20 @@ export default function ContextoPage({ hideHeader = false }) {
                   sx={{
                     alignSelf: 'flex-start', px: 2.5, py: 1, borderRadius: '8px', border: 'none',
                     cursor: creating ? 'default' : 'pointer',
-                    bgcolor: (creating || !newTitle.trim() || !newContent.trim()) ? 'rgba(88, 106, 208,0.4)' : '#586AD0',
-                    color: '#fff', fontSize: '0.8rem', fontWeight: 600,
+                    bgcolor: (creating || !newTitle.trim() || !newContent.trim()) ? 'color-mix(in srgb, var(--af-acento) 40%, transparent)' : 'var(--af-acento)',
+                    color: 'var(--af-sobre-acento)', fontSize: '0.8rem', fontWeight: 600,
                     display: 'flex', alignItems: 'center', gap: 0.75,
-                    '&:hover:not(:disabled)': { bgcolor: '#2F42A6' },
+                    '&:hover:not(:disabled)': { bgcolor: 'var(--af-acento-hover)' },
                   }}
                 >
-                  {creating ? <CircularProgress size={13} sx={{ color: '#fff' }} /> : <Plus size={14} />}
+                  {creating ? <CircularProgress size={13} sx={{ color: 'var(--af-sobre-acento)' }} /> : <Plus size={14} />}
                   {creating ? 'Agregando...' : 'Agregar cubículo'}
                 </Box>
               </Box>
 
               <SectionLabel>Tus cubículos ({cubicles.length})</SectionLabel>
               {loading ? (
-                <CircularProgress size={20} sx={{ color: '#9BA6E3' }} />
+                <CircularProgress size={20} sx={{ color: 'var(--af-acento-suave)' }} />
               ) : cubicles.length === 0 ? (
                 <Typography sx={{ fontSize: '0.8rem', color: textMuted }}>Todavía no hay cubículos.</Typography>
               ) : (
@@ -179,7 +179,7 @@ export default function ContextoPage({ hideHeader = false }) {
                           <TextField value={editContent} onChange={e => setEditContent(e.target.value)} multiline rows={3} sx={inputSx} />
                           <Box sx={{ display: 'flex', gap: 1 }}>
                             <Box component="button" onClick={() => handleSaveEdit(c.id)} disabled={saving}
-                              sx={{ px: 2, py: 0.6, borderRadius: '6px', border: 'none', cursor: 'pointer', bgcolor: '#586AD0', color: '#fff', fontSize: '0.75rem', fontWeight: 600 }}>
+                              sx={{ px: 2, py: 0.6, borderRadius: '6px', border: 'none', cursor: 'pointer', bgcolor: 'var(--af-acento)', color: 'var(--af-sobre-acento)', fontSize: '0.75rem', fontWeight: 600 }}>
                               {saving ? 'Guardando...' : 'Guardar'}
                             </Box>
                             <Box component="button" onClick={cancelEdit}
@@ -199,7 +199,7 @@ export default function ContextoPage({ hideHeader = false }) {
                             </Typography>
                           </Box>
                           <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
-                            <Box onClick={() => startEdit(c)} sx={{ color: textMuted, cursor: 'pointer', p: 0.5, '&:hover': { color: '#9BA6E3' } }}>
+                            <Box onClick={() => startEdit(c)} sx={{ color: textMuted, cursor: 'pointer', p: 0.5, '&:hover': { color: 'var(--af-acento-suave)' } }}>
                               <Pencil size={14} />
                             </Box>
                             <Box onClick={() => handleDelete(c.id)} sx={{ color: textMuted, cursor: 'pointer', p: 0.5, '&:hover': { color: '#e57373' } }}>
@@ -216,11 +216,11 @@ export default function ContextoPage({ hideHeader = false }) {
 
             <Box sx={{ flex: '1 1 380px', minWidth: 300, maxWidth: 520, position: 'sticky', top: 16 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                <FileIcon size={14} color="#9BA6E3" />
+                <FileIcon size={14} color="var(--af-acento-suave)" />
                 <Typography sx={{ fontSize: '0.75rem', fontFamily: 'JetBrains Mono, monospace', color: textMuted }}>
                   contexto.md
                 </Typography>
-                <Sparkles size={12} color="#9BA6E3" />
+                <Sparkles size={12} color="var(--af-acento-suave)" />
               </Box>
               <Box
                 sx={{
@@ -230,7 +230,7 @@ export default function ContextoPage({ hideHeader = false }) {
                 }}
               >
                 {loadingMd ? (
-                  <CircularProgress size={16} sx={{ color: '#9BA6E3' }} />
+                  <CircularProgress size={16} sx={{ color: 'var(--af-acento-suave)' }} />
                 ) : markdown ? markdown : (
                   <Typography sx={{ fontSize: '0.75rem', color: textMuted, fontStyle: 'italic' }}>
                     Este archivo se genera solo — agrega tu primer cubículo y aparece acá.

@@ -108,7 +108,7 @@ export default function SesionTareas({ sesion, slug }) {
   if (tareas === null) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
-        <CircularProgress size={22} sx={{ color: '#586AD0' }} />
+        <CircularProgress size={22} sx={{ color: 'var(--af-acento)' }} />
       </Box>
     );
   }
@@ -127,7 +127,7 @@ export default function SesionTareas({ sesion, slug }) {
             '& .MuiOutlinedInput-root': {
               bgcolor: bgSuave, borderRadius: '8px', fontSize: '0.9375rem',
               '& fieldset': { borderColor: borde },
-              '&.Mui-focused fieldset': { borderColor: '#586AD0' },
+              '&.Mui-focused fieldset': { borderColor: 'var(--af-acento)' },
             },
           }}
         />
@@ -147,7 +147,7 @@ export default function SesionTareas({ sesion, slug }) {
             '& .MuiToggleButton-root': {
               textTransform: 'none', fontSize: '0.8125rem', px: 1.75, py: 0.4,
               borderColor: borde,
-              '&.Mui-selected': { bgcolor: 'rgba(88, 106, 208, 0.16)', color: '#586AD0', fontWeight: 600 },
+              '&.Mui-selected': { bgcolor: 'color-mix(in srgb, var(--af-acento) 16%, transparent)', color: 'var(--af-acento)', fontWeight: 600 },
             },
           }}
         >

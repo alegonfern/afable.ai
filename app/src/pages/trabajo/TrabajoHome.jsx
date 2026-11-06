@@ -76,7 +76,7 @@ export default function TrabajoHome() {
         position: 'relative',
         border: `1px solid ${borde}`, borderRadius: '12px', bgcolor: bgCaja,
         px: 2, pt: 1.75, pb: 1,
-        '&:focus-within': { borderColor: 'rgba(88, 106, 208, 0.5)' },
+        '&:focus-within': { borderColor: 'color-mix(in srgb, var(--af-acento) 50%, transparent)' },
         transition: 'border-color .15s',
       }}>
         {menciones.mencion && (
@@ -131,9 +131,9 @@ export default function TrabajoHome() {
             disabled={!texto.trim()}
             title="Enviar"
             sx={{
-              bgcolor: texto.trim() ? '#586AD0' : 'transparent',
-              color: texto.trim() ? '#fff' : textMuted,
-              '&:hover': { bgcolor: texto.trim() ? '#2F42A6' : 'transparent' },
+              bgcolor: texto.trim() ? 'var(--af-acento)' : 'transparent',
+              color: texto.trim() ? 'var(--af-sobre-acento)' : textMuted,
+              '&:hover': { bgcolor: texto.trim() ? 'var(--af-acento-hover)' : 'transparent' },
             }}
           >
             <SendHorizontal size={16} />

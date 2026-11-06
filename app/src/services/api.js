@@ -411,6 +411,250 @@ export const api = {
   metodoPagoPrincipal: (slug, id) =>
     apiClient.post(`/workspaces/${slug}/facturacion/metodos/${id}/principal/`),
 
+  // ── Finanzas ── lo que la empresa descarga del SII, clasificado. Cuelga de la Empresa:
+  // ver es de cualquier miembro; cargar, clasificar y configurar, de editor para arriba.
+  // Compras y Ventas (22-10-2026): /workspaces/<slug>/comercial/...
+  comercial: {
+    configuracion: (slug) => apiClient.get(`/workspaces/${slug}/comercial/configuracion/`),
+    guardarConfiguracion: (slug, datos) => apiClient.put(`/workspaces/${slug}/comercial/configuracion/`, datos),
+    resumen: (slug, tipo) => apiClient.get(`/workspaces/${slug}/comercial/resumen/`, { params: { tipo } }),
+    contactos: (slug, params) => apiClient.get(`/workspaces/${slug}/comercial/contactos/`, { params }),
+    contacto: (slug, id) => apiClient.get(`/workspaces/${slug}/comercial/contactos/${id}/`),
+    crearContacto: (slug, datos) => apiClient.post(`/workspaces/${slug}/comercial/contactos/`, datos),
+    actualizarContacto: (slug, id, datos) => apiClient.patch(`/workspaces/${slug}/comercial/contactos/${id}/`, datos),
+    productos: (slug, params) => apiClient.get(`/workspaces/${slug}/comercial/productos/`, { params }),
+    crearProducto: (slug, datos) => apiClient.post(`/workspaces/${slug}/comercial/productos/`, datos),
+    actualizarProducto: (slug, id, datos) => apiClient.patch(`/workspaces/${slug}/comercial/productos/${id}/`, datos),
+    bodegas: (slug) => apiClient.get(`/workspaces/${slug}/comercial/bodegas/`),
+    crearBodega: (slug, datos) => apiClient.post(`/workspaces/${slug}/comercial/bodegas/`, datos),
+    actualizarBodega: (slug, id, datos) => apiClient.patch(`/workspaces/${slug}/comercial/bodegas/${id}/`, datos),
+    stock: (slug) => apiClient.get(`/workspaces/${slug}/comercial/stock/`),
+    ajustar: (slug, datos) => apiClient.post(`/workspaces/${slug}/comercial/stock/ajuste/`, datos),
+    traspasar: (slug, datos) => apiClient.post(`/workspaces/${slug}/comercial/stock/traspaso/`, datos),
+    movimientos: (slug, params) => apiClient.get(`/workspaces/${slug}/comercial/movimientos/`, { params }),
+    pedidos: (slug, params) => apiClient.get(`/workspaces/${slug}/comercial/pedidos/`, { params }),
+    pedido: (slug, id) => apiClient.get(`/workspaces/${slug}/comercial/pedidos/${id}/`),
+    crearPedido: (slug, datos) => apiClient.post(`/workspaces/${slug}/comercial/pedidos/`, datos),
+    actualizarPedido: (slug, id, datos) => apiClient.patch(`/workspaces/${slug}/comercial/pedidos/${id}/`, datos),
+    borrarPedido: (slug, id) => apiClient.delete(`/workspaces/${slug}/comercial/pedidos/${id}/`),
+    accion: (slug, id, accion, extra = {}) => apiClient.post(`/workspaces/${slug}/comercial/pedidos/${id}/accion/`, { accion, ...extra }),
+    entregar: (slug, id, datos) => apiClient.post(`/workspaces/${slug}/comercial/pedidos/${id}/entregar/`, datos),
+    anularEntrega: (slug, id) => apiClient.post(`/workspaces/${slug}/comercial/entregas/${id}/anular/`),
+    // La guía de despacho electrónica (52) de una entrega, con el facturador nativo.
+    emitirGuia: (slug, pedido, entrega, transporte = {}) =>
+      apiClient.post(`/workspaces/${slug}/comercial/pedidos/${pedido}/entregas/${entrega}/guia/`, transporte),
+    entregas: (slug, tipo) => apiClient.get(`/workspaces/${slug}/comercial/entregas/`, { params: { tipo } }),
+    candidatas: (slug, id) => apiClient.get(`/workspaces/${slug}/comercial/pedidos/${id}/facturas/`),
+    vincular: (slug, id, datos) => apiClient.post(`/workspaces/${slug}/comercial/pedidos/${id}/facturas/`, datos),
+    desvincular: (slug, id, documento) =>
+      apiClient.delete(`/workspaces/${slug}/comercial/pedidos/${id}/facturas/`, { params: { documento } }),
+    pdf: (slug, id) => apiClient.get(`/workspaces/${slug}/comercial/pedidos/${id}/pdf/`, { responseType: 'blob' }),
+    pdfFactura: (slug, id) => apiClient.get(`/workspaces/${slug}/comercial/facturas/${id}/pdf/`, { responseType: 'blob' }),
+    enviarCorreo: (slug, id, datos) => apiClient.post(`/workspaces/${slug}/comercial/pedidos/${id}/correo/`, datos),
+    porFacturar: (slug, tipo) => apiClient.get(`/workspaces/${slug}/comercial/por-facturar/`, { params: { tipo } }),
+    // 24-10-2026: cobros y pagos, devoluciones, precios por contacto, reponer, reportes y planillas.
+    pagar: (slug, id, datos) => apiClient.post(`/workspaces/${slug}/comercial/pedidos/${id}/pagos/`, datos),
+    borrarPago: (slug, id, pago) => apiClient.delete(`/workspaces/${slug}/comercial/pedidos/${id}/pagos/${pago}/`),
+    devolver: (slug, id, datos) => apiClient.post(`/workspaces/${slug}/comercial/pedidos/${id}/devolver/`, datos),
+    precios: (slug, params) => apiClient.get(`/workspaces/${slug}/comercial/precios/`, { params }),
+    guardarPrecio: (slug, datos) => apiClient.post(`/workspaces/${slug}/comercial/precios/`, datos),
+    borrarPrecio: (slug, id) => apiClient.delete(`/workspaces/${slug}/comercial/precios/${id}/`),
+    reponer: (slug) => apiClient.post(`/workspaces/${slug}/comercial/stock/reponer/`),
+    reporte: (slug, params) => apiClient.get(`/workspaces/${slug}/comercial/reportes/`, { params }),
+    exportar: (slug, que, params) => apiClient.get(`/workspaces/${slug}/comercial/exportar/${que}/`, { params, responseType: 'blob' }),
+    plantilla: (slug, que) => apiClient.get(`/workspaces/${slug}/comercial/importar/${que}/`, { responseType: 'blob' }),
+    importar: (slug, que, archivo) => {
+      const datos = new FormData();
+      datos.append('file', archivo);
+      return apiClient.post(`/workspaces/${slug}/comercial/importar/${que}/`, datos, { headers: { 'Content-Type': 'multipart/form-data' } });
+    },
+    tipoCambio: (slug, moneda, fecha) =>
+      apiClient.get(`/workspaces/${slug}/comercial/tipo-cambio/`, { params: { moneda, fecha } }),
+  },
+  // Conectores (27-10-2026): /workspaces/<slug>/conectores/... Ver: miembros; sincronizar: editor;
+  // conectar, opciones y desconectar: administrador.
+  conectores: {
+    lista: (slug) => apiClient.get(`/workspaces/${slug}/conectores/`),
+    detalle: (slug, tipo) => apiClient.get(`/workspaces/${slug}/conectores/${tipo}/`),
+    opciones: (slug, tipo, config) => apiClient.patch(`/workspaces/${slug}/conectores/${tipo}/`, { config }),
+    conectar: (slug, tipo, datos = {}) => apiClient.post(`/workspaces/${slug}/conectores/${tipo}/conectar/`, datos),
+    sincronizar: (slug, tipo, opciones = {}) => apiClient.post(`/workspaces/${slug}/conectores/${tipo}/sincronizar/`, opciones),
+    desconectar: (slug, tipo) => apiClient.post(`/workspaces/${slug}/conectores/${tipo}/desconectar/`),
+    historial: (slug, tipo) => apiClient.get(`/workspaces/${slug}/conectores/${tipo}/historial/`),
+  },
+  // Inventario (26-10-2026): /workspaces/<slug>/comercial/inventario/... Ver es de cualquier
+  // miembro; entradas, salidas, conteos e importaciones, de editor para arriba.
+  inventario: {
+    resumen: (slug, params) => apiClient.get(`/workspaces/${slug}/comercial/inventario/resumen/`, { params }),
+    stock: (slug, params) => apiClient.get(`/workspaces/${slug}/comercial/inventario/stock/`, { params }),
+    entrada: (slug, datos) => apiClient.post(`/workspaces/${slug}/comercial/inventario/entrada/`, datos),
+    salida: (slug, datos) => apiClient.post(`/workspaces/${slug}/comercial/inventario/salida/`, datos),
+    kardex: (slug, id, params) => apiClient.get(`/workspaces/${slug}/comercial/inventario/kardex/${id}/`, { params }),
+    movimientos: (slug, params) => apiClient.get(`/workspaces/${slug}/comercial/inventario/movimientos/`, { params }),
+    valorizacion: (slug, params) => apiClient.get(`/workspaces/${slug}/comercial/inventario/valorizacion/`, { params }),
+    rotacion: (slug, params) => apiClient.get(`/workspaces/${slug}/comercial/inventario/rotacion/`, { params }),
+    conteos: (slug) => apiClient.get(`/workspaces/${slug}/comercial/inventario/conteos/`),
+    crearConteo: (slug, datos) => apiClient.post(`/workspaces/${slug}/comercial/inventario/conteos/`, datos),
+    conteo: (slug, id) => apiClient.get(`/workspaces/${slug}/comercial/inventario/conteos/${id}/`),
+    contar: (slug, id, lineas) => apiClient.patch(`/workspaces/${slug}/comercial/inventario/conteos/${id}/lineas/`, { lineas }),
+    aplicarConteo: (slug, id) => apiClient.post(`/workspaces/${slug}/comercial/inventario/conteos/${id}/aplicar/`),
+    cancelarConteo: (slug, id) => apiClient.post(`/workspaces/${slug}/comercial/inventario/conteos/${id}/cancelar/`),
+    planillaConteo: (slug, id) => apiClient.get(`/workspaces/${slug}/comercial/inventario/conteos/${id}/planilla/`, { responseType: 'blob' }),
+    subirPlanillaConteo: (slug, id, archivo) => {
+      const datos = new FormData();
+      datos.append('archivo', archivo);
+      return apiClient.post(`/workspaces/${slug}/comercial/inventario/conteos/${id}/planilla/`, datos, { headers: { 'Content-Type': 'multipart/form-data' } });
+    },
+    plantillaInicial: (slug) => apiClient.get(`/workspaces/${slug}/comercial/inventario/plantilla-inicial/`, { responseType: 'blob' }),
+    importarInicial: (slug, archivo) => {
+      const datos = new FormData();
+      datos.append('archivo', archivo);
+      return apiClient.post(`/workspaces/${slug}/comercial/inventario/importar-inicial/`, datos, { headers: { 'Content-Type': 'multipart/form-data' } });
+    },
+    exportar: (slug, que, params) => apiClient.get(`/workspaces/${slug}/comercial/inventario/exportar/${que}/`, { params, responseType: 'blob' }),
+  },
+  // Facturación electrónica nativa (26-10-2026): /workspaces/<slug>/dte/... Ver es de cualquier
+  // miembro; el certificado, los folios y activar son del administrador; notas y reintentos, de editor.
+  dte: {
+    estado: (slug, ambiente) => apiClient.get(`/workspaces/${slug}/dte/estado/`, { params: { ambiente } }),
+    guardarConfiguracion: (slug, datos) => apiClient.put(`/workspaces/${slug}/dte/configuracion/`, datos),
+    subirCertificado: (slug, archivo, clave) => {
+      const datos = new FormData();
+      datos.append('archivo', archivo);
+      datos.append('clave', clave);
+      return apiClient.post(`/workspaces/${slug}/dte/certificado/`, datos, { headers: { 'Content-Type': 'multipart/form-data' } });
+    },
+    cafs: (slug, ambiente) => apiClient.get(`/workspaces/${slug}/dte/cafs/`, { params: { ambiente } }),
+    subirCaf: (slug, archivo, primerFolio) => {
+      const datos = new FormData();
+      datos.append('archivo', archivo);
+      if (primerFolio) datos.append('primer_folio', primerFolio);
+      return apiClient.post(`/workspaces/${slug}/dte/cafs/`, datos, { headers: { 'Content-Type': 'multipart/form-data' } });
+    },
+    probarConexion: (slug, ambiente) => apiClient.post(`/workspaces/${slug}/dte/probar-conexion/`, { ambiente }),
+    activar: (slug, ambiente) => apiClient.post(`/workspaces/${slug}/dte/activar/`, { ambiente }),
+    desactivar: (slug) => apiClient.post(`/workspaces/${slug}/dte/desactivar/`),
+    documentos: (slug, params) => apiClient.get(`/workspaces/${slug}/dte/documentos/`, { params }),
+    xml: (slug, id) => apiClient.get(`/workspaces/${slug}/dte/documentos/${id}/xml/`, { responseType: 'blob' }),
+    pdf: (slug, id, cedible) => apiClient.get(`/workspaces/${slug}/dte/documentos/${id}/pdf/`, { params: cedible ? { cedible: 1 } : {}, responseType: 'blob' }),
+    nota: (slug, id, datos) => apiClient.post(`/workspaces/${slug}/dte/documentos/${id}/nota/`, datos),
+    envio: (slug, id) => apiClient.get(`/workspaces/${slug}/dte/envios/${id}/`),
+    reintentar: (slug, id) => apiClient.post(`/workspaces/${slug}/dte/envios/${id}/reintentar/`),
+    // Intercambio: lo que llega de los proveedores y la casilla donde llega.
+    recibidos: (slug, params) => apiClient.get(`/workspaces/${slug}/dte/recibidos/`, { params }),
+    subirRecibido: (slug, archivo) => {
+      const datos = new FormData();
+      datos.append('archivo', archivo);
+      return apiClient.post(`/workspaces/${slug}/dte/recibidos/subir/`, datos, { headers: { 'Content-Type': 'multipart/form-data' } });
+    },
+    aceptarRecibido: (slug, id, datos = {}) => apiClient.post(`/workspaces/${slug}/dte/recibidos/${id}/aceptar/`, datos),
+    reclamarRecibido: (slug, id, datos) => apiClient.post(`/workspaces/${slug}/dte/recibidos/${id}/reclamar/`, datos),
+    xmlRecibido: (slug, id) => apiClient.get(`/workspaces/${slug}/dte/recibidos/${id}/xml/`, { responseType: 'blob' }),
+    casilla: (slug) => apiClient.get(`/workspaces/${slug}/dte/casilla/`),
+    guardarCasilla: (slug, datos) => apiClient.put(`/workspaces/${slug}/dte/casilla/`, datos),
+    probarCasilla: (slug) => apiClient.post(`/workspaces/${slug}/dte/casilla/probar/`),
+    revisarCasilla: (slug) => apiClient.post(`/workspaces/${slug}/dte/casilla/revisar/`),
+    enviarACliente: (slug, id, correo) => apiClient.post(`/workspaces/${slug}/dte/documentos/${id}/enviar-a-cliente/`, correo ? { correo } : {}),
+    // Certificación ante el SII, paso a paso.
+    certificacion: (slug) => apiClient.get(`/workspaces/${slug}/dte/certificacion/`),
+    cargarSet: (slug, texto, archivo) => {
+      const datos = new FormData();
+      if (texto) datos.append('texto', texto);
+      if (archivo) datos.append('archivo', archivo);
+      return apiClient.post(`/workspaces/${slug}/dte/certificacion/set/`, datos, { headers: { 'Content-Type': 'multipart/form-data' } });
+    },
+    generarCertificacion: (slug, que, datos = {}) => apiClient.post(`/workspaces/${slug}/dte/certificacion/generar/`, { que, ...datos }),
+    subirCertificacion: (slug) => apiClient.post(`/workspaces/${slug}/dte/certificacion/subir/`),
+    consultarCertificacion: (slug) => apiClient.post(`/workspaces/${slug}/dte/certificacion/consultar/`),
+    pasoCertificacion: (slug, paso) => apiClient.post(`/workspaces/${slug}/dte/certificacion/paso/`, { paso }),
+    xmlCertificacion: (slug, id) => apiClient.get(`/workspaces/${slug}/dte/certificacion/envios/${id}/xml/`, { responseType: 'blob' }),
+    intercambioCertificacion: (slug, archivo) => {
+      const datos = new FormData();
+      datos.append('archivo', archivo);
+      return apiClient.post(`/workspaces/${slug}/dte/certificacion/intercambio/`, datos, { headers: { 'Content-Type': 'multipart/form-data' }, responseType: 'blob' });
+    },
+    muestrasCertificacion: (slug) => apiClient.get(`/workspaces/${slug}/dte/certificacion/muestras/`, { responseType: 'blob' }),
+  },
+  finanzas: {
+    configuracion: (slug) => apiClient.get(`/workspaces/${slug}/finanzas/configuracion/`),
+    guardarConfiguracion: (slug, datos) =>
+      apiClient.put(`/workspaces/${slug}/finanzas/configuracion/`, datos),
+    categorias: (slug) => apiClient.get(`/workspaces/${slug}/finanzas/categorias/`),
+    actualizarCategoria: (slug, id, datos) =>
+      apiClient.patch(`/workspaces/${slug}/finanzas/categorias/${id}/`, datos),
+    proyectos: (slug) => apiClient.get(`/workspaces/${slug}/finanzas/proyectos/`),
+    crearProyecto: (slug, nombre) =>
+      apiClient.post(`/workspaces/${slug}/finanzas/proyectos/`, { nombre }),
+    cargas: (slug) => apiClient.get(`/workspaces/${slug}/finanzas/cargas/`),
+    cargar: (slug, archivo, libro) => {
+      const datos = new FormData();
+      datos.append('file', archivo);
+      if (libro) datos.append('libro', libro);
+      return apiClient.post(`/workspaces/${slug}/finanzas/cargas/`, datos, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    },
+    // La carga queda en borrador: se revisa, se puede pedir a la IA lo que falte y se confirma.
+    carga: (slug, id) => apiClient.get(`/workspaces/${slug}/finanzas/cargas/${id}/`),
+    cancelarCarga: (slug, id) => apiClient.delete(`/workspaces/${slug}/finanzas/cargas/${id}/`),
+    sugerirCarga: (slug, id) => apiClient.post(`/workspaces/${slug}/finanzas/cargas/${id}/sugerir/`),
+    confirmarCarga: (slug, id, decisiones) =>
+      apiClient.post(`/workspaces/${slug}/finanzas/cargas/${id}/confirmar/`, { decisiones }),
+    contrapartes: (slug, libros) =>
+      apiClient.get(`/workspaces/${slug}/finanzas/contrapartes/`, {
+        params: { libro: libros }, paramsSerializer: { indexes: null },
+      }),
+    actualizarContraparte: (slug, id, cambios) =>
+      apiClient.patch(`/workspaces/${slug}/finanzas/contrapartes/${id}/`, cambios),
+    // Los números (calculados en el servidor desde los documentos).
+    resumen: (slug, anio) => apiClient.get(`/workspaces/${slug}/finanzas/resumen/`, { params: { anio } }),
+    impuestos: (slug, anio) => apiClient.get(`/workspaces/${slug}/finanzas/impuestos/`, { params: { anio } }),
+    marcarF29: (slug, anio, mes, datos) =>
+      apiClient.patch(`/workspaces/${slug}/finanzas/impuestos/${anio}/${mes}/`, datos),
+    porCategoria: (slug, params) => apiClient.get(`/workspaces/${slug}/finanzas/por-categoria/`, { params }),
+    margenProyectos: (slug, anio) =>
+      apiClient.get(`/workspaces/${slug}/finanzas/proyectos/margen/`, { params: { anio } }),
+    // Conciliación ("El cuadre").
+    cuentas: (slug) => apiClient.get(`/workspaces/${slug}/finanzas/cuentas/`),
+    crearCuenta: (slug, datos) => apiClient.post(`/workspaces/${slug}/finanzas/cuentas/`, datos),
+    subirCartola: (slug, cuenta, archivo) => {
+      const datos = new FormData();
+      datos.append('cuenta', cuenta);
+      datos.append('file', archivo);
+      return apiClient.post(`/workspaces/${slug}/finanzas/cartolas/`, datos, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    },
+    cuadre: (slug, params) => apiClient.get(`/workspaces/${slug}/finanzas/cuadre/`, { params }),
+    movimientos: (slug, params) => apiClient.get(`/workspaces/${slug}/finanzas/movimientos/`, { params }),
+    accionMovimiento: (slug, id, accion, datos = {}) =>
+      apiClient.post(`/workspaces/${slug}/finanzas/movimientos/${id}/${accion}/`, datos),
+    cierres: (slug) => apiClient.get(`/workspaces/${slug}/finanzas/cuadre/cierres/`),
+    cerrarMes: (slug, anio, mes) => apiClient.post(`/workspaces/${slug}/finanzas/cuadre/cierres/`, { anio, mes }),
+    reabrirMes: (slug, anio, mes) =>
+      apiClient.delete(`/workspaces/${slug}/finanzas/cuadre/cierres/`, { params: { anio, mes } }),
+    ventas: (slug, anio) => apiClient.get(`/workspaces/${slug}/finanzas/ventas/`, { params: { anio } }),
+    // Automatizaciones de cada módulo (catálogo fijo que la empresa activa).
+    // Lo que hizo hoy el agente de un módulo (vista "Agente", 25-10-2026).
+    actividadAgente: (slug, modulo) => apiClient.get(`/workspaces/${slug}/finanzas/agentes/${modulo}/hoy/`),
+    automatizaciones: (slug, modulo) =>
+      apiClient.get(`/workspaces/${slug}/finanzas/automatizaciones/`, { params: { modulo } }),
+    actualizarAutomatizacion: (slug, clave, datos) =>
+      apiClient.patch(`/workspaces/${slug}/finanzas/automatizaciones/${clave}/`, datos),
+    probarAutomatizacion: (slug, clave) =>
+      apiClient.post(`/workspaces/${slug}/finanzas/automatizaciones/${clave}/`),
+    // Finanzas: la plata.
+    cuentasPor: (slug, tipo) => apiClient.get(`/workspaces/${slug}/finanzas/cuentas-por/${tipo}/`),
+    caja: (slug) => apiClient.get(`/workspaces/${slug}/finanzas/caja/`),
+    cuentaDueno: (slug) => apiClient.get(`/workspaces/${slug}/finanzas/cuenta-dueno/`),
+    documentos: (slug, filtros = {}) =>
+      apiClient.get(`/workspaces/${slug}/finanzas/documentos/`, { params: filtros }),
+    actualizarDocumento: (slug, id, cambios) =>
+      apiClient.patch(`/workspaces/${slug}/finanzas/documentos/${id}/`, cambios),
+    lote: (slug, datos) => apiClient.post(`/workspaces/${slug}/finanzas/documentos/lote/`, datos),
+    sugerir: (slug) => apiClient.post(`/workspaces/${slug}/finanzas/documentos/sugerir/`),
+  },
+
   // ── Rutinas ──
   getRoutines: () => apiClient.get('/agents/routines/'),
   createRoutine: (data) => apiClient.post('/agents/routines/', data),

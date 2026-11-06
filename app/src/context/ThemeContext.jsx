@@ -4,7 +4,7 @@ const ThemeCtx = createContext({ mode: 'light', toggleMode: () => {} });
 
 export function ThemeContextProvider({ children }) {
   const [mode, setMode] = useState(
-    () => localStorage.getItem('afable_theme') || 'dark'
+    () => localStorage.getItem('afable_theme') || 'light'
   );
 
   useEffect(() => {

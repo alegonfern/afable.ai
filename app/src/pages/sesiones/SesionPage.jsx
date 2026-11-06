@@ -65,7 +65,7 @@ export default function SesionPage() {
   if (cargando) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', pt: 12 }}>
-        <CircularProgress size={26} sx={{ color: '#586AD0' }} />
+        <CircularProgress size={26} sx={{ color: 'var(--af-acento)' }} />
       </Box>
     );
   }

@@ -2,6 +2,8 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 
+from apps.dte.views_intercambio import CorreoEntranteView
+
 
 def _media_publica():
     """Sirve por `/media/` SOLO lo que es público de verdad: logos y fotos de perfil.
@@ -37,6 +39,16 @@ urlpatterns = [
         # lo demás de la empresa. Vive en `apps.payments` porque ahí están los
         # modelos y las pasarelas; sólo el ruteo se cuelga de `workspaces/`.
         path('workspaces/', include('apps.payments.facturacion_urls')),
+        # Finanzas también cuelga de la Empresa: /workspaces/<slug>/finanzas/...
+        path('workspaces/', include('apps.finanzas.urls')),
+        # Compras y Ventas: /workspaces/<slug>/comercial/...
+        path('workspaces/', include('apps.comercial.urls')),
+        # Facturación electrónica nativa: /workspaces/<slug>/dte/...
+        path('workspaces/', include('apps.dte.urls')),
+        # Conectores: /workspaces/<slug>/conectores/...
+        path('workspaces/', include('apps.conectores.urls')),
+        # La casilla de intercambio de Afable: el proveedor de correo entrante reenvía aquí cada correo.
+        path('dte/correo-entrante/<str:secreto>/', CorreoEntranteView.as_view(), name='dte-correo-entrante'),
         path('invitations/', include('apps.workspaces.invitation_urls')),
         path('organizations/', include('apps.organizations.urls')),
         path('sources/', include('apps.sources.urls')),

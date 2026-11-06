@@ -107,7 +107,7 @@ export default function SesionConversacion({ sesion, slug, onSaludo }) {
   if (feed === null) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
-        <CircularProgress size={22} sx={{ color: '#586AD0' }} />
+        <CircularProgress size={22} sx={{ color: 'var(--af-acento)' }} />
       </Box>
     );
   }
@@ -164,9 +164,9 @@ export default function SesionConversacion({ sesion, slug, onSaludo }) {
           <IconButton
             onClick={enviar} disabled={!mensaje.trim()}
             sx={{
-              bgcolor: mensaje.trim() ? '#586AD0' : 'transparent',
-              color: mensaje.trim() ? '#fff' : textMuted,
-              '&:hover': { bgcolor: mensaje.trim() ? '#2F42A6' : bgSuave },
+              bgcolor: mensaje.trim() ? 'var(--af-acento)' : 'transparent',
+              color: mensaje.trim() ? 'var(--af-sobre-acento)' : textMuted,
+              '&:hover': { bgcolor: mensaje.trim() ? 'var(--af-acento-hover)' : bgSuave },
             }}
             size="small"
           >
@@ -188,7 +188,7 @@ export default function SesionConversacion({ sesion, slug, onSaludo }) {
             sx: {
               bgcolor: bgSuave, borderRadius: '8px', fontSize: '0.9375rem',
               '& fieldset': { borderColor: borde },
-              '&.Mui-focused fieldset': { borderColor: '#586AD0' },
+              '&.Mui-focused fieldset': { borderColor: 'var(--af-acento)' },
             },
           }}
         />
@@ -236,9 +236,9 @@ export default function SesionConversacion({ sesion, slug, onSaludo }) {
                   // diferencia que hay que ver de un vistazo entre "alguien escribió
                   // esto" y "esto apareció sin que nadie lo pidiera".
                   bgcolor: i.autonoma ? 'rgba(52, 211, 153, 0.14)'
-                    : i.tipo === 'tarea' ? 'rgba(240, 180, 41, 0.14)' : 'rgba(88, 106, 208, 0.14)',
+                    : i.tipo === 'tarea' ? 'rgba(240, 180, 41, 0.14)' : 'color-mix(in srgb, var(--af-acento) 14%, transparent)',
                   color: i.autonoma ? '#34D399'
-                    : i.tipo === 'tarea' ? '#f0b429' : '#9BA6E3',
+                    : i.tipo === 'tarea' ? '#f0b429' : 'var(--af-acento-suave)',
                 }}>
                   {i.autonoma ? <Sparkles size={15} />
                     : i.tipo === 'tarea' ? <CheckCircle2 size={15} /> : <MessageSquare size={15} />}
@@ -268,7 +268,7 @@ export default function SesionConversacion({ sesion, slug, onSaludo }) {
                     </Typography>
                   )}
                   {i.respuestas > 0 && (
-                    <Typography sx={{ fontSize: '0.8125rem', color: '#9BA6E3', mt: 0.6, fontWeight: 600 }}>
+                    <Typography sx={{ fontSize: '0.8125rem', color: 'var(--af-acento-suave)', mt: 0.6, fontWeight: 600 }}>
                       {i.respuestas} {i.respuestas === 1 ? 'respuesta' : 'respuestas'}
                       {i.ultima_de && ` · la última de ${i.ultima_de}`}
                     </Typography>

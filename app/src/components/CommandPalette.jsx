@@ -14,7 +14,6 @@ import { api } from '../services/api';
 // lista — una pantalla sin ninguna forma de llegar es una pantalla que no existe.
 const COMANDOS_DESCONECTADOS = [
   { group: 'Navegación', icon: MessageSquare,  label: 'Chat',             shortcut: 'G C', action: '/app' },
-  { group: 'Navegación', icon: Bot,            label: 'Agentes',          shortcut: 'G A', action: '/app/agentes' },
   { group: 'Navegación', icon: FolderOpen,     label: 'Archivos',         shortcut: 'G F', action: '/app/archivos' },
   { group: 'Navegación', icon: Users,          label: 'Equipo',                            action: '/app/admin/personas' },
   { group: 'Navegación', icon: Plug,           label: 'Conexiones',       shortcut: 'G I', action: '/app/contexto?tab=integraciones' },
@@ -23,7 +22,6 @@ const COMANDOS_DESCONECTADOS = [
   { group: 'Navegación', icon: Layers,         label: 'Espacios',                          action: '/app/contexto?tab=espacios' },
   { group: 'Navegación', icon: LayoutDashboard, label: 'Tablero',         shortcut: 'G T', action: '/app/tablero' },
   { group: 'Navegación', icon: BookOpen,       label: 'Contexto de la empresa',            action: '/app/contexto?tab=mi-contexto' },
-  { group: 'Navegación', icon: Bot,            label: 'Agentes (administración)',           action: '/app/admin/agentes' },
   { group: 'Navegación', icon: Building2,      label: 'Su empresa',                        action: '/app/admin/workspace' },
   { group: 'Navegación', icon: CreditCard,     label: 'Facturación',                       action: '/app/admin/facturacion' },
   { group: 'Navegación', icon: User,           label: 'Mi Perfil',                         action: '/app/perfil' },
@@ -31,7 +29,6 @@ const COMANDOS_DESCONECTADOS = [
   { group: 'Navegación', icon: HelpCircle,     label: 'Ayuda',                             action: '/app/ayuda' },
   { group: 'Navegación', icon: Settings,       label: 'Banco de pruebas',                  action: '/app/banco-de-pruebas' },
   { group: 'Acciones',   icon: Plus,           label: 'Nueva conversación',                action: 'new-chat' },
-  { group: 'Acciones',   icon: Bot,            label: 'Crear agente',                      action: '/app/agentes/nuevo' },
 ];
 
 // ⛔ DESCONECTADO el 2026-09-01: la paleta sería la puerta trasera a todo lo que se
@@ -57,9 +54,9 @@ export default function CommandPalette({ open, onClose }) {
   const textSemi = d ? 'rgba(255,255,255,0.65)' : 'rgba(0,0,0,0.65)';
   const textMain = theme.palette.text.primary;
   const bgPalette = d ? '#1a1a1a' : '#ffffff';
-  const bgHover = d ? 'rgba(88, 106, 208,0.15)' : 'rgba(88, 106, 208,0.08)';
+  const bgHover = d ? 'color-mix(in srgb, var(--af-acento) 15%, transparent)' : 'color-mix(in srgb, var(--af-acento) 8%, transparent)';
   const borderPalette = d ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
-  const borderActive = '#586AD0';
+  const borderActive = 'var(--af-acento)';
   const bgGroup = d ? 'rgba(255,255,255,0.25)' : 'rgba(0,0,0,0.25)';
   const bgInput = d ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.05)';
 
@@ -205,7 +202,7 @@ export default function CommandPalette({ open, onClose }) {
                         transition: 'all 0.1s',
                       }}
                     >
-                      <Icon size={15} color={isSelected ? '#9BA6E3' : textMuted} />
+                      <Icon size={15} color={isSelected ? 'var(--af-acento-suave)' : textMuted} />
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography sx={{ fontSize: '0.875rem', color: isSelected ? textMain : textSemi, fontWeight: isSelected ? 500 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {cmd.label}

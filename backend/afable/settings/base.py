@@ -38,6 +38,14 @@ INSTALLED_APPS = [
     'apps.leads',
     'apps.soporte',
     'apps.notificaciones',
+    # Finanzas: lo que la empresa descarga del SII, clasificado (PMV, 17-10-2026).
+    'apps.finanzas',
+    # Compras y Ventas al estilo Odoo, amarradas a las facturas del SII (22-10-2026).
+    'apps.comercial',
+    # Facturador electrónico nativo: emite DTE al SII con el certificado de cada empresa (26-10-2026).
+    'apps.dte',
+    # Conectores con servicios externos (HubSpot, SII · Libros contables…) (27-10-2026).
+    'apps.conectores',
 ]
 
 MIDDLEWARE = [
@@ -79,6 +87,8 @@ DATABASES = {
         'PASSWORD': config('DB_PASSWORD', default='afable'),
         'HOST': config('DB_HOST', default='localhost'),
         'PORT': config('DB_PORT', default='5432'),
+        # Nombre de la base de pruebas: configurable para correr dos suites a la vez sin pisarse.
+        'TEST': {'NAME': config('DB_TEST_NAME', default=None)},
     }
 }
 
@@ -181,6 +191,16 @@ EMAIL_BACKEND = (
     else 'django.core.mail.backends.console.EmailBackend'
 )
 
+# WhatsApp (avisos de las automatizaciones, 22-10-2026), por la API oficial de Meta
+# (WhatsApp Cloud API). Sin token, el canal queda apagado y la pantalla lo dice. Un mensaje
+# que Afable inicia tiene que ir en una PLANTILLA aprobada por Meta: la de los avisos lleva dos
+# variables en el cuerpo, {{1}} = título y {{2}} = detalle.
+WHATSAPP_TOKEN = config('WHATSAPP_TOKEN', default='')
+WHATSAPP_PHONE_NUMBER_ID = config('WHATSAPP_PHONE_NUMBER_ID', default='')
+WHATSAPP_PLANTILLA = config('WHATSAPP_PLANTILLA', default='aviso_afable')
+WHATSAPP_IDIOMA = config('WHATSAPP_IDIOMA', default='es')
+WHATSAPP_API_VERSION = config('WHATSAPP_API_VERSION', default='v21.0')
+
 # Flow Payments
 FLOW_API_KEY = config('FLOW_API_KEY', default='')
 FLOW_SECRET_KEY = config('FLOW_SECRET_KEY', default='')
@@ -245,3 +265,14 @@ EMBEDDINGS_MODEL    = config('EMBEDDINGS_MODEL', default='embeddinggemma')
 # Vacio = usar OLLAMA_BASE_URL. Se separa para poder tener el modelo de embeddings
 # en otra maquina que el de chat.
 EMBEDDINGS_BASE_URL = config('EMBEDDINGS_BASE_URL', default='')
+
+# Facturador electrónico nativo (apps.dte). Apagado hasta probarlo entero con el SII:
+# 'off' = nadie lo ve; 'piloto' = solo las empresas de DTE_PILOTO (slugs, separados por coma); 'on' = todas.
+DTE_NATIVO = config('DTE_NATIVO', default='off')
+DTE_PILOTO = [s.strip() for s in config('DTE_PILOTO', default='').split(',') if s.strip()]
+
+# La casilla de intercambio de Afable (apps.dte): cada empresa recibe dte-<rut>-<dv>@DTE_CORREO_DOMINIO y el
+# proveedor de correo entrante reenvía cada correo a /api/v1/dte/correo-entrante/<DTE_CORREO_SECRETO>/.
+# Vacío = la casilla de Afable no se ofrece (las empresas usan su propia casilla por IMAP).
+DTE_CORREO_DOMINIO = config('DTE_CORREO_DOMINIO', default='')
+DTE_CORREO_SECRETO = config('DTE_CORREO_SECRETO', default='')

@@ -38,6 +38,8 @@ import {
 import { toast } from 'react-toastify';
 import SelectorEspacio from '../../../components/SelectorEspacio';
 import Notificaciones from '../../../components/Notificaciones';
+import SelectorVista from './SelectorVista';
+import { BotonesPanel } from '../PanelLateral';
 import { authService } from '../../../services/auth';
 import { api } from '../../../services/api';
 import { DRAWER_WIDTH, MINI_DRAWER_WIDTH } from '../../../config';
@@ -46,7 +48,7 @@ import { useApp } from '../../../context/AppContext';
 
 const KIND_META = {
   local: { badge: 'Local', color: '#34D399', icon: <Zap size={14} /> },
-  cloud: { badge: 'Cloud', color: '#9BA6E3', icon: <Sparkles size={14} /> },
+  cloud: { badge: 'Cloud', color: 'var(--af-acento-suave)', icon: <Sparkles size={14} /> },
   anthropic: { badge: 'Anthropic', color: '#D97757', icon: <Brain size={14} /> },
   deepseek: { badge: 'DeepSeek', color: '#4D6BFE', icon: <Cpu size={14} /> },
 };
@@ -166,7 +168,7 @@ export default function Header({ open, handleDrawerToggle }) {
         onClick={handleDrawerToggle}
         edge="start"
         sx={{
-          mr: 1,
+          mr: { xs: 0.25, sm: 1 },
           color: textMuted,
           '&:hover': { color: theme.palette.text.primary, bgcolor: bgHover },
         }}
@@ -325,8 +327,13 @@ export default function Header({ open, handleDrawerToggle }) {
       </Box>
       )}
 
-      {/* La campana, al lado del modo claro/oscuro: los dos son de la persona y no de
-          la pantalla en la que está. */}
+      {/* Módulo / Automatización, centrado (solo dentro de un módulo). */}
+      <SelectorVista />
+
+      {/* A la derecha, juntos (26-10-2026): la campana y el modo claro/oscuro (son de la persona,
+          no de la pantalla) y, dentro de un módulo, sus botones del panel. A la izquierda queda
+          solo el botón del menú. */}
+      <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 0.25, flexShrink: 0 }}>
       <Notificaciones color={textMuted} />
 
       {/* Claro / oscuro: arriba a la derecha, donde se busca sin pensar.
@@ -339,14 +346,19 @@ export default function Header({ open, handleDrawerToggle }) {
           size="small"
           aria-label={mode === 'dark' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
           sx={{
-            ml: 1, mr: 0.5,
+            ml: { xs: 0, sm: 1 }, mr: { xs: 0, sm: 0.5 },
             color: textMuted,
-            '&:hover': { color: '#586AD0', bgcolor: 'action.hover' },
+            '&:hover': { color: 'var(--af-acento)', bgcolor: 'action.hover' },
           }}
         >
           {mode === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
         </IconButton>
       </Tooltip>
+
+      {/* Dentro de un módulo, en el extremo derecho: el chat con lo que se está viendo y,
+          si el módulo tiene, su configuración. */}
+      <BotonesPanel color={textMuted} />
+      </Box>
 
       <Menu
         anchorEl={anchorEl}
@@ -378,9 +390,8 @@ export default function Header({ open, handleDrawerToggle }) {
         <Divider sx={{ borderColor: d ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)' }} />
 
         {[
-          { label: 'Mi Perfil',      icon: <User size={15} />,       path: '/app/perfil' },
-          { label: 'Workspace',      icon: <Building2 size={15} />,  path: '/app/admin/workspace' },
-          { label: 'Configuración',  icon: <Settings size={15} />,   path: '/app/configuracion' },
+          { label: 'Mi perfil',      icon: <User size={15} />,       path: '/app/ajustes/perfil' },
+          { label: 'Configuración',  icon: <Settings size={15} />,   path: '/app/ajustes' },
           { label: 'Ayuda',          icon: <HelpCircle size={15} />, path: '/app/ayuda' },
         ].map(({ label, icon, path }) => (
           <MenuItem
@@ -433,7 +444,7 @@ export default function Header({ open, handleDrawerToggle }) {
             borderBottom: `1px solid ${theme.palette.divider}`,
           }}
         >
-          <Toolbar sx={{ minHeight: '52px !important' }}>{toolbarContent}</Toolbar>
+          <Toolbar sx={{ minHeight: '52px !important', px: { xs: '8px !important', sm: '16px !important' } }}>{toolbarContent}</Toolbar>
         </AppBar>
       </>
     );
@@ -442,7 +453,7 @@ export default function Header({ open, handleDrawerToggle }) {
   return (
     <>
       <AppBarStyled position="fixed" open={open} elevation={0}>
-        <Toolbar sx={{ minHeight: '52px !important' }}>{toolbarContent}</Toolbar>
+        <Toolbar sx={{ minHeight: '52px !important', px: { xs: '8px !important', sm: '16px !important' } }}>{toolbarContent}</Toolbar>
       </AppBarStyled>
     </>
   );

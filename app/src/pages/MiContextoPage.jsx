@@ -21,7 +21,7 @@ const CATEGORIES = [
 const categoryMeta = (value) => CATEGORIES.find(c => c.value === value) || CATEGORIES[4];
 
 const SectionLabel = ({ children }) => (
-  <Typography sx={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#586AD0', mb: 1.5 }}>
+  <Typography sx={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--af-acento)', mb: 1.5 }}>
     {children}
   </Typography>
 );
@@ -43,13 +43,13 @@ function SaveButton({ saving, onClick, children }) {
       sx={{
         alignSelf: 'flex-start', px: 3, py: 1, borderRadius: '8px', border: 'none',
         cursor: saving ? 'default' : 'pointer',
-        bgcolor: saving ? 'rgba(88, 106, 208,0.4)' : '#586AD0',
-        color: '#fff', fontSize: '0.875rem', fontWeight: 600,
+        bgcolor: saving ? 'color-mix(in srgb, var(--af-acento) 40%, transparent)' : 'var(--af-acento)',
+        color: 'var(--af-sobre-acento)', fontSize: '0.875rem', fontWeight: 600,
         display: 'flex', alignItems: 'center', gap: 1,
-        '&:hover:not(:disabled)': { bgcolor: '#2F42A6' },
+        '&:hover:not(:disabled)': { bgcolor: 'var(--af-acento-hover)' },
       }}
     >
-      {saving && <CircularProgress size={14} sx={{ color: '#fff' }} />}
+      {saving && <CircularProgress size={14} sx={{ color: 'var(--af-sobre-acento)' }} />}
       {saving ? 'Guardando...' : children}
     </Box>
   );
@@ -96,10 +96,10 @@ export default function MiContextoPage({ hideHeader = false }) {
       bgcolor: bgInput, borderRadius: '8px', fontSize: '0.875rem', color: theme.palette.text.primary,
       '& fieldset': { borderColor },
       '&:hover fieldset': { borderColor: d ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)' },
-      '&.Mui-focused fieldset': { borderColor: '#586AD0' },
+      '&.Mui-focused fieldset': { borderColor: 'var(--af-acento)' },
     },
     '& .MuiInputLabel-root': { color: textMuted, fontSize: '0.875rem' },
-    '& .MuiInputLabel-root.Mui-focused': { color: '#9BA6E3' },
+    '& .MuiInputLabel-root.Mui-focused': { color: 'var(--af-acento-suave)' },
   };
 
 
@@ -188,7 +188,7 @@ export default function MiContextoPage({ hideHeader = false }) {
 
   const tabSx = {
     textTransform: 'none', fontSize: '0.85rem', fontWeight: 600, minHeight: 40,
-    color: textMuted, '&.Mui-selected': { color: '#586AD0' },
+    color: textMuted, '&.Mui-selected': { color: 'var(--af-acento)' },
   };
 
   return (
@@ -213,7 +213,7 @@ export default function MiContextoPage({ hideHeader = false }) {
 
               <SectionLabel>Formulario</SectionLabel>
               {loadingOrg ? (
-                <CircularProgress size={20} sx={{ color: '#9BA6E3', mb: 3 }} />
+                <CircularProgress size={20} sx={{ color: 'var(--af-acento-suave)', mb: 3 }} />
               ) : (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 3 }}>
                   <ContextForm
@@ -253,8 +253,8 @@ export default function MiContextoPage({ hideHeader = false }) {
                   border: `1px solid ${borderColor}`, bgcolor: 'transparent',
                   px: 2, py: 0.9, borderRadius: '8px', cursor: 'pointer',
                   fontFamily: 'inherit', fontSize: '0.875rem', fontWeight: 600,
-                  color: '#586AD0', mb: 3,
-                  '&:hover': { borderColor: '#586AD0' },
+                  color: 'var(--af-acento)', mb: 3,
+                  '&:hover': { borderColor: 'var(--af-acento)' },
                 }}
               >
                 Ir a Archivos

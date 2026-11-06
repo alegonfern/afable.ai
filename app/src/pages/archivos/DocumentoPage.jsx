@@ -141,7 +141,7 @@ export default function DocumentoPage() {
   if (doc === null) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', pt: 12 }}>
-        <CircularProgress size={26} sx={{ color: '#586AD0' }} />
+        <CircularProgress size={26} sx={{ color: 'var(--af-acento)' }} />
       </Box>
     );
   }
@@ -224,7 +224,7 @@ export default function DocumentoPage() {
                 bgcolor: bgSuave, borderRadius: '10px', fontFamily: MONO,
                 fontSize: '0.875rem', lineHeight: 1.7, alignItems: 'flex-start',
                 '& fieldset': { borderColor: borde },
-                '&.Mui-focused fieldset': { borderColor: '#586AD0' },
+                '&.Mui-focused fieldset': { borderColor: 'var(--af-acento)' },
               },
             }}
           />
@@ -257,7 +257,7 @@ export default function DocumentoPage() {
           }}>
             <Typography sx={{
               fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em',
-              textTransform: 'uppercase', color: '#586AD0', mb: 1.75,
+              textTransform: 'uppercase', color: 'var(--af-acento)', mb: 1.75,
             }}>
               Historial
             </Typography>
@@ -273,14 +273,14 @@ export default function DocumentoPage() {
                   return (
                     <Box key={v.numero} sx={{
                       p: 1.25, borderRadius: '9px', bgcolor: bgSuave,
-                      border: `1px solid ${viendo?.numero === v.numero ? '#586AD0' : borde}`,
+                      border: `1px solid ${viendo?.numero === v.numero ? 'var(--af-acento)' : borde}`,
                     }}>
                       <Stack direction="row" spacing={0.75} alignItems="center">
                         <Box sx={{
                           width: 22, height: 22, borderRadius: '6px', flexShrink: 0,
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          bgcolor: deAgente ? 'rgba(88,106,208,0.16)' : 'rgba(0,0,0,0.06)',
-                          color: deAgente ? '#9BA6E3' : textMuted,
+                          bgcolor: deAgente ? 'color-mix(in srgb, var(--af-acento) 16%, transparent)' : 'rgba(0,0,0,0.06)',
+                          color: deAgente ? 'var(--af-acento-suave)' : textMuted,
                         }}>
                           {deAgente ? <Bot size={12} /> : <User size={12} />}
                         </Box>
@@ -292,7 +292,7 @@ export default function DocumentoPage() {
                           sx={{
                             fontSize: '0.7rem', height: 20,
                             ...(deAgente
-                              ? { bgcolor: 'rgba(88,106,208,0.16)', color: '#9BA6E3', fontWeight: 600 }
+                              ? { bgcolor: 'color-mix(in srgb, var(--af-acento) 16%, transparent)', color: 'var(--af-acento-suave)', fontWeight: 600 }
                               : {}),
                           }}
                         />

@@ -149,7 +149,7 @@ export default function ArchivosPage() {
   if (datos === null) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', pt: 12 }}>
-        <CircularProgress size={26} sx={{ color: '#586AD0' }} />
+        <CircularProgress size={26} sx={{ color: 'var(--af-acento)' }} />
       </Box>
     );
   }
@@ -175,8 +175,8 @@ export default function ArchivosPage() {
             }}
             sx={{
               pl: 1 + nivel * 1.5, pr: 1, py: 0.5, borderRadius: '6px', cursor: 'pointer',
-              color: activa ? '#586AD0' : textMuted,
-              bgcolor: activa ? (d ? 'rgba(88,106,208,0.14)' : 'rgba(88,106,208,0.09)') : 'transparent',
+              color: activa ? 'var(--af-acento)' : textMuted,
+              bgcolor: activa ? (d ? 'color-mix(in srgb, var(--af-acento) 14%, transparent)' : 'color-mix(in srgb, var(--af-acento) 9%, transparent)') : 'transparent',
               '&:hover': { bgcolor: activa ? undefined : bgSuave },
             }}
           >
@@ -260,7 +260,7 @@ export default function ArchivosPage() {
         </Box>
 
         <Box sx={{
-          color: esCarpeta ? '#f0b429' : '#9BA6E3',
+          color: esCarpeta ? '#f0b429' : 'var(--af-acento-suave)',
           mt: 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
           {esCarpeta ? <Folder size={44} strokeWidth={1.5} /> : <FileText size={40} strokeWidth={1.5} />}
@@ -330,8 +330,8 @@ export default function ArchivosPage() {
         <Box sx={{
           width: 30, height: 30, borderRadius: '8px', flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          bgcolor: esCarpeta ? 'rgba(240,180,41,0.14)' : 'rgba(88,106,208,0.14)',
-          color: esCarpeta ? '#f0b429' : '#9BA6E3',
+          bgcolor: esCarpeta ? 'rgba(240,180,41,0.14)' : 'color-mix(in srgb, var(--af-acento) 14%, transparent)',
+          color: esCarpeta ? '#f0b429' : 'var(--af-acento-suave)',
         }}>
           {esCarpeta ? <Folder size={15} /> : <FileText size={15} />}
         </Box>
@@ -415,8 +415,8 @@ export default function ArchivosPage() {
             }}
             sx={{
               px: 1, py: 0.5, borderRadius: '6px', cursor: 'pointer', mb: 0.5,
-              color: !carpetaAbierta ? '#586AD0' : textMuted,
-              bgcolor: !carpetaAbierta ? (d ? 'rgba(88,106,208,0.14)' : 'rgba(88,106,208,0.09)') : 'transparent',
+              color: !carpetaAbierta ? 'var(--af-acento)' : textMuted,
+              bgcolor: !carpetaAbierta ? (d ? 'color-mix(in srgb, var(--af-acento) 14%, transparent)' : 'color-mix(in srgb, var(--af-acento) 9%, transparent)') : 'transparent',
               '&:hover': { bgcolor: !carpetaAbierta ? undefined : bgSuave },
             }}
           >
@@ -472,7 +472,7 @@ export default function ArchivosPage() {
                 sx: {
                   bgcolor: bgSuave, borderRadius: '8px', fontSize: '0.9375rem',
                   '& fieldset': { borderColor: borde },
-                  '&.Mui-focused fieldset': { borderColor: '#586AD0' },
+                  '&.Mui-focused fieldset': { borderColor: 'var(--af-acento)' },
                 },
               }}
             />
@@ -500,7 +500,7 @@ export default function ArchivosPage() {
               sx={{
                 '& .MuiToggleButton-root': {
                   px: 1, py: 0.4, borderColor: borde,
-                  '&.Mui-selected': { bgcolor: 'rgba(88,106,208,0.16)', color: '#586AD0' },
+                  '&.Mui-selected': { bgcolor: 'color-mix(in srgb, var(--af-acento) 16%, transparent)', color: 'var(--af-acento)' },
                 },
               }}
             >
@@ -567,7 +567,7 @@ export default function ArchivosPage() {
               <Typography
                 onClick={() => seleccionarEspacio(null)}
                 sx={{
-                  fontSize: '0.78rem', fontWeight: 600, color: '#586AD0',
+                  fontSize: '0.78rem', fontWeight: 600, color: 'var(--af-acento)',
                   cursor: 'pointer', '&:hover': { textDecoration: 'underline' },
                 }}
               >

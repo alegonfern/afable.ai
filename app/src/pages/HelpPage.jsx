@@ -72,8 +72,8 @@ export default function HelpPage() {
   const Section = ({ title, icon, children }) => (
     <Box sx={{ mb: 4 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <Box sx={{ color: '#586AD0' }}>{icon}</Box>
-        <Typography sx={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#586AD0' }}>
+        <Box sx={{ color: 'var(--af-acento)' }}>{icon}</Box>
+        <Typography sx={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--af-acento)' }}>
           {title}
         </Typography>
       </Box>
@@ -133,7 +133,7 @@ export default function HelpPage() {
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
             {CHAT_SHORTCUTS.map((c, i) => (
               <Box key={i} sx={{ display: 'flex', gap: 1.5, p: 1.75, borderRadius: '8px', bgcolor: bgCard, border: `1px solid ${borderColor}` }}>
-                <Box sx={{ color: '#586AD0', mt: 0.25, flexShrink: 0 }}>{c.icon}</Box>
+                <Box sx={{ color: 'var(--af-acento)', mt: 0.25, flexShrink: 0 }}>{c.icon}</Box>
                 <Box>
                   <Typography sx={{ fontSize: '0.875rem', fontWeight: 500, color: theme.palette.text.primary, mb: 0.25 }}>
                     {c.desc}
@@ -192,7 +192,7 @@ export default function HelpPage() {
           <Typography sx={{ fontSize: '0.8rem', color: textMuted }}>
             Afable v0.1 — Plataforma de IA empresarial
           </Typography>
-          <Typography sx={{ fontSize: '0.8rem', color: '#586AD0', fontWeight: 500 }}>
+          <Typography sx={{ fontSize: '0.8rem', color: 'var(--af-acento)', fontWeight: 500 }}>
             beta
           </Typography>
         </Box>

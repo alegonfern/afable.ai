@@ -21,7 +21,7 @@ const etiquetaRol = (valor) => (ROLES.find((r) => r.value === valor) || {}).labe
 
 const DISPLAY = `'Sora', 'Inter', sans-serif`;
 
-export default function PersonasPage() {
+export default function PersonasPage({ embebido = false }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const { slug, workspace, esAdmin, loading: cargandoWorkspace } = useWorkspace();
@@ -139,9 +139,9 @@ export default function PersonasPage() {
           borderRadius: '6px',
           fontSize: '0.75rem',
           fontWeight: 600,
-          bgcolor: esAdminRol ? 'rgba(88, 106, 208, 0.14)' : bgSegmentado,
-          color: esAdminRol ? (d ? '#9BA6E3' : '#2F42A6') : textSemi,
-          border: `1px solid ${esAdminRol ? 'rgba(88, 106, 208, 0.28)' : borde}`,
+          bgcolor: esAdminRol ? 'color-mix(in srgb, var(--af-acento) 14%, transparent)' : bgSegmentado,
+          color: esAdminRol ? (d ? 'var(--af-acento-suave)' : 'var(--af-acento-hover)') : textSemi,
+          border: `1px solid ${esAdminRol ? 'color-mix(in srgb, var(--af-acento) 28%, transparent)' : borde}`,
         }}
       >
         {etiquetaRol(rol)}
@@ -197,7 +197,7 @@ export default function PersonasPage() {
   if (cargandoWorkspace || (cargando && !miembros.length)) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', pt: 12 }}>
-        <CircularProgress size={26} sx={{ color: '#586AD0' }} />
+        <CircularProgress size={26} sx={{ color: 'var(--af-acento)' }} />
       </Box>
     );
   }
@@ -215,17 +215,25 @@ export default function PersonasPage() {
   const filas = pestana === 'miembros' ? filtrados : invitacionesFiltradas;
 
   return (
-    <Box sx={{ maxWidth: 1000, mx: 'auto', px: { xs: 2.5, md: 5 }, py: { xs: 4, md: 6 }, width: '100%' }}>
-      {/* Encabezado: ícono, título display, subtítulo — el patrón de todas las páginas de Admin */}
-      <Users size={24} color={textSemi} strokeWidth={1.75} />
-      <Typography
-        sx={{ fontFamily: DISPLAY, fontSize: '1.875rem', fontWeight: 600, mt: 1.5, letterSpacing: '-0.01em' }}
-      >
-        Personas
-      </Typography>
-      <Typography sx={{ color: textMuted, fontSize: '0.9375rem', mt: 0.75 }}>
-        Administre las personas de la Empresa y sus roles.
-      </Typography>
+    <Box sx={embebido ? { maxWidth: 1000, width: '100%' } : { maxWidth: 1000, mx: 'auto', px: { xs: 2.5, md: 5 }, py: { xs: 4, md: 6 }, width: '100%' }}>
+      {/* Encabezado: ícono, título display, subtítulo — el patrón de todas las páginas de Admin.
+          Dentro de Ajustes el título lo pone Ajustes. */}
+      {!embebido && (
+        <>
+          <Users size={24} color={textSemi} strokeWidth={1.75} />
+          <Typography
+            sx={{ fontFamily: DISPLAY, fontSize: '1.875rem', fontWeight: 600, mt: 1.5, letterSpacing: '-0.01em' }}
+          >
+            Personas
+          </Typography>
+        </>
+      )}
+      {/* En Configuración el título y la explicación los pone la página. */}
+      {!embebido && (
+        <Typography sx={{ color: textMuted, fontSize: '0.9375rem', mt: 0.75 }}>
+          Administre las personas de la Empresa y sus roles.
+        </Typography>
+      )}
 
       {/* Fila de acción: buscador a la izquierda, acción primaria a la derecha */}
       <Box sx={{ display: 'flex', gap: 1.5, mt: 3, alignItems: 'stretch' }}>
@@ -243,7 +251,7 @@ export default function PersonasPage() {
               fontSize: '0.875rem',
               '& fieldset': { borderColor: borde },
               '&:hover fieldset': { borderColor: d ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)' },
-              '&.Mui-focused fieldset': { borderColor: '#586AD0' },
+              '&.Mui-focused fieldset': { borderColor: 'var(--af-acento)' },
             },
           }}
         />
@@ -403,7 +411,7 @@ export default function PersonasPage() {
             sx={{ fontSize: '0.875rem', gap: 1 }}
           >
             <Box sx={{ width: 16, display: 'flex' }}>
-              {menu.membresia && menu.membresia.role === r.value && <Check size={14} color="#586AD0" />}
+              {menu.membresia && menu.membresia.role === r.value && <Check size={14} color="var(--af-acento)" />}
             </Box>
             {r.label}
           </MenuItem>
@@ -514,9 +522,9 @@ function ModalInvitar({ abierto, cerrar, slug, alInvitar }) {
                 fontFamily: 'inherit',
                 fontSize: '0.875rem',
                 fontWeight: rol === r.value ? 600 : 500,
-                color: rol === r.value ? (d ? '#9BA6E3' : '#2F42A6') : theme.palette.text.secondary,
-                bgcolor: rol === r.value ? 'rgba(88, 106, 208, 0.12)' : 'transparent',
-                border: `1px solid ${rol === r.value ? 'rgba(88, 106, 208, 0.35)' : borde}`,
+                color: rol === r.value ? (d ? 'var(--af-acento-suave)' : 'var(--af-acento-hover)') : theme.palette.text.secondary,
+                bgcolor: rol === r.value ? 'color-mix(in srgb, var(--af-acento) 12%, transparent)' : 'transparent',
+                border: `1px solid ${rol === r.value ? 'color-mix(in srgb, var(--af-acento) 35%, transparent)' : borde}`,
               }}
             >
               {r.label}

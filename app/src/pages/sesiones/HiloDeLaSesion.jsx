@@ -91,7 +91,7 @@ export default function HiloDeLaSesion({ conversationId, workspaceSlug, sesionSl
   if (mensajes === null) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
-        <CircularProgress size={18} sx={{ color: '#586AD0' }} />
+        <CircularProgress size={18} sx={{ color: 'var(--af-acento)' }} />
       </Box>
     );
   }
@@ -108,7 +108,7 @@ export default function HiloDeLaSesion({ conversationId, workspaceSlug, sesionSl
                 width: 24, height: 24, borderRadius: '7px', flexShrink: 0, mt: 0.25,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 background: esAgente
-                  ? 'linear-gradient(135deg, #586AD0 0%, #2F42A6 100%)'
+                  ? 'linear-gradient(135deg, var(--af-acento) 0%, var(--af-acento-hover) 100%)'
                   : (d ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'),
                 fontSize: '0.68rem', fontWeight: 700,
                 color: esAgente ? '#fff' : textMuted,
@@ -120,7 +120,7 @@ export default function HiloDeLaSesion({ conversationId, workspaceSlug, sesionSl
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography sx={{
                   fontSize: '0.72rem', fontWeight: 600, mb: 0.25,
-                  color: esAgente ? '#9BA6E3' : textMuted,
+                  color: esAgente ? 'var(--af-acento-suave)' : textMuted,
                 }}>
                   {esAgente ? (m.agent_name || 'Afable') : (esMio ? 'Usted' : m.autor?.nombre)}
                 </Typography>
@@ -140,7 +140,7 @@ export default function HiloDeLaSesion({ conversationId, workspaceSlug, sesionSl
                         title="Abrir el documento"
                         sx={{
                           px: 0.75, py: 0.15, borderRadius: '5px', cursor: 'pointer',
-                          fontSize: '0.7rem', color: '#9BA6E3',
+                          fontSize: '0.7rem', color: 'var(--af-acento-suave)',
                           border: '1px solid rgba(155, 166, 227, 0.3)',
                           '&:hover': { bgcolor: 'rgba(155, 166, 227, 0.12)' },
                         }}
@@ -161,7 +161,7 @@ export default function HiloDeLaSesion({ conversationId, workspaceSlug, sesionSl
         position: 'relative',
         display: 'flex', alignItems: 'flex-end', gap: 1, mt: 1.5,
         border: `1px solid ${borde}`, borderRadius: '10px', px: 1.5, py: 1,
-        '&:focus-within': { borderColor: 'rgba(88, 106, 208, 0.5)' },
+        '&:focus-within': { borderColor: 'color-mix(in srgb, var(--af-acento) 50%, transparent)' },
       }}>
         {menciones.mencion && (
           <MencionAgentes
@@ -193,7 +193,7 @@ export default function HiloDeLaSesion({ conversationId, workspaceSlug, sesionSl
         <IconButton
           size="small" onClick={(e) => { e.stopPropagation(); enviar(); }}
           disabled={!texto.trim() || enviando}
-          sx={{ color: texto.trim() ? '#586AD0' : textMuted }}
+          sx={{ color: texto.trim() ? 'var(--af-acento)' : textMuted }}
         >
           <SendHorizontal size={16} />
         </IconButton>

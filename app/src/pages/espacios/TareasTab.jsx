@@ -16,7 +16,7 @@ const ESTADOS = [
 
 const COLOR_DE_ESTADO = {
   pendiente: { fg: '#f0b429', bg: 'rgba(240, 180, 41, 0.14)' },
-  en_curso: { fg: '#586AD0', bg: 'rgba(88, 106, 208, 0.16)' },
+  en_curso: { fg: 'var(--af-acento)', bg: 'color-mix(in srgb, var(--af-acento) 16%, transparent)' },
   lista: { fg: '#34D399', bg: 'rgba(52, 211, 153, 0.14)' },
 };
 
@@ -115,7 +115,7 @@ export default function TareasTab({ slug, spaceSlug, agentes = [], personas = []
   if (tareas === null) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
-        <CircularProgress size={22} sx={{ color: '#586AD0' }} />
+        <CircularProgress size={22} sx={{ color: 'var(--af-acento)' }} />
       </Box>
     );
   }
@@ -260,7 +260,7 @@ export default function TareasTab({ slug, spaceSlug, agentes = [], personas = []
                       title={`Pedirle a ${t.agent_name} que la haga`} size="small"
                     >
                       {estaCorriendo
-                        ? <CircularProgress size={16} sx={{ color: '#586AD0' }} />
+                        ? <CircularProgress size={16} sx={{ color: 'var(--af-acento)' }} />
                         : <PlayArrowIcon fontSize="small" />}
                     </IconButton>
                   )}
@@ -283,7 +283,7 @@ export default function TareasTab({ slug, spaceSlug, agentes = [], personas = []
                       sx={{
                         border: 'none', bgcolor: 'transparent', p: 0, cursor: 'pointer',
                         fontFamily: 'inherit', fontSize: '0.8125rem', fontWeight: 600,
-                        color: '#9BA6E3', '&:hover': { textDecoration: 'underline' },
+                        color: 'var(--af-acento-suave)', '&:hover': { textDecoration: 'underline' },
                       }}
                     >
                       {abierta === t.id ? 'Ocultar lo que hizo' : `Ver lo que hizo ${t.agent_name || 'el agente'}`}

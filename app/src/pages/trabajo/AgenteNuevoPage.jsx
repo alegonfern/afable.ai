@@ -80,7 +80,7 @@ export default function AgenteNuevoPage() {
     '& .MuiOutlinedInput-root': {
       bgcolor: bgSuave, borderRadius: '8px', fontSize: '0.9375rem',
       '& fieldset': { borderColor: borde },
-      '&.Mui-focused fieldset': { borderColor: '#586AD0' },
+      '&.Mui-focused fieldset': { borderColor: 'var(--af-acento)' },
     },
   }), [bgSuave, borde]);
 
@@ -190,7 +190,7 @@ export default function AgenteNuevoPage() {
   if (cargando) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', pt: 12 }}>
-        <CircularProgress size={26} sx={{ color: '#586AD0' }} />
+        <CircularProgress size={26} sx={{ color: 'var(--af-acento)' }} />
       </Box>
     );
   }
@@ -222,7 +222,7 @@ export default function AgenteNuevoPage() {
           px: 1.75, py: 1.4, mb: 1, borderRadius: '9px', cursor: 'pointer',
           fontFamily: 'inherit', textAlign: 'left', bgcolor: bgSuave,
           border: `1px solid ${borde}`, color: 'inherit',
-          '&:hover': { borderColor: '#586AD0' },
+          '&:hover': { borderColor: 'var(--af-acento)' },
           '&:disabled': { opacity: 0.6, cursor: 'default' },
           transition: 'border-color 0.12s',
         }}
@@ -256,7 +256,7 @@ export default function AgenteNuevoPage() {
 
         {preparando && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 2 }}>
-            <CircularProgress size={15} sx={{ color: '#586AD0' }} />
+            <CircularProgress size={15} sx={{ color: 'var(--af-acento)' }} />
             <Typography sx={{ fontSize: '0.875rem', color: textMuted }}>
               Mirando lo que hay en la carpeta…
             </Typography>
@@ -502,7 +502,7 @@ function Elegibles({ titulo, ayuda, vacio, items, etiqueta, elegidos, onAlternar
                 sx={{
                   borderRadius: '8px', fontSize: '0.875rem', cursor: 'pointer',
                   ...(activo
-                    ? { bgcolor: 'rgba(88, 106, 208, 0.16)', color: '#586AD0', border: '1px solid rgba(88, 106, 208, 0.4)', fontWeight: 600 }
+                    ? { bgcolor: 'color-mix(in srgb, var(--af-acento) 16%, transparent)', color: 'var(--af-acento)', border: '1px solid color-mix(in srgb, var(--af-acento) 40%, transparent)', fontWeight: 600 }
                     : { borderColor: theme.palette.divider, color: textMuted }),
                 }}
               />

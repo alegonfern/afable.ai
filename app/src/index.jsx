@@ -15,35 +15,44 @@ const queryClient = new QueryClient({
   },
 });
 
-// Cursor-style: near-black surfaces, ultra-subtle borders, restrained accent.
+// Minimalista, con el negro de askbond.ai como acento (botones, ítem activo, foco).
+// En modo oscuro el acento se invierte a casi blanco: un botón negro sobre fondo negro
+// no se ve. Los colores de acento viven en variables CSS (`--af-acento`…) para que las
+// pantallas con colores escritos a mano cambien junto con el tema.
+const DISPLAY = `'Sora', 'Inter', sans-serif`;
 const MONO = `'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace`;
 
 export function getAfableTheme(mode) {
   const d = mode === 'dark';
-  const border    = d ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)';
-  const borderSub = d ? '#1f1f1f' : '#e6e6e6';
+  const border    = d ? 'rgba(255,255,255,0.06)' : 'rgba(60,45,20,0.09)';
+  // Neutros cálidos en modo claro (30-10-2026, como la interfaz de harvey.ai): fondo hueso, bordes y
+  // grises que tiran a piedra en vez de a azul. Las tarjetas siguen blancas y el negro no cambia.
+  const borderSub = d ? '#1f1f1f' : '#e5e1d8';
+  const acento      = d ? '#f2f2f2' : '#0b0b0f';
+  const acentoHover = d ? '#ffffff' : '#2a2a30';
+  const sobreAcento = d ? '#0b0b0f' : '#ffffff';
 
   return createTheme({
     palette: {
       mode,
       background: {
-        default: d ? '#0e0e0e' : '#fbfbfa',
+        default: d ? '#0e0e0e' : '#f7f6f2',
         paper:   d ? '#161616' : '#ffffff',
       },
-      primary:   { main: '#586AD0', light: '#7886D9', dark: '#2F42A6', contrastText: '#fff' },
-      secondary: { main: '#9BA6E3' },
+      primary:   { main: acento, light: d ? '#ffffff' : '#5c5852', dark: acentoHover, contrastText: sobreAcento },
+      secondary: { main: d ? '#b4b4b4' : '#5c5852' },
       divider: borderSub,
       // Grises con mas contraste: los anteriores (#7d7d7d / #4a4a4a) obligaban a
       // forzar la vista sobre el fondo casi negro. Se mantiene la jerarquia, sube
       // el piso.
       text: {
-        primary:   d ? '#f2f2f2' : '#141416',
-        secondary: d ? '#b4b4b4' : '#52525b',
-        disabled:  d ? '#7a7a7a' : '#8a8a8a',
+        primary:   d ? '#f2f2f2' : '#16140f',
+        secondary: d ? '#b4b4b4' : '#57534c',
+        disabled:  d ? '#7a7a7a' : '#8f897f',
       },
       action: {
-        hover:    d ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
-        selected: 'rgba(88, 106, 208,0.12)',
+        hover:    d ? 'rgba(255,255,255,0.05)' : 'rgba(60,45,20,0.05)',
+        selected: d ? 'rgba(255,255,255,0.08)' : 'rgba(60,45,20,0.08)',
       },
       error:   { main: '#f87171' },
       success: { main: '#34D399' },
@@ -52,10 +61,13 @@ export function getAfableTheme(mode) {
     typography: {
       fontFamily: `'Inter', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif`,
       fontSize: 14,
-      h1: { fontWeight: 600, letterSpacing: '-0.02em',  fontSize: '1.875rem' },
-      h2: { fontWeight: 600, letterSpacing: '-0.015em', fontSize: '1.5rem' },
-      h3: { fontWeight: 600, letterSpacing: '-0.01em',  fontSize: '1.25rem' },
-      h4: { fontWeight: 600, letterSpacing: '-0.01em',  fontSize: '1.125rem' },
+      // Títulos en peso 500 y tracking cerrado, como askbond: el minimalismo lo da el
+      // tamaño y el espaciado, no la negrita.
+      // Los títulos van en Sora, la tipografía de Afable (la del logo); el resto en Inter.
+      h1: { fontFamily: DISPLAY, fontWeight: 600, letterSpacing: '-0.03em', fontSize: '1.875rem' },
+      h2: { fontFamily: DISPLAY, fontWeight: 600, letterSpacing: '-0.025em', fontSize: '1.5rem' },
+      h3: { fontFamily: DISPLAY, fontWeight: 600, letterSpacing: '-0.02em', fontSize: '1.25rem' },
+      h4: { fontFamily: DISPLAY, fontWeight: 600, letterSpacing: '-0.015em', fontSize: '1.125rem' },
       h5: { fontWeight: 500, fontSize: '1rem' },
       h6: { fontWeight: 500, fontSize: '0.9375rem' },
       // Un escalón más que antes, encima de la raíz de 17px: el texto de lectura
@@ -74,6 +86,19 @@ export function getAfableTheme(mode) {
           // tamaños del proyecto están en `rem`, así que subir la raíz de los
           // 16px del navegador a 17px agranda la interfaz completa de una vez,
           // en vez de ir pantalla por pantalla.
+          ':root': {
+            '--af-acento': acento,
+            '--af-acento-hover': acentoHover,
+            '--af-acento-suave': d ? '#b4b4b4' : '#5c5852',
+            '--af-sobre-acento': sobreAcento,
+            // El color de Afable: desde el 30-10-2026 es el mismo del texto (negro; claro en modo
+            // oscuro), sin índigo. Marca lo que hace la IA, el ítem activo, enlaces y foco; los
+            // TEXTOS que lo usan van además en cursiva para distinguirse del resto.
+            '--af-color': acento,
+            '--af-color-2': acento,
+            '--af-color-suave': d ? 'rgba(255,255,255,0.08)' : 'rgba(60,45,20,0.08)',
+            '--af-degradado': `linear-gradient(${acento}, ${acento})`,
+          },
           html: {
             fontSize: '17px',
             WebkitFontSmoothing: 'antialiased',
@@ -81,7 +106,7 @@ export function getAfableTheme(mode) {
             textRendering: 'optimizeLegibility',
           },
           body: {
-            backgroundColor: d ? '#0e0e0e' : '#fbfbfa',
+            backgroundColor: d ? '#0e0e0e' : '#f7f6f2',
             fontSize: '0.9375rem',
           },
           // La barra fina va en TODO lo que scrollea, no solo en la página.
@@ -114,7 +139,7 @@ export function getAfableTheme(mode) {
       MuiAppBar: {
         styleOverrides: {
           root: {
-            backgroundColor: d ? '#0e0e0e' : '#fbfbfa',
+            backgroundColor: d ? '#0e0e0e' : '#f7f6f2',
             borderBottom: `1px solid ${borderSub}`,
             boxShadow: 'none',
           },
@@ -123,7 +148,7 @@ export function getAfableTheme(mode) {
       MuiDrawer: {
         styleOverrides: {
           paper: {
-            backgroundColor: d ? '#121212' : '#f7f7f6',
+            backgroundColor: d ? '#121212' : '#f0eee8',
             borderRight: `1px solid ${borderSub}`,
           },
         },
@@ -133,18 +158,24 @@ export function getAfableTheme(mode) {
           root: {
             textTransform: 'none',
             fontWeight: 500,
-            letterSpacing: 0,
+            letterSpacing: '-0.02em',
             fontSize: '0.82rem',
-            borderRadius: 6,
+            borderRadius: 10,
             boxShadow: 'none',
             '&:hover': { boxShadow: 'none' },
           },
+          // El botón de askbond: negro, borde del mismo negro, texto blanco.
           containedPrimary: {
-            background: '#586AD0',
-            '&:hover': { background: '#2F42A6', boxShadow: 'none' },
+            background: acento,
+            color: sobreAcento,
+            border: `1px solid ${acento}`,
+            '&:hover': { background: acentoHover, boxShadow: 'none' },
           },
+          // El secundario: blanco con borde gris claro, texto negro.
           outlinedPrimary: {
-            borderColor: border,
+            color: d ? '#f2f2f2' : '#0b0b0f',
+            backgroundColor: d ? 'transparent' : '#ffffff',
+            borderColor: d ? 'rgba(255,255,255,0.14)' : '#e0e4f1',
             '&:hover': { borderColor: d ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)', boxShadow: 'none' },
           },
         },
@@ -183,11 +214,11 @@ export function getAfableTheme(mode) {
             fontSize: '0.875rem',
             borderRadius: 4,
             '&:hover': {
-              backgroundColor: d ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+              backgroundColor: d ? 'rgba(255,255,255,0.05)' : 'rgba(60,45,20,0.05)',
             },
             '&.Mui-selected': {
-              backgroundColor: 'rgba(88, 106, 208,0.12)',
-              '&:hover': { backgroundColor: 'rgba(88, 106, 208,0.18)' },
+              backgroundColor: d ? 'rgba(255,255,255,0.08)' : 'rgba(60,45,20,0.08)',
+              '&:hover': { backgroundColor: d ? 'rgba(255,255,255,0.12)' : 'rgba(60,45,20,0.11)' },
             },
           },
         },
@@ -204,7 +235,7 @@ export function getAfableTheme(mode) {
               '&:hover fieldset': {
                 borderColor: d ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.25)',
               },
-              '&.Mui-focused fieldset': { borderColor: 'rgba(88, 106, 208,0.6)' },
+              '&.Mui-focused fieldset': { borderColor: 'var(--af-color)', borderWidth: 1 },
             },
             '& .MuiInputLabel-root': { fontSize: '0.875rem' },
           },
@@ -219,11 +250,11 @@ export function getAfableTheme(mode) {
             borderRadius: 5,
             fontSize: '0.875rem',
             '&.Mui-selected': {
-              backgroundColor: 'rgba(88, 106, 208,0.12)',
-              '&:hover': { backgroundColor: 'rgba(88, 106, 208,0.16)' },
+              backgroundColor: d ? 'rgba(255,255,255,0.08)' : 'rgba(60,45,20,0.08)',
+              '&:hover': { backgroundColor: d ? 'rgba(255,255,255,0.12)' : 'rgba(60,45,20,0.11)' },
             },
             '&:hover': {
-              backgroundColor: d ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+              backgroundColor: d ? 'rgba(255,255,255,0.05)' : 'rgba(60,45,20,0.05)',
             },
           },
         },
@@ -245,7 +276,7 @@ export function getAfableTheme(mode) {
           root: {
             borderRadius: 6,
             '&:hover': {
-              backgroundColor: d ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+              backgroundColor: d ? 'rgba(255,255,255,0.05)' : 'rgba(60,45,20,0.05)',
             },
           },
         },

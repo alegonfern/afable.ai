@@ -9,6 +9,7 @@ import { toast } from 'react-toastify';
 import { api } from '../../services/api';
 import { useWorkspace } from '../../context/WorkspaceContext';
 import { MarcaWorkspace } from '../../components/SelectorWorkspace';
+import DatosParaFacturar from '../ajustes/DatosParaFacturar';
 
 const POLITICAS = [
   { value: 'todos', label: 'Todos los miembros' },
@@ -29,7 +30,7 @@ const DISPLAY = `'Sora', 'Inter', sans-serif`;
  * El archivo conserva su nombre para no mover una ruta que ya anda; lo que se lee en
  * pantalla es lo que tiene que ser correcto.
  */
-export default function WorkspacePage() {
+export default function WorkspacePage({ embebido = false }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const { workspace, slug, esAdmin, seleccionar, recargar, loading } = useWorkspace();
@@ -53,7 +54,7 @@ export default function WorkspacePage() {
       name: workspace.name || '',
       sector: workspace.sector || '',
       employees: workspace.employees || '',
-      tax_id: workspace.tax_id || '',
+      rut: workspace.rut || '',
       description: workspace.description || '',
       agent_creation_policy: workspace.agent_creation_policy || 'editores',
     });
@@ -70,7 +71,7 @@ export default function WorkspacePage() {
       await recargar();
       toast.success('Empresa actualizado.');
     } catch (e) {
-      toast.error(e.response?.data?.detail || 'No se pudo guardar.');
+      toast.error(e.response?.data?.detail || e.response?.data?.rut?.[0] || 'No se pudo guardar.');
     } finally {
       setGuardando(false);
     }
@@ -109,27 +110,31 @@ export default function WorkspacePage() {
       borderRadius: '8px',
       fontSize: '0.875rem',
       '& fieldset': { borderColor: borde },
-      '&.Mui-focused fieldset': { borderColor: '#586AD0' },
+      '&.Mui-focused fieldset': { borderColor: 'var(--af-acento)' },
     },
     '& .MuiInputLabel-root': { fontSize: '0.875rem', color: textMuted },
-    '& .MuiInputLabel-root.Mui-focused': { color: '#9BA6E3' },
+    '& .MuiInputLabel-root.Mui-focused': { color: 'var(--af-acento-suave)' },
   };
 
   if (loading || (workspace && !form)) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', pt: 12 }}>
-        <CircularProgress size={26} sx={{ color: '#586AD0' }} />
+        <CircularProgress size={26} sx={{ color: 'var(--af-acento)' }} />
       </Box>
     );
   }
 
   return (
-    <Box sx={{ maxWidth: 1000, mx: 'auto', px: { xs: 2.5, md: 5 }, py: { xs: 4, md: 6 }, width: '100%' }}>
-      <Building2 size={24} color={textMuted} strokeWidth={1.75} />
-      <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.875rem', fontWeight: 600, mt: 1.5, letterSpacing: '-0.01em' }}>
-        Su empresa
-      </Typography>
-      <Typography sx={{ color: textMuted, fontSize: '0.9375rem', mt: 0.75 }}>
+    <Box sx={embebido ? { maxWidth: 1000, width: '100%' } : { maxWidth: 1000, mx: 'auto', px: { xs: 2.5, md: 5 }, py: { xs: 4, md: 6 }, width: '100%' }}>
+      {!embebido && (
+        <>
+          <Building2 size={24} color={textMuted} strokeWidth={1.75} />
+          <Typography sx={{ fontFamily: DISPLAY, fontSize: '1.875rem', fontWeight: 600, mt: 1.5, letterSpacing: '-0.01em' }}>
+            Su empresa
+          </Typography>
+        </>
+      )}
+      <Typography sx={{ color: textMuted, fontSize: '0.9375rem', mt: embebido ? 0 : 0.75 }}>
         Cómo se llama, a qué se dedica y quién puede crear agentes. Es lo que el agente
         lee antes de contestar, y lo que se imprime en sus comprobantes.
       </Typography>
@@ -225,9 +230,9 @@ export default function WorkspacePage() {
               size="small" sx={campoSx}
             />
             <TextField
-              label="RUT / NIF"
-              value={form.tax_id}
-              onChange={(e) => setForm({ ...form, tax_id: e.target.value })}
+              label="RUT"
+              value={form.rut}
+              onChange={(e) => setForm({ ...form, rut: e.target.value })}
               disabled={!esAdmin}
               placeholder="Ej: 76.123.456-7"
               size="small" sx={campoSx}
@@ -245,7 +250,12 @@ export default function WorkspacePage() {
             sx={{ ...campoSx, mt: 2 }}
           />
 
-          <Typography sx={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#586AD0', mt: 4, mb: 1.5 }}>
+          <DatosParaFacturar campoSx={campoSx} titulo={
+            <Typography sx={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--af-acento)', mb: 0.75 }}>
+              Datos para facturar
+            </Typography>} />
+
+          <Typography sx={{ fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--af-acento)', mt: 4, mb: 1.5 }}>
             Quién puede crear agentes
           </Typography>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
@@ -262,9 +272,9 @@ export default function WorkspacePage() {
                     px: 1.75, py: 0.875, borderRadius: '8px',
                     fontFamily: 'inherit', fontSize: '0.875rem',
                     fontWeight: activa ? 600 : 500,
-                    color: activa ? (d ? '#9BA6E3' : '#2F42A6') : theme.palette.text.secondary,
-                    bgcolor: activa ? 'rgba(88, 106, 208, 0.12)' : 'transparent',
-                    border: `1px solid ${activa ? 'rgba(88, 106, 208, 0.35)' : borde}`,
+                    color: activa ? (d ? 'var(--af-acento-suave)' : 'var(--af-acento-hover)') : theme.palette.text.secondary,
+                    bgcolor: activa ? 'color-mix(in srgb, var(--af-acento) 12%, transparent)' : 'transparent',
+                    border: `1px solid ${activa ? 'color-mix(in srgb, var(--af-acento) 35%, transparent)' : borde}`,
                   }}
                 >
                   {p.label}
@@ -293,7 +303,7 @@ export default function WorkspacePage() {
             </Box>
             <Button
               component={Link}
-              to="/app/admin/personas"
+              to="/app/ajustes/equipo"
               sx={{ textTransform: 'none', fontSize: '0.875rem', fontWeight: 600, whiteSpace: 'nowrap' }}
             >
               Ir a Personas
@@ -348,7 +358,7 @@ function QuienPuedeQue({ textMuted, borde, bgSuave }) {
     ['El plan y los medios de pago', false, false, true],
   ];
   const Celda = ({ si }) => (
-    <Box sx={{ textAlign: 'center', color: si ? '#586AD0' : textMuted, opacity: si ? 1 : 0.35 }}>
+    <Box sx={{ textAlign: 'center', color: si ? 'var(--af-acento)' : textMuted, opacity: si ? 1 : 0.35 }}>
       {si ? '●' : '—'}
     </Box>
   );
@@ -357,7 +367,7 @@ function QuienPuedeQue({ textMuted, borde, bgSuave }) {
     <Box sx={{ mt: 4 }}>
       <Typography sx={{
         fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em',
-        textTransform: 'uppercase', color: '#586AD0', mb: 1.5,
+        textTransform: 'uppercase', color: 'var(--af-acento)', mb: 1.5,
       }}>
         Quién puede qué
       </Typography>
@@ -399,7 +409,7 @@ function QuienPuedeQue({ textMuted, borde, bgSuave }) {
 }
 
 
-function ModalNuevoWorkspace({ abierto, cerrar, sectores, alCrear }) {
+export function ModalNuevoWorkspace({ abierto, cerrar, sectores, alCrear }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
   const textMuted = d ? 'rgba(255,255,255,0.66)' : 'rgba(0,0,0,0.62)';

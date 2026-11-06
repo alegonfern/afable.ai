@@ -21,6 +21,7 @@ import {
   ChevronRight, Zap, Bot, History, Boxes,
   User, Building2, HelpCircle, LogOut, Timer, Layers, Users,
   Plug, FolderOpen, BookOpen, CheckSquare, CreditCard,
+  ShoppingCart, Calculator, Wallet, PackageOpen,
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { authService } from '../../../services/auth';
@@ -30,6 +31,10 @@ import { useApp } from '../../../context/AppContext';
 import { api } from '../../../services/api';
 import MenuDeFila, { DialogoCompartir } from './MenuDeFila';
 import { Isotipo, Logo } from '../../../components/Logo';
+import { MODULOS, moduloDeRuta, rutaDe, seccionesDe, vistaGuardada } from '../modulos';
+import { useWorkspace } from '../../../context/WorkspaceContext';
+import { useDteDisponible } from '../../../pages/dte/useDte';
+import { tonoModulo } from '../../../theme/tonos';
 
 const openedMixin = (theme) => ({
   width: DRAWER_WIDTH,
@@ -68,23 +73,21 @@ export default function Drawer({ open, handleDrawerToggle }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { currentUser } = useApp();
+  const { slug: empresaSlug } = useWorkspace();
+  const dteDisponible = useDteDisponible(empresaSlug);
   const matchDownLG = useMediaQuery(theme.breakpoints.down('lg'));
   const d = theme.palette.mode === 'dark';
 
   const [conversations, setConversations] = useState([]);
-  const [chatOpen, setChatOpen] = useState(true);
+  // El historial se despliega bajo Chat cuando se está en el chat, como el submenú de un
+  // módulo bajo el módulo abierto; la flecha lo abre o cierra a mano desde cualquier lado.
+  const [chatOpen, setChatOpen] = useState(() => location.pathname.startsWith('/app/chat'));
+  useEffect(() => { setChatOpen(location.pathname.startsWith('/app/chat')); }, [location.pathname]);
   // Las Sesiones del Workspace activo: es la seccion que las vuelve alcanzables. Sin
   // esto, una Sesion existe pero no hay por donde llegar a ella.
   const [sesiones, setSesiones] = useState([]);
   const [sesionesOpen, setSesionesOpen] = useState(true);
   const [userMenuAnchor, setUserMenuAnchor] = useState(null);
-  const [modo, setModoState] = useState(() => localStorage.getItem('afable_modo') || 'trabajo');
-
-  const setModo = (siguiente) => {
-    setModoState(siguiente);
-    localStorage.setItem('afable_modo', siguiente);
-  };
-
   const handleLogout = () => {
     authService.logout();
     toast.success('Sesión cerrada');
@@ -153,7 +156,7 @@ export default function Drawer({ open, handleDrawerToggle }) {
         await api.deleteConversation(conv.id);
         setConversations((cs) => cs.filter((c) => c.id !== conv.id));
         toast.success('Conversación eliminada.');
-        if (location.pathname.startsWith('/app/chat')) navigate('/app/chat');
+        if (location.pathname.startsWith('/app/chat')) navigate('/app/chat', { state: { nueva: true } });
       }
       if (clave === 'compartir') setCompartiendo(conv);
     } catch {
@@ -237,6 +240,11 @@ export default function Drawer({ open, handleDrawerToggle }) {
   // Compara tambien el `?tab=`: las pestañas del hub de Espacios son items
   // distintos del menu y apuntan todas a /app/contexto. Sin esto se encendian las
   // cuatro juntas.
+  // El módulo de un hilo del panel lateral, que se guarda como "<empresa>:<módulo>".
+  const moduloDeConversacion = (conv) =>
+    MODULOS.find((m) => m.slug === (conv.contexto || '').split(':')[1])?.label || null;
+  const tonoDeConversacion = (conv) => tonoModulo((conv.contexto || '').split(':')[1]);
+
   const isActive = (path) => {
     if (path === '/app') return location.pathname === '/app';
     const [ruta, query] = path.split('?');
@@ -252,29 +260,53 @@ export default function Drawer({ open, handleDrawerToggle }) {
     display: 'flex', alignItems: 'center', gap: 1.25,
     px: 1.5, py: 0.4, mx: 0.75, borderRadius: '5px', mb: 0.25,
     cursor: 'pointer', position: 'relative',
-    bgcolor: active ? (d ? 'rgba(88, 106, 208,0.14)' : 'rgba(88, 106, 208,0.09)') : 'transparent',
-    color: active ? '#586AD0' : textMuted,
-    borderLeft: active ? '2px solid #586AD0' : '2px solid transparent',
-    '&:hover': { bgcolor: active ? (d ? 'rgba(88, 106, 208,0.18)' : 'rgba(88, 106, 208,0.12)') : bgHover, color: active ? '#586AD0' : textActive },
+    bgcolor: active ? (d ? 'color-mix(in srgb, var(--af-acento) 14%, transparent)' : 'color-mix(in srgb, var(--af-acento) 9%, transparent)') : 'transparent',
+    color: active ? 'var(--af-acento)' : textMuted,
+    // La línea del ítem activo es el único toque de color de la barra.
+    borderLeft: active ? '2px solid var(--af-color)' : '2px solid transparent',
+    '&:hover': { bgcolor: active ? (d ? 'color-mix(in srgb, var(--af-acento) 18%, transparent)' : 'color-mix(in srgb, var(--af-acento) 12%, transparent)') : bgHover, color: active ? 'var(--af-acento)' : textActive },
     transition: 'all 0.12s',
   });
 
-  const iconColor = (active) => active ? '#586AD0' : textDisabled;
+  const iconColor = (active) => active ? 'var(--af-acento)' : textDisabled;
 
   const userInitials = currentUser
     ? ((currentUser.first_name?.[0] || '') + (currentUser.last_name?.[0] || '') || currentUser.email?.[0] || 'U').toUpperCase()
     : 'U';
 
-  // ── Los tres modos ──────────────────────────────────────────────────────────
-  // Conmutador arriba a la izquierda: solo el modo activo muestra su etiqueta, los
-  // otros dos son icono pelado. La barra cambia completa segun el modo.
+  // Los módulos de la barra. El selector Módulo / Automatización se mudó al encabezado
+  // (15-10-2026, como Kapso): la barra dice DÓNDE se está, el selector QUÉ se ve de ahí.
+  // Cada módulo lleva a la última vista elegida.
+  const ICONOS = {
+    ventas:       <ShoppingCart size={15} />,
+    compras:      <PackageOpen size={15} />,
+    inventario:   <Boxes size={15} />,
+    contabilidad: <Calculator size={15} />,
+    finanzas:     <Wallet size={15} />,
+  };
+  const moduloAbierto = moduloDeRuta(location.pathname);
+  // Los módulos desplegados en la barra. El módulo en el que se está se despliega solo al
+  // entrar; la flecha (o un clic en el módulo en el que ya se está) lo pliega o despliega a
+  // mano, y cualquier otro se puede desplegar sin salir de donde se está.
+  const [desplegados, setDesplegados] = useState(() => new Set(moduloAbierto ? [moduloAbierto.slug] : []));
+  useEffect(() => {
+    if (moduloAbierto?.slug) setDesplegados((d) => (d.has(moduloAbierto.slug) ? d : new Set(d).add(moduloAbierto.slug)));
+  }, [moduloAbierto?.slug]);
+  const alternarModulo = (slug) => setDesplegados((d) => {
+    const n = new Set(d);
+    if (n.has(slug)) n.delete(slug); else n.add(slug);
+    return n;
+  });
+
+  // ── Los tres modos ── ⛔ DESCONECTADOS el 2026-10-14 ─────────────────────────
+  // El conmutador los reemplazó por Módulo / Automatización. Quedan acá, como los
+  // items de abajo, por si alguno vuelve.
   //   Trabajo  — el dia a dia: chat, agentes, disparadores, tablero.
   //   Espacios — de donde sale lo que el agente sabe: espacios, conexiones,
   //              documentos y el contexto de la empresa.
   //   Admin    — la empresa: personas, agentes, ajustes, plan.
-  // Los items de cuenta (perfil, ayuda, cerrar sesion) viven en la ficha del
-  // usuario, abajo, igual en los tres modos.
-  const MODOS = [
+  // eslint-disable-next-line no-unused-vars
+  const MODOS_DESCONECTADOS = [
     { key: 'trabajo',  label: 'Trabajo',  icon: <MessageSquare size={14} /> },
     { key: 'espacios', label: 'Workspaces', icon: <Layers size={14} /> },
     { key: 'admin',    label: 'Admin',    icon: <Settings size={14} /> },
@@ -284,7 +316,6 @@ export default function Drawer({ open, handleDrawerToggle }) {
     trabajo: {
       seccion: null,
       items: [
-        { path: '/app/agentes',          label: 'Agentes',      icon: <Bot size={15} /> },
         // Las Tareas estaban SOLO adentro de su Sesion, cuatro niveles abajo: "que tengo
         // pendiente" no se podia contestar sin abrir Sesion por Sesion. Sube al menu del
         // dia a dia, que es cuando se hace esa pregunta.
@@ -311,7 +342,6 @@ export default function Drawer({ open, handleDrawerToggle }) {
       seccion: 'Empresa',
       items: [
         { path: '/app/admin/personas',  label: 'Personas',      icon: <Users size={14} /> },
-        { path: '/app/admin/agentes',   label: 'Agentes',       icon: <Bot size={14} /> },
         { path: '/app/admin/workspace', label: 'Su empresa',    icon: <Building2 size={14} /> },
         { path: '/app/configuracion',   label: 'Configuración', icon: <Settings size={14} /> },
         // Decia "Plan" y llevaba a la vitrina de precios, que no dice con que se esta
@@ -330,41 +360,25 @@ export default function Drawer({ open, handleDrawerToggle }) {
   // siguen respondiendo. Reconectar un item es moverlo de esa constante a esta.
   //
   // Lo único vivo adentro es el CHAT y su historial de conversaciones.
-  const ITEMS_POR_MODO = {
-    trabajo:  { seccion: null, items: [] },
-    espacios: { seccion: null, items: [] },
-    admin:    { seccion: null, items: [] },
-  };
+  // El 2026-10-14 los modos se reemplazaron por Módulo / Automatización: lo vivo en la
+  // barra es el chat y los MODULOS de más arriba.
 
   // La lista de Sesiones de la barra viaja con el resto: vuelve cuando volvamos a
   // enchufar Sesiones. La carga de datos se deja como está para no tocar su lógica.
   const MOSTRAR_SESIONES = false;
+  // El Chat salió de la barra el 18-10-2026 y volvió el 25-10-2026 como lo principal, arriba
+  // de los módulos: lleva al chat completo. El panel lateral sigue siendo el chat de cada
+  // módulo, y sus hilos aparecen aquí en el historial con el nombre del módulo.
+  const MOSTRAR_CHAT = true;
 
   // El buscador de la barra. Sale por lo mismo que el del encabezado: con el menú
   // desconectado no hay qué buscar todavía. El bloque queda entero abajo.
   const MOSTRAR_BUSCADOR = false;
 
-  useEffect(() => {
-    // El chat y la home no estan en ninguna lista de items: son el modo Trabajo.
-    const enChat = location.pathname === '/app' || location.pathname.startsWith('/app/chat');
-    const dueño = enChat
-      ? ['trabajo']
-      : Object.entries(ITEMS_POR_MODO).find(([, { items }]) =>
-          // `i.path` puede traer ?tab=: para saber de que modo es la pantalla basta
-          // la ruta, sin la query.
-          items.some((i) => location.pathname.startsWith(i.path.split('?')[0])),
-        );
-    if (dueño && dueño[0] !== modo) setModo(dueño[0]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname]);
-
-  // El chat y su historial solo viven en el modo Trabajo.
-  const enTrabajo = modo === 'trabajo';
-  const { seccion, items: itemsDelModo } = ITEMS_POR_MODO[modo] || ITEMS_POR_MODO.trabajo;
-
   // La ficha del usuario, igual en los tres modos.
   const accountMenuItems = [
-    { path: '/app/perfil', label: 'Mi Perfil', icon: <User size={14} /> },
+    { path: '/app/ajustes/perfil', label: 'Mi perfil', icon: <User size={14} /> },
+    { path: '/app/ajustes', label: 'Configuración', icon: <Settings size={14} /> },
     { path: '/app/ayuda',  label: 'Ayuda',     icon: <HelpCircle size={14} /> },
   ];
 
@@ -381,58 +395,21 @@ export default function Drawer({ open, handleDrawerToggle }) {
         sx={{
           display: 'flex', alignItems: 'center', flexShrink: 0, cursor: 'pointer',
           justifyContent: open ? 'flex-start' : 'center',
-          px: open ? 1.5 : 0.5, pt: 1.5, pb: 0.5,
+          px: open ? 1.5 : 0.5, pt: 1.5, pb: 1,
           '&:hover': { opacity: 0.85 }, transition: 'opacity 0.12s',
         }}
       >
         {open ? <Logo size={22} /> : <Isotipo size={22} />}
-      </Box>
-
-      {/* ── Conmutador de modos ──────────────────────────────────────────────
-          Tres iconos arriba a la izquierda; el activo lleva su etiqueta en una
-          pastilla y los otros dos van sin texto. A la derecha, colapsar el panel. */}
-      <Box sx={{
-        display: 'flex', alignItems: 'center',
-        justifyContent: open ? 'space-between' : 'center',
-        gap: 0.5, px: open ? 1 : 0.5, py: 1, minHeight: 52, flexShrink: 0,
-      }}>
-        <Box sx={{
-          display: 'flex', alignItems: 'center', gap: 0.25,
-          flexDirection: open ? 'row' : 'column',
-        }}>
-          {MODOS.map((m) => {
-            const activo = modo === m.key;
-            return (
-              <Tooltip key={m.key} title={activo && open ? '' : m.label} placement="right" arrow>
-                <Box
-                  component="button"
-                  onClick={() => setModo(m.key)}
-                  aria-pressed={activo}
-                  sx={{
-                    display: 'flex', alignItems: 'center', gap: 0.75,
-                    px: activo && open ? 1.25 : 0.75, py: 0.6,
-                    border: 'none', cursor: 'pointer', borderRadius: '6px',
-                    fontFamily: 'inherit', fontSize: '0.875rem', fontWeight: 500,
-                    color: activo ? textActive : textDisabled,
-                    bgcolor: activo ? bgHover : 'transparent',
-                    '&:hover': { color: activo ? textActive : textMuted, bgcolor: bgHover },
-                    transition: 'all 0.12s',
-                  }}
-                >
-                  <Box sx={{ display: 'flex' }}>{m.icon}</Box>
-                  {activo && open && m.label}
-                </Box>
-              </Tooltip>
-            );
-          })}
-        </Box>
-
+        {/* Colapsar, en la misma fila de la marca (como Kapso). Antes iba en una fila
+            propia junto al conmutador de modos, que se mudó al encabezado. */}
         {open && (
-          <Box component="button" onClick={handleDrawerToggle} sx={{
-            border: 'none', background: 'transparent', color: textDisabled,
-            cursor: 'pointer', display: 'flex', p: 0.5, borderRadius: '4px', flexShrink: 0,
-            '&:hover': { color: textMuted, bgcolor: bgHover }, transition: 'all 0.12s',
-          }}>
+          <Box component="button" aria-label="Colapsar el panel"
+            onClick={(e) => { e.stopPropagation(); handleDrawerToggle(); }}
+            sx={{
+              ml: 'auto', border: 'none', background: 'transparent', color: textDisabled,
+              cursor: 'pointer', display: 'flex', p: 0.5, borderRadius: '4px', flexShrink: 0,
+              '&:hover': { color: textMuted, bgcolor: bgHover }, transition: 'all 0.12s',
+            }}>
             <ChevronLeft size={15} />
           </Box>
         )}
@@ -479,8 +456,9 @@ export default function Drawer({ open, handleDrawerToggle }) {
       {/* ── Main content (scrollable) ── */}
       <Box sx={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', py: 0.5 }}>
 
-        {/* Chat con su historial: solo en Trabajo */}
-        {enTrabajo && (
+        {/* Chat con su historial: desde aquí se maneja todo, así que va primero y en
+            las dos posiciones del selector. */}
+        {MOSTRAR_CHAT && (
           <Box sx={{ mb: 0.5 }}>
             <Tooltip title={!open ? 'Chat' : ''} placement="right" arrow>
               <Box sx={itemSx(isActive('/app/chat'))} onClick={() => navigate('/app/chat')}>
@@ -491,7 +469,7 @@ export default function Drawer({ open, handleDrawerToggle }) {
                       Chat
                     </Typography>
                     <Box
-                      onClick={(e) => { e.stopPropagation(); navigate('/app/chat'); }}
+                      onClick={(e) => { e.stopPropagation(); navigate('/app/chat', { state: { nueva: true } }); }}
                       sx={{
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         width: 18, height: 18, borderRadius: '4px', flexShrink: 0,
@@ -560,12 +538,19 @@ export default function Drawer({ open, handleDrawerToggle }) {
                         <Typography sx={{ fontSize: '0.8rem', lineHeight: 1.4, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {(conv.title || 'Conversación').slice(0, 28)}
                         </Typography>
+                        {/* Un hilo del panel lateral dice de qué módulo es: es la misma
+                            conversación que sigue al abrir el chat dentro de ese módulo. */}
+                        {moduloDeConversacion(conv) && (
+                          <Typography sx={{ fontSize: '0.68rem', fontWeight: 500, flexShrink: 0, color: tonoDeConversacion(conv).color, px: 0.6, borderRadius: '4px', bgcolor: tonoDeConversacion(conv).suave }}>
+                            {moduloDeConversacion(conv)}
+                          </Typography>
+                        )}
                         {/* Un hilo compartido se distingue de un vistazo: si no, no hay
                             forma de saber qué ve el equipo y qué no. */}
                         {conv.sesion_nombre && (
                           <Typography
                             title={`Compartida en ${conv.sesion_nombre}`}
-                            sx={{ fontSize: '0.7rem', flexShrink: 0, color: '#9BA6E3' }}
+                            sx={{ fontSize: '0.7rem', flexShrink: 0, color: 'var(--af-acento-suave)' }}
                           >
                             ●
                           </Typography>
@@ -598,7 +583,7 @@ export default function Drawer({ open, handleDrawerToggle }) {
         {/* Sesiones: donde trabaja el equipo. Solo en Trabajo, como el chat.
             ⛔ Desconectada el 2026-09-01 con `MOSTRAR_SESIONES`. El bloque queda entero:
             volver a mostrarla es poner esa bandera en true. */}
-        {enTrabajo && MOSTRAR_SESIONES && (
+        {MOSTRAR_SESIONES && (
           <Box sx={{ mb: 0.5 }}>
             <Tooltip title={!open ? 'Sesiones' : ''} placement="right" arrow>
               <Box sx={itemSx(isActive('/app/sesiones'))} onClick={() => setSesionesOpen(p => !p)}>
@@ -664,8 +649,8 @@ export default function Drawer({ open, handleDrawerToggle }) {
                         sx={{
                           display: 'flex', alignItems: 'center', gap: 0.75,
                           px: 1, py: 0.35, borderRadius: '4px', cursor: 'pointer',
-                          color: activa ? '#586AD0' : textDisabled,
-                          '&:hover': { bgcolor: bgHover, color: activa ? '#586AD0' : textMuted },
+                          color: activa ? 'var(--af-acento)' : textDisabled,
+                          '&:hover': { bgcolor: bgHover, color: activa ? 'var(--af-acento)' : textMuted },
                           transition: 'all 0.1s',
                         }}
                       >
@@ -728,31 +713,71 @@ export default function Drawer({ open, handleDrawerToggle }) {
           </Box>
         )}
 
-        {/* Encabezado de la seccion del modo activo */}
-        {open && seccion && (
+        {/* Los módulos. */}
+        {open && (
           <Typography sx={{
             px: 2, pt: 1, pb: 0.5, fontSize: '0.72rem', fontWeight: 600,
             color: textDisabled, letterSpacing: '0.06em', textTransform: 'uppercase',
           }}>
-            {seccion}
+            Módulos
           </Typography>
         )}
 
-        {/* Los items del modo activo */}
-        {itemsDelModo.map(item => (
-          <Tooltip key={item.path} title={!open ? item.label : ''} placement="right" arrow>
-            <Box sx={itemSx(isActive(item.path))} onClick={() => navigate(item.path)}>
-              <Box sx={{ color: iconColor(isActive(item.path)), flexShrink: 0, display: 'flex' }}>
-                {item.icon}
-              </Box>
-              {open && (
-                <Typography sx={{ fontSize: '0.9rem', fontWeight: isActive(item.path) ? 500 : 400, color: 'inherit' }}>
-                  {item.label}
-                </Typography>
+        {MODULOS.map((m) => {
+          // Encendido en sus dos páginas: el selector ya dice en cuál de ellas se está.
+          const activo = moduloAbierto?.slug === m.slug;
+          // Las secciones del módulo, como submenú plegable.
+          const secciones = seccionesDe(m.slug, { dte: dteDisponible });
+          const conSubmenu = open && secciones.length > 0;
+          const desplegado = conSubmenu && desplegados.has(m.slug);
+          return (
+            <Box key={m.slug}>
+              <Tooltip title={!open ? m.label : ''} placement="right" arrow>
+                <Box sx={itemSx(activo)} onClick={() => (activo && conSubmenu ? alternarModulo(m.slug) : navigate(rutaDe(m.slug, vistaGuardada())))}>
+                  <Box sx={{ color: iconColor(activo), flexShrink: 0, display: 'flex' }}>
+                    {ICONOS[m.slug]}
+                  </Box>
+                  {open && (
+                    <Typography sx={{ fontSize: '0.9rem', fontWeight: activo ? 500 : 400, color: 'inherit', flex: 1 }}>
+                      {m.label}
+                    </Typography>
+                  )}
+                  {conSubmenu && (
+                    <Box
+                      onClick={(e) => { e.stopPropagation(); alternarModulo(m.slug); }}
+                      sx={{ display: 'flex', p: 0.25, borderRadius: '4px', flexShrink: 0, color: textDisabled, '&:hover': { bgcolor: bgHover, color: textActive } }}
+                    >
+                      {desplegado ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                    </Box>
+                  )}
+                </Box>
+              </Tooltip>
+              {conSubmenu && (
+                <Collapse in={desplegado}>
+                <Box sx={{ pl: 3.5, pr: 0.75, mt: 0.25, mb: 0.5 }}>
+                  {secciones.map((sec) => {
+                    const actual = activo && moduloAbierto.vista === 'modulo' && moduloAbierto.seccion === sec.slug;
+                    return (
+                      <Box key={sec.slug} onClick={() => navigate(`/app/${m.slug}/${sec.slug}`)}
+                        sx={{
+                          px: 1, py: 0.4, borderRadius: '4px', cursor: 'pointer',
+                          fontSize: '0.84rem', lineHeight: 1.45,
+                          color: actual ? textActive : textDisabled,
+                          fontWeight: actual ? 500 : 400,
+                          borderLeft: actual ? '2px solid var(--af-color)' : '2px solid transparent',
+                          '&:hover': { bgcolor: bgHover, color: textActive },
+                          transition: 'all 0.1s',
+                        }}>
+                        {sec.label}
+                      </Box>
+                    );
+                  })}
+                </Box>
+                </Collapse>
               )}
             </Box>
-          </Tooltip>
-        ))}
+          );
+        })}
 
       </Box>
 
@@ -770,7 +795,7 @@ export default function Drawer({ open, handleDrawerToggle }) {
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-          <Avatar src={currentUser?.avatar_url} sx={{ width: 24, height: 24, fontSize: '0.65rem', bgcolor: '#586AD0', flexShrink: 0 }}>
+          <Avatar src={currentUser?.avatar_url} sx={{ width: 24, height: 24, fontSize: '0.65rem', bgcolor: 'var(--af-acento)', flexShrink: 0 }}>
             {userInitials}
           </Avatar>
           {open && (

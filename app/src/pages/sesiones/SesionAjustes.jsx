@@ -12,7 +12,7 @@ const DISPLAY = `'Sora', 'Inter', sans-serif`;
 const Etiqueta = ({ children }) => (
   <Typography sx={{
     fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em',
-    textTransform: 'uppercase', color: '#586AD0', mb: 1.25,
+    textTransform: 'uppercase', color: 'var(--af-acento)', mb: 1.25,
   }}>
     {children}
   </Typography>
@@ -51,7 +51,7 @@ export default function SesionAjustes({ sesion, slug, onCambio, onBorrada }) {
     '& .MuiOutlinedInput-root': {
       bgcolor: bgSuave, borderRadius: '8px', fontSize: '0.9375rem',
       '& fieldset': { borderColor: borde },
-      '&.Mui-focused fieldset': { borderColor: '#586AD0' },
+      '&.Mui-focused fieldset': { borderColor: 'var(--af-acento)' },
     },
   };
 
@@ -245,7 +245,7 @@ export default function SesionAjustes({ sesion, slug, onCambio, onBorrada }) {
                 sx={{
                   borderRadius: '8px', fontSize: '0.8125rem', cursor: 'pointer',
                   ...(activa
-                    ? { bgcolor: 'rgba(88, 106, 208, 0.16)', color: '#586AD0', border: '1px solid rgba(88, 106, 208, 0.4)', fontWeight: 600 }
+                    ? { bgcolor: 'color-mix(in srgb, var(--af-acento) 16%, transparent)', color: 'var(--af-acento)', border: '1px solid color-mix(in srgb, var(--af-acento) 40%, transparent)', fontWeight: 600 }
                     : { borderColor: borde, color: textMuted }),
                 }}
               />

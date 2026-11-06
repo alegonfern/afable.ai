@@ -81,7 +81,7 @@ export default function SesionArchivos({ sesion, slug }) {
   if (archivos === null) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
-        <CircularProgress size={22} sx={{ color: '#586AD0' }} />
+        <CircularProgress size={22} sx={{ color: 'var(--af-acento)' }} />
       </Box>
     );
   }
@@ -99,7 +99,7 @@ export default function SesionArchivos({ sesion, slug }) {
             sx: {
               bgcolor: bgSuave, borderRadius: '8px', fontSize: '0.9375rem',
               '& fieldset': { borderColor: borde },
-              '&.Mui-focused fieldset': { borderColor: '#586AD0' },
+              '&.Mui-focused fieldset': { borderColor: 'var(--af-acento)' },
             },
           }}
         />
@@ -152,7 +152,7 @@ export default function SesionArchivos({ sesion, slug }) {
               <Box sx={{
                 width: 32, height: 32, borderRadius: '8px', flexShrink: 0,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                bgcolor: 'rgba(88, 106, 208, 0.14)', color: '#9BA6E3',
+                bgcolor: 'color-mix(in srgb, var(--af-acento) 14%, transparent)', color: 'var(--af-acento-suave)',
               }}>
                 <FileText size={16} />
               </Box>

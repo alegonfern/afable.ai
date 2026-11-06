@@ -15,7 +15,11 @@ export const AppProvider = ({ children }) => {
   const [selectedOrganization, setSelectedOrganization] = useState(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [aiModel, setAiModelState] = useState(() => localStorage.getItem('afable_aiModel') || null);
+  // El selector de modelo está desconectado (2026-09-01): un modelo guardado de antes
+  // mandaría en cada mensaje sin que nadie pueda verlo ni cambiarlo, y taparía el modelo
+  // por defecto del servidor (DeepSeek desde el 15-10-2026). Mientras el selector no
+  // vuelva, se parte siempre del default; la clave queda para cuando vuelva.
+  const [aiModel, setAiModelState] = useState(null);
 
   const setAiModel = (model) => {
     setAiModelState(model);

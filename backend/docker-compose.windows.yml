@@ -1,0 +1,54 @@
+# Afable en Windows, con Docker Desktop.
+#
+# Por qué existe este archivo y no se tocó el de al lado: `docker-compose.yml` usa
+# `network_mode: "host"`, que solo funciona en Linux — es lo que corre en el VPS. En
+# Docker Desktop para Windows esa red no expone nada: el backend arranca y no hay
+# forma de llegarle, y tampoco ve a la base.
+#
+# Acá se usa la red normal de Compose: el backend llega a la base por el nombre del
+# servicio (`db`), y el puerto 8001 se publica al Windows de afuera.
+#
+#   docker compose -f docker-compose.windows.yml up -d
+#
+# ⚠️ `OLLAMA_BASE_URL` del `.env` apunta a `localhost:11434`, que dentro del contenedor
+# es el contenedor mismo. Sin Ollama corriendo, la búsqueda semántica y los resúmenes
+# de documentos quedan sin embeddings. No impide levantar ni probar el resto; si hace
+# falta, se cambia a `http://host.docker.internal:11434`.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: afable
+      POSTGRES_USER: afable
+      POSTGRES_PASSWORD: afable
+    ports:
+      # 5433 afuera para no chocar con un Postgres instalado en Windows.
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U afable -d afable"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    command: python manage.py runserver 0.0.0.0:8001
+    volumes:
+      - .:/app
+    ports:
+      - "8001:8001"
+    env_file: .env
+    environment:
+      # Pisan al `.env`, que apunta a localhost:5433 porque allá el backend comparte
+      # la red del host. Acá la base es otro contenedor.
+      DB_HOST: db
+      DB_PORT: "5432"
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

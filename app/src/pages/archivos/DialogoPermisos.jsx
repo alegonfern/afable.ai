@@ -96,7 +96,7 @@ export default function DialogoPermisos({ abierto, onCerrar, slug, carpeta, docu
 
         {datos === null ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-            <CircularProgress size={22} sx={{ color: '#586AD0' }} />
+            <CircularProgress size={22} sx={{ color: 'var(--af-acento)' }} />
           </Box>
         ) : (
           <>
@@ -132,7 +132,7 @@ export default function DialogoPermisos({ abierto, onCerrar, slug, carpeta, docu
               <>
                 <Typography sx={{
                   fontSize: '0.6875rem', fontWeight: 700, letterSpacing: '0.08em',
-                  textTransform: 'uppercase', color: '#586AD0', mb: 1.25,
+                  textTransform: 'uppercase', color: 'var(--af-acento)', mb: 1.25,
                 }}>
                   Quiénes entran
                 </Typography>
@@ -142,8 +142,8 @@ export default function DialogoPermisos({ abierto, onCerrar, slug, carpeta, docu
                   direction="row" spacing={1} alignItems="center"
                   sx={{
                     p: 1, pl: 0.5, mb: 1.25, borderRadius: '8px',
-                    bgcolor: datos.workspace_nivel ? 'rgba(88,106,208,0.07)' : bgSuave,
-                    border: `1px solid ${datos.workspace_nivel ? 'rgba(88,106,208,0.35)' : borde}`,
+                    bgcolor: datos.workspace_nivel ? 'color-mix(in srgb, var(--af-acento) 7%, transparent)' : bgSuave,
+                    border: `1px solid ${datos.workspace_nivel ? 'color-mix(in srgb, var(--af-acento) 35%, transparent)' : borde}`,
                   }}
                 >
                   <Checkbox
@@ -151,7 +151,7 @@ export default function DialogoPermisos({ abierto, onCerrar, slug, carpeta, docu
                     checked={Boolean(datos.workspace_nivel)}
                     onChange={(e) => cambiar({ workspace_nivel: e.target.checked ? 'lectura' : null })}
                   />
-                  <Box sx={{ color: '#586AD0', display: 'flex', mt: 0.25 }}>
+                  <Box sx={{ color: 'var(--af-acento)', display: 'flex', mt: 0.25 }}>
                     <Building2 size={16} />
                   </Box>
                   <Box sx={{ flex: 1, minWidth: 0 }}>

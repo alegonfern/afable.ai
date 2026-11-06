@@ -229,11 +229,11 @@ function ConnectModal({ open, connector, orgId, existingConn, onClose, onCreated
     '& .MuiOutlinedInput-root': {
       fontSize: '0.85rem',
       '& fieldset': { borderColor: theme.palette.divider },
-      '&:hover fieldset': { borderColor: 'rgba(88, 106, 208,0.4)' },
-      '&.Mui-focused fieldset': { borderColor: '#586AD0' },
+      '&:hover fieldset': { borderColor: 'color-mix(in srgb, var(--af-acento) 40%, transparent)' },
+      '&.Mui-focused fieldset': { borderColor: 'var(--af-acento)' },
     },
     '& .MuiInputLabel-root': { fontSize: '0.82rem' },
-    '& .MuiInputLabel-root.Mui-focused': { color: '#586AD0' },
+    '& .MuiInputLabel-root.Mui-focused': { color: 'var(--af-acento)' },
   };
 
   return (
@@ -305,7 +305,7 @@ function ConnectModal({ open, connector, orgId, existingConn, onClose, onCreated
             borderRadius: '8px', p: 3,
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
             color: 'text.disabled', cursor: 'pointer',
-            '&:hover': { borderColor: 'rgba(88, 106, 208,0.4)', color: 'text.secondary' },
+            '&:hover': { borderColor: 'color-mix(in srgb, var(--af-acento) 40%, transparent)', color: 'text.secondary' },
           }}>
             <FileText size={24} />
             <Typography sx={{ fontSize: '0.82rem' }}>Arrastra tu archivo aquí o haz clic</Typography>
@@ -342,7 +342,7 @@ function ConnectModal({ open, connector, orgId, existingConn, onClose, onCreated
               fontSize: '0.78rem', color: 'text.secondary',
               border: `1px solid ${theme.palette.divider}`,
               borderRadius: '7px', px: 1.5,
-              '&:hover': { borderColor: 'rgba(88, 106, 208,0.3)', color: '#9BA6E3' },
+              '&:hover': { borderColor: 'color-mix(in srgb, var(--af-acento) 30%, transparent)', color: 'var(--af-acento-suave)' },
             }}
           >
             {testing ? 'Probando...' : 'Probar conexión'}
@@ -359,8 +359,8 @@ function ConnectModal({ open, connector, orgId, existingConn, onClose, onCreated
           startIcon={saving ? <CircularProgress size={12} color="inherit" /> : null}
           sx={{
             fontSize: '0.78rem', fontWeight: 600,
-            bgcolor: '#586AD0', borderRadius: '7px',
-            '&:hover': { bgcolor: '#2F42A6' },
+            bgcolor: 'var(--af-acento)', borderRadius: '7px',
+            '&:hover': { bgcolor: 'var(--af-acento-hover)' },
             '&.Mui-disabled': { bgcolor: 'action.disabledBackground' },
           }}
         >
@@ -456,7 +456,7 @@ function ConnectedRow({ conn, onDeleted, onSynced, onEdit }) {
             <Chip
               label={CATEGORY_CHIP[conn.category]}
               size="small"
-              sx={{ height: 17, fontSize: '0.64rem', fontWeight: 700, letterSpacing: '0.04em', bgcolor: 'rgba(124,58,237,0.1)', color: '#9BA6E3', border: '1px solid rgba(124,58,237,0.3)', '& .MuiChip-label': { px: 0.75 } }}
+              sx={{ height: 17, fontSize: '0.64rem', fontWeight: 700, letterSpacing: '0.04em', bgcolor: 'rgba(124,58,237,0.1)', color: 'var(--af-acento-suave)', border: '1px solid rgba(124,58,237,0.3)', '& .MuiChip-label': { px: 0.75 } }}
             />
           )}
           <Chip
@@ -489,7 +489,7 @@ function ConnectedRow({ conn, onDeleted, onSynced, onEdit }) {
             onClick={handleTest}
             disabled={testing}
             startIcon={testing ? <CircularProgress size={11} /> : <Zap size={12} />}
-            sx={{ fontSize: '0.72rem', color: 'text.secondary', border: `1px solid ${theme.palette.divider}`, borderRadius: '6px', px: 1, minWidth: 0, '&:hover': { borderColor: 'rgba(88, 106, 208,0.3)', color: '#9BA6E3' } }}
+            sx={{ fontSize: '0.72rem', color: 'text.secondary', border: `1px solid ${theme.palette.divider}`, borderRadius: '6px', px: 1, minWidth: 0, '&:hover': { borderColor: 'color-mix(in srgb, var(--af-acento) 30%, transparent)', color: 'var(--af-acento-suave)' } }}
           >
             {testing ? '...' : 'Probar'}
           </Button>
@@ -502,12 +502,12 @@ function ConnectedRow({ conn, onDeleted, onSynced, onEdit }) {
             ? 'Vuelve a leer los archivos ahora, sin esperar la sincronización automática'
             : 'Vuelve a leer el esquema de este sistema'}
           startIcon={syncing ? <CircularProgress size={11} /> : <RefreshCw size={12} />}
-          sx={{ fontSize: '0.72rem', color: 'text.secondary', border: `1px solid ${theme.palette.divider}`, borderRadius: '6px', px: 1, minWidth: 0, '&:hover': { borderColor: 'rgba(88, 106, 208,0.3)', color: '#9BA6E3' } }}
+          sx={{ fontSize: '0.72rem', color: 'text.secondary', border: `1px solid ${theme.palette.divider}`, borderRadius: '6px', px: 1, minWidth: 0, '&:hover': { borderColor: 'color-mix(in srgb, var(--af-acento) 30%, transparent)', color: 'var(--af-acento-suave)' } }}
         >
           {syncing ? '...' : 'Actualizar'}
         </Button>
         {canEdit && (
-          <IconButton size="small" onClick={() => onEdit(conn)} sx={{ color: 'text.disabled', '&:hover': { color: '#9BA6E3', bgcolor: 'rgba(88, 106, 208,0.08)' } }}>
+          <IconButton size="small" onClick={() => onEdit(conn)} sx={{ color: 'text.disabled', '&:hover': { color: 'var(--af-acento-suave)', bgcolor: 'color-mix(in srgb, var(--af-acento) 8%, transparent)' } }}>
             <Pencil size={14} />
           </IconButton>
         )}
@@ -533,8 +533,8 @@ function ConnectorCard({ connector, onClick }) {
       sx={{
         display: 'flex', flexDirection: 'column', gap: 1.5,
         p: 2.5, borderRadius: '10px', cursor: 'pointer',
-        bgcolor: hover ? 'rgba(88, 106, 208,0.04)' : 'background.paper',
-        border: `1px solid ${hover ? 'rgba(88, 106, 208,0.3)' : theme.palette.divider}`,
+        bgcolor: hover ? 'color-mix(in srgb, var(--af-acento) 4%, transparent)' : 'background.paper',
+        border: `1px solid ${hover ? 'color-mix(in srgb, var(--af-acento) 30%, transparent)' : theme.palette.divider}`,
         transition: 'all 0.15s',
       }}
     >
@@ -551,10 +551,10 @@ function ConnectorCard({ connector, onClick }) {
         <Box sx={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           width: 26, height: 26, borderRadius: '6px',
-          bgcolor: hover ? 'rgba(88, 106, 208,0.12)' : 'action.hover',
+          bgcolor: hover ? 'color-mix(in srgb, var(--af-acento) 12%, transparent)' : 'action.hover',
           transition: 'all 0.15s',
         }}>
-          <Plus size={14} color={hover ? '#9BA6E3' : theme.palette.text.disabled} />
+          <Plus size={14} color={hover ? 'var(--af-acento-suave)' : theme.palette.text.disabled} />
         </Box>
       </Box>
       <Typography sx={{ fontSize: '0.78rem', color: 'text.secondary', lineHeight: 1.6 }}>
@@ -734,7 +734,7 @@ export default function IntegrationsPage({ hideHeader = false }) {
             <Typography sx={sectionLabel}>Sistemas conectados</Typography>
             {loading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-                <CircularProgress size={24} sx={{ color: '#586AD0' }} />
+                <CircularProgress size={24} sx={{ color: 'var(--af-acento)' }} />
               </Box>
             ) : (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>

@@ -21,8 +21,8 @@ import { api } from '../services/api';
 
 const GRID_STYLES = `
   .afable-grid .react-grid-item.react-grid-placeholder {
-    background: rgba(88, 106, 208, 0.12) !important;
-    border: 1px dashed rgba(88, 106, 208, 0.35) !important;
+    background: color-mix(in srgb, var(--af-acento) 12%, transparent) !important;
+    border: 1px dashed color-mix(in srgb, var(--af-acento) 35%, transparent) !important;
     border-radius: 8px !important;
     box-shadow: none !important;
   }
@@ -41,10 +41,10 @@ const DEFAULT_LAYOUT = [
 
 const DEFAULT_CARDS = {
   live:  { type: 'live', title: 'Datos en vivo', color: '#34D399' },
-  notas: { type: 'nota', title: 'Notas',         color: '#9BA6E3', text: '' },
+  notas: { type: 'nota', title: 'Notas',         color: 'var(--af-acento-suave)', text: '' },
 };
 
-const PRESET_COLORS = ['#586AD0', '#34D399', '#60A5FA', '#F59E0B', '#F87171', '#9BA6E3', '#38BDF8', '#FB923C'];
+const PRESET_COLORS = ['var(--af-acento)', '#34D399', '#60A5FA', '#F59E0B', '#F87171', 'var(--af-acento-suave)', '#38BDF8', '#FB923C'];
 
 function cardIconFor(type) {
   if (type === 'ventas' || type === 'kpi') return TrendingUp;
@@ -100,7 +100,7 @@ function LiveKpisContent() {
         <Box
           component={RouterLink}
           to="/app/contexto?tab=integraciones"
-          sx={{ color: '#586AD0', fontWeight: 600, textDecoration: 'none',
+          sx={{ color: 'var(--af-acento)', fontWeight: 600, textDecoration: 'none',
                 '&:hover': { textDecoration: 'underline' } }}
         >
           Conecte el sistema donde factura o lleva el stock
@@ -163,7 +163,7 @@ function NotaContent({ text, onChange }) {
 function KpiCardContent({ meta }) {
   const theme = useTheme();
   const d = theme.palette.mode === 'dark';
-  const { value = '—', unit = '', target, trend, period, color = '#586AD0' } = meta;
+  const { value = '—', unit = '', target, trend, period, color = 'var(--af-acento)' } = meta;
   const trendNum  = parseFloat(trend) || 0;
   const targetNum = parseFloat(target) || 0;
   const valueNum  = parseFloat(value)  || 0;
@@ -213,7 +213,7 @@ function BarChartContent({ meta }) {
   const gridColor = d ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
   const tickColor = d ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)';
   const data  = meta.data  || [];
-  const color = meta.color || '#586AD0';
+  const color = meta.color || 'var(--af-acento)';
   const unit  = meta.unit  || '';
 
   return (
@@ -239,7 +239,7 @@ function LineChartContent({ meta, id }) {
   const gridColor = d ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)';
   const tickColor = d ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.35)';
   const data  = meta.data  || [];
-  const color = meta.color || '#586AD0';
+  const color = meta.color || 'var(--af-acento)';
   const unit  = meta.unit  || '';
   const gradId = `lg-${id}`;
 
@@ -283,7 +283,7 @@ function ConfigDialog({ open, onClose, card, cardId, onSave }) {
       target: card.target || '',
       trend:  card.trend  !== undefined ? String(card.trend) : '',
       period: card.period || '',
-      color:  card.color  || '#586AD0',
+      color:  card.color  || 'var(--af-acento)',
     });
     setRows(card.data?.length ? card.data.map(r => ({ ...r, valor: String(r.valor) })) : [{ name: '', valor: '' }]);
   }, [card, open]);
@@ -312,9 +312,9 @@ function ConfigDialog({ open, onClose, card, cardId, onSave }) {
       fontSize: '0.875rem',
       '& fieldset':             { borderColor: theme.palette.divider },
       '&:hover fieldset':       { borderColor: theme.palette.divider },
-      '&.Mui-focused fieldset': { borderColor: '#586AD0' },
+      '&.Mui-focused fieldset': { borderColor: 'var(--af-acento)' },
     },
-    '& .MuiInputLabel-root.Mui-focused': { color: '#586AD0' },
+    '& .MuiInputLabel-root.Mui-focused': { color: 'var(--af-acento)' },
     '& .MuiInputBase-input': { color: 'text.primary' },
   };
 
@@ -389,7 +389,7 @@ function ConfigDialog({ open, onClose, card, cardId, onSave }) {
               ))}
               <Box
                 onClick={addRow}
-                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.5, px: 0.25, cursor: 'pointer', color: 'text.disabled', borderRadius: '4px', '&:hover': { color: '#586AD0' }, transition: 'color 0.12s', width: 'fit-content' }}
+                sx={{ display: 'flex', alignItems: 'center', gap: 0.5, py: 0.5, px: 0.25, cursor: 'pointer', color: 'text.disabled', borderRadius: '4px', '&:hover': { color: 'var(--af-acento)' }, transition: 'color 0.12s', width: 'fit-content' }}
               >
                 <Plus size={13} />
                 <Typography sx={{ fontSize: '0.78rem' }}>Agregar fila</Typography>
@@ -424,7 +424,7 @@ function ConfigDialog({ open, onClose, card, cardId, onSave }) {
         </Button>
         <Button
           onClick={handleSave} variant="contained" size="small"
-          sx={{ bgcolor: '#586AD0', '&:hover': { bgcolor: '#2F42A6' }, fontSize: '0.8125rem', textTransform: 'none', boxShadow: 'none', borderRadius: '6px', px: 2 }}
+          sx={{ bgcolor: 'var(--af-acento)', '&:hover': { bgcolor: 'var(--af-acento-hover)' }, fontSize: '0.8125rem', textTransform: 'none', boxShadow: 'none', borderRadius: '6px', px: 2 }}
         >
           Guardar
         </Button>
@@ -467,7 +467,7 @@ function Card({ id, meta, onRemove, onNoteChange, onConfig }) {
         {CONFIGURABLE.includes(meta.type) && (
           <IconButton
             size="small" onClick={() => onConfig(id)} className="nodrag"
-            sx={{ p: 0.25, color: 'text.disabled', '&:hover': { color: '#586AD0' }, ml: 0.25 }}
+            sx={{ p: 0.25, color: 'text.disabled', '&:hover': { color: 'var(--af-acento)' }, ml: 0.25 }}
           >
             <Settings size={12} />
           </IconButton>
@@ -550,14 +550,14 @@ export default function TablondePage() {
   const addNota = () => {
     const id = `nota-${Date.now()}`;
     setLayout(prev => [...prev, { i: id, x: 0, y: nextY(), w: 5, h: 3, minW: 3, minH: 2 }]);
-    updateCards(prev => ({ ...prev, [id]: { type: 'nota', title: 'Nueva nota', color: '#9BA6E3', text: '' } }));
+    updateCards(prev => ({ ...prev, [id]: { type: 'nota', title: 'Nueva nota', color: 'var(--af-acento-suave)', text: '' } }));
     setMenuAnchor(null);
   };
 
   const addKpi = () => {
     const id = `kpi-${Date.now()}`;
     setLayout(prev => [...prev, { i: id, x: 0, y: nextY(), w: 3, h: 4, minW: 2, minH: 3 }]);
-    updateCards(prev => ({ ...prev, [id]: { type: 'kpi', title: 'Nuevo KPI', value: '0', unit: '', target: '', trend: '0', period: '', color: '#586AD0' } }));
+    updateCards(prev => ({ ...prev, [id]: { type: 'kpi', title: 'Nuevo KPI', value: '0', unit: '', target: '', trend: '0', period: '', color: 'var(--af-acento)' } }));
     setMenuAnchor(null);
     setConfigCardId(id);
   };
@@ -568,7 +568,7 @@ export default function TablondePage() {
     updateCards(prev => ({
       ...prev,
       [id]: {
-        type: 'bar', title: 'Gráfico de barras', color: '#586AD0', unit: '',
+        type: 'bar', title: 'Gráfico de barras', color: 'var(--af-acento)', unit: '',
         data: [
           { name: 'Ene', valor: 400 }, { name: 'Feb', valor: 620 },
           { name: 'Mar', valor: 480 }, { name: 'Abr', valor: 800 },

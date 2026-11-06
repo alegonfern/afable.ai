@@ -30,7 +30,7 @@ import { useWorkspace } from '../context/WorkspaceContext';
 // La paleta del monograma. Colores que se leen sobre claro y sobre oscuro, y que no
 // compiten con el índigo de la marca.
 const COLORES = [
-  '#586AD0', '#0F9D8C', '#C2703D', '#8A5CC4', '#3F7FBF',
+  'var(--af-acento)', '#0F9D8C', '#C2703D', '#8A5CC4', '#3F7FBF',
   '#B4485F', '#5E8C3A', '#9A7B2E',
 ];
 
@@ -191,7 +191,7 @@ export default function SelectorWorkspace({ open = true, compacto = true }) {
                   </Typography>
                 </Box>
               </Box>
-              {activo && <Check size={14} style={{ color: '#586AD0', flexShrink: 0 }} />}
+              {activo && <Check size={14} style={{ color: 'var(--af-acento)', flexShrink: 0 }} />}
             </MenuItem>
           );
         })}

@@ -50,7 +50,7 @@ const ORDENES = [
  */
 function CaraDelAgente({ agente, size = 34 }) {
   const cara = agente.cara || {};
-  const color = cara.accent || '#586AD0';
+  const color = cara.accent || 'var(--af-acento)';
   return (
     <Box sx={{
       width: size, height: size, borderRadius: `${Math.round(size / 3.6)}px`, flexShrink: 0,
@@ -316,7 +316,7 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
       {!embebida && <PropuestasDeAgente onCreado={() => cargar()} />}
 
       {/* Buscador + Crear + Gestionar */}
-      <Box sx={{ display: 'flex', gap: 1.25, mt: embebida ? 0 : 1.5, alignItems: 'stretch' }}>
+      <Box sx={{ display: 'flex', flexWrap: { xs: 'wrap', sm: 'nowrap' }, gap: 1.25, mt: embebida ? 0 : 1.5, alignItems: 'stretch' }}>
         <TextField
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
@@ -327,7 +327,7 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
             sx: {
               bgcolor: bgSuave, borderRadius: '8px', fontSize: '0.9375rem',
               '& fieldset': { borderColor: borde },
-              '&.Mui-focused fieldset': { borderColor: '#586AD0' },
+              '&.Mui-focused fieldset': { borderColor: 'var(--af-acento)' },
             },
           }}
         />
@@ -370,7 +370,7 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
             sx={{
               border: 'none', bgcolor: 'transparent', p: 0, cursor: 'pointer',
               fontFamily: 'inherit', fontSize: 'inherit', fontWeight: 600,
-              color: '#9BA6E3', '&:hover': { textDecoration: 'underline' },
+              color: 'var(--af-acento-suave)', '&:hover': { textDecoration: 'underline' },
             }}
           >
             {ignorarEspacio ? `Volver a ${espacio.name}` : 'Ver todos'}
@@ -380,10 +380,10 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
 
       {/* Pestañas + orden */}
       <Box sx={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        gap: 2, mt: embebida ? 1.25 : 2.5, borderBottom: `1px solid ${borde}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap',
+        columnGap: 2, mt: embebida ? 1.25 : 2.5, borderBottom: `1px solid ${borde}`,
       }}>
-        <Box sx={{ display: 'flex', gap: 0.5 }}>
+        <Box sx={{ display: 'flex', gap: 0.5, maxWidth: '100%', overflowX: 'auto', '& > button': { whiteSpace: 'nowrap', flexShrink: 0 } }}>
           {PESTANAS.map((p) => {
             const activa = pestana === p.value;
             return (
@@ -396,7 +396,7 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
                   px: 1.5, pb: 1.25, pt: 0.5, fontFamily: 'inherit',
                   fontSize: '0.9375rem', fontWeight: activa ? 600 : 500,
                   color: activa ? theme.palette.text.primary : textMuted,
-                  borderBottom: `2px solid ${activa ? '#586AD0' : 'transparent'}`,
+                  borderBottom: `2px solid ${activa ? 'var(--af-acento)' : 'transparent'}`,
                   mb: '-1px',
                   '&:hover': { color: theme.palette.text.primary },
                 }}
@@ -444,7 +444,7 @@ export default function AgentesGaleria({ onElegir, embebida = false, filtrarPorE
 
       {/* Centinela del scroll infinito */}
       <Box ref={centinela} sx={{ display: 'flex', justifyContent: 'center', py: embebida ? 0.5 : 3 }}>
-        {cargando && <CircularProgress size={22} sx={{ color: '#586AD0' }} />}
+        {cargando && <CircularProgress size={22} sx={{ color: 'var(--af-acento)' }} />}
       </Box>
 
       {/* "Crear" era un desplegable de dos opciones y la segunda ("Desde un agente
