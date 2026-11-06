@@ -1,0 +1,8 @@
+Archivos oficiales del SII para las pruebas del núcleo (tests_nucleo.py):
+
+caf_33_ejemplo_sii.xml  El CAF de ejemplo del "Manual de operación del ambiente de certificación"
+                        (sección 5.2): DA y FRMA tal como los publica el SII, con la llave privada
+                        RSASK del mismo manual. No sirve para emitir: el RUT es de prueba.
+F60T33-ejemplo.xml      El EnvioDTE de ejemplo del SII (fm_ejemplo_xml.zip). Su TED verifica con el
+                        CAF de arriba; sus firmas XMLDSig NO verifican (el ejemplo se editó después
+                        de firmarse), por eso las firmas se prueban con un certificado generado.
