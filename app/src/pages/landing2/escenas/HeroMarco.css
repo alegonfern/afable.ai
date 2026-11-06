@@ -1,0 +1,149 @@
+/* Hero de la landing 2: todo bajo .hm / .lp2 para no tocar la landing original, que
+   comparte las clases lp-* y hx-* (el CSS de Vite es global). */
+
+.hm { position: relative; margin-top: -76px; padding: 140px 32px 0; }
+
+/* Todo centrado (30-10-2026, pedido de Alexis): la etiqueta, el titular, la descripción y los
+   botones, uno debajo del otro. */
+.hm__cabeza {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  max-width: 1376px; margin: 0 auto 56px;
+}
+.hm__titulo { display: flex; flex-direction: column; align-items: center; }
+.hm__titulo .lp-h1 { max-width: none; font-size: clamp(42px, 5.4vw, 76px); }
+.hm__lado { display: flex; flex-direction: column; align-items: center; margin-top: 24px; }
+.hm__lado .lp-lead { margin: 0; max-width: 620px; }
+.hm__lado .lp-acciones { justify-content: center; margin-top: 28px; }
+
+.hm-marco {
+  position: relative; overflow: hidden; isolation: isolate;
+  max-width: 1376px; margin: 0 auto; border-radius: 10px; background: #2b2a6b;
+}
+.hm-fondo { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; object-fit: cover; }
+
+.hm-pantalla { position: absolute; left: 50%; transform: translateX(-50%); }
+.hm-pantalla .hx-ventana {
+  box-shadow: rgba(10, 12, 40, 0.18) 0 0 0 1px, rgba(10, 12, 40, 0.35) 0 30px 60px -20px;
+}
+
+/* La landing 2 no tiene la frase "Todo su ERP, desde un chat." dentro del hero: su sección
+   se muestra también en escritorio. */
+.lp2 .lp-solo-sin-hero-animado { display: block; }
+
+@media (max-width: 1023px) {
+  .hm { padding: 104px 16px 0; }
+  .hm__cabeza { margin-bottom: 32px; }
+  .hm-marco--movil { padding: 32px 14px; }
+  .hm-pantalla--movil { position: relative; left: auto; transform: none; }
+}
+
+/* ── La vista Agente de Finanzas (VistaAgente.jsx), con las medidas de AgentePage ── */
+.va {
+  position: relative; display: grid; grid-template-columns: 205px 1fr; grid-template-rows: 46px 50px 1fr;
+  font-size: 13px; color: var(--texto); background: #fafafa; border: 1px solid var(--borde); border-radius: 16px; overflow: hidden;
+  box-shadow: rgba(10, 12, 40, 0.18) 0 0 0 1px, rgba(10, 12, 40, 0.35) 0 30px 60px -20px;
+}
+.va__lado { grid-row: 1 / 4; border-right: 1px solid var(--borde); background: #fbfbfa; }
+.va__cab { border-bottom: 1px solid var(--borde); background: #fff; }
+.va__pag { border-bottom: 1px solid var(--borde); }
+.va__cuerpo { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 20px; padding: 20px 24px; min-height: 0; }
+
+.va-conv { display: flex; flex-direction: column; min-height: 0; border: 1px solid var(--borde); border-radius: 16px; background: #fff; overflow: hidden; }
+.va-conv__cab { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--borde); }
+.va-conv__cab b { display: block; font-size: 14px; font-weight: 600; }
+.va-conv__cab span { font-size: 11.5px; color: var(--texto-2); }
+.va-avatar {
+  position: relative; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 10px; background: rgba(11, 11, 15, 0.06); color: var(--color);
+}
+.va-avatar i { position: absolute; right: -3px; bottom: -3px; display: inline-flex; padding: 2px; border-radius: 50%; background: #fff; }
+.va-conv__hilo { flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; overflow: hidden; }
+.va-conv__hilo .hx-lat__yo { max-width: 70%; }
+.va-pasos { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--texto-2); }
+.va-tarjeta { max-width: 420px; border: 1px solid var(--borde); border-radius: 12px; padding: 12px 14px; background: #fff; box-shadow: 0 6px 18px -10px rgba(11, 11, 15, 0.25); }
+.va-tarjeta__fila { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; }
+.va-tarjeta__fila b { font-weight: 600; }
+.va-tarjeta__fila--suave { color: var(--texto-2); font-size: 12px; }
+.va-tarjeta__botones { display: flex; gap: 8px; margin-top: 10px; }
+.va-tarjeta__botones b, .va-tarjeta__botones span { padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 500; }
+.va-tarjeta__botones b { background: var(--negro); color: #fff; }
+.va-tarjeta__botones span { border: 1px solid var(--borde); color: var(--texto); }
+.va-conv__entrada { margin: 0 16px 16px; }
+
+.va-costado { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.va-titulo {
+  display: flex; align-items: center; margin-bottom: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--texto-3);
+}
+.va-titulo--segundo { margin-top: 18px; }
+.va-vivo { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; color: #0f9d6b; }
+.va-vivo i { width: 6px; height: 6px; border-radius: 50%; background: #0f9d6b; animation: va-latido 1.4s ease-in-out infinite; }
+@keyframes va-latido { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.7); } }
+.va-hecho { display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin: 0 -10px; border-radius: 10px; }
+.va-hecho__icono {
+  flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px;
+  border-radius: 8px; background: rgba(11, 11, 15, 0.06); color: var(--color);
+}
+.va-hecho__texto { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.va-hecho__texto b { font-size: 13px; font-weight: 500; }
+.va-hecho__texto span { font-size: 12px; color: var(--texto-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.va-hecho__hora { font-size: 11.5px; color: var(--texto-3); font-variant-numeric: tabular-nums; }
+.va-auto { display: flex; align-items: center; gap: 10px; padding: 8px 12px; margin-bottom: 6px; border: 1px solid var(--borde); border-radius: 10px; background: #fff; }
+.va-interruptor { position: relative; flex-shrink: 0; width: 28px; height: 16px; border-radius: 8px; background: #d9dbe1; }
+.va-interruptor::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: left .2s; }
+.va-interruptor.is-activa { background: var(--negro); }
+.va-interruptor.is-activa::after { left: 14px; }
+
+/* La versión de teléfono (VistaAgente compacta): sin barra lateral, en una columna. Va al final
+   para ganarle a las reglas de .va. */
+.va--compacta { display: block; }
+.va--compacta .va__lado { display: none; }
+.va--compacta .va__cab { height: 46px; }
+.va--compacta .hx-cab__iconos { display: none; }
+.va--compacta .hx-cab__selector { position: static; transform: none; margin: 0 auto; }
+.va--compacta .va__pag { height: 50px; }
+.va--compacta .va__cuerpo { grid-template-columns: 1fr; padding: 14px; gap: 18px; }
+.va--compacta .va-conv__hilo { min-height: 330px; }
+.va--compacta .va-tarjeta__botones { flex-wrap: wrap; }
+
+/* ── El marco con pintura en otras secciones (MarcoPintado) ── */
+.hm-marco--libre { padding: clamp(28px, 5vw, 72px); }
+.hm-marco--libre .esp { margin: 0; }
+.hm-marco--libre .esp__ventana { box-shadow: rgba(10, 12, 40, 0.18) 0 0 0 1px, rgba(10, 12, 40, 0.4) 0 30px 60px -20px; }
+.lp2-marco-escena { margin-top: 48px; }
+/* Una sombra abajo, para que los capítulos en blanco se lean también sobre un dibujo en papel claro. */
+.lp2-marco-escena::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 34%; z-index: -1; pointer-events: none;
+  background: linear-gradient(to top, rgba(11, 11, 15, 0.7), transparent);
+}
+/* Los capítulos de la escena van sobre la pintura: en blanco, con sombra para que se lean. */
+.lp2-marco-escena .esp-caps button { color: rgba(255, 255, 255, 0.75); font-weight: 500; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6); }
+.lp2-marco-escena .esp-caps button:hover, .lp2-marco-escena .esp-caps button.is-activo { color: #fff; }
+.lp2-marco-escena .esp-caps__barra { background: rgba(255, 255, 255, 0.35); }
+.lp2-marco-escena .esp-caps__barra span { background: #fff; }
+
+/* Recortes de pantalla sobre la pintura, en las tarjetas de "Con su ERP o sin él". */
+.va.va-recorte {
+  display: block; width: 100%; max-width: 400px; height: auto; padding: 16px 20px 10px; background: #fff;
+}
+.lp2-recorte-chat {
+  width: 100%; max-width: 400px; padding: 16px 18px; border-radius: 16px; background: #fff; font-size: 13px; color: var(--texto);
+  box-shadow: rgba(10, 12, 40, 0.18) 0 0 0 1px, rgba(10, 12, 40, 0.4) 0 30px 60px -20px;
+}
+.lp2-recorte-chat .hx-lat__yo { max-width: 85%; }
+.lp2-recorte-chat__fuente { margin-top: 4px; font-size: 11.5px; color: var(--texto-3); }
+
+/* Los planos se mueven (30-10-2026): acercamiento y desplazamiento lentos, de ida y vuelta, como una
+   cámara recorriendo el dibujo. Cada plano trae su recorrido en variables (CAMARA en HeroMarco.jsx). */
+@keyframes hm-camara {
+  from { transform: scale(1.02) translate(0, 0); }
+  to { transform: scale(var(--cam-s, 1.12)) translate(var(--cam-x, 0), var(--cam-y, 0)); }
+}
+.hm-fondo--camara {
+  transform-origin: 50% 50%;
+  will-change: transform;
+  animation: hm-camara var(--cam-t, 28s) ease-in-out infinite alternate;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hm-fondo--camara { animation: none; }
+}

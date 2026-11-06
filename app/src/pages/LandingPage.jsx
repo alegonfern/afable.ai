@@ -1,626 +1,561 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Isotipo } from '../components/Logo';
-import ProcessFlow from '../components/ProcessFlow';
-import HeroShowcase from '../components/HeroShowcase';
-import HeroScene from '../components/HeroScene';
-import LandingLeadChat from '../components/LandingLeadChat';
-import { odoo as odooLogo, sap as sapLogo, googleDrive as driveLogo } from '../assets/logos';
+import { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  ArrowRight, ArrowUp, Calculator, Check, FileText, Landmark, Menu,
+  Package, Receipt, ShoppingCart, Sparkles, X, Zap,
+} from 'lucide-react';
+import { Logo } from '../components/Logo';
+import {
+  odoo as odooLogo, sap as sapLogo, excel as excelLogo, googleDrive as driveLogo,
+} from '../assets/logos';
+import santanderLogo from '../assets/logos/integraciones/santander.svg';
+import bancoChileLogo from '../assets/logos/integraciones/bancochile.svg';
+import bciLogo from '../assets/logos/integraciones/bci.svg';
+import biceLogo from '../assets/logos/integraciones/bice.svg';
+import itauLogo from '../assets/logos/integraciones/itau.svg';
+import bbvaLogo from '../assets/logos/integraciones/bbva.svg';
+import mercadoPagoLogo from '../assets/logos/integraciones/mercadopago.svg';
+import global66Logo from '../assets/logos/integraciones/global66.svg';
+import bukLogo from '../assets/logos/integraciones/buk.svg';
+import rindeGastosLogo from '../assets/logos/integraciones/rindegastos.svg';
+import hubspotLogo from '../assets/logos/integraciones/hubspot.svg';
+import stripeLogo from '../assets/logos/integraciones/stripe.svg';
+import salesforceLogo from '../assets/logos/integraciones/salesforce.svg';
+import EscenaFacturar from './landing/escenas/EscenaFacturar';
+import EscenaPrincipal from './landing/escenas/EscenaPrincipal';
+import HeroAnimado from './landing/escenas/HeroAnimado';
+import { ModosAnimados, RegistroEnVivo } from './landing/escenas/EscenasChicas';
+import { AgentesAnimados, DoloresAnimados } from './landing/escenas/EscenasAgentes';
 import './LandingPage.css';
-import './LandingPageThemes.css';
+
+/*
+ * La landing, rehecha el 14-10-2026 con el enfoque nuevo: Afable gestiona la empresa
+ * desde un chat, con dos módulos (Ventas y Contabilidad) y sus automatizaciones.
+ *
+ * La estructura sigue a sintropix.com (titular de entrega diaria → el producto
+ * trabajando → con qué se conecta → el problema → tres columnas → registro en vivo →
+ * pasos verificables → bloque oscuro del agente → cierre). El menú y los botones
+ * siguen a askbond.ai. Detalle en la memoria `afable-diseno-referencias`.
+ *
+ * Todas las cifras de los visuales son de una empresa de ejemplo y lo dicen.
+ */
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001/api/v1';
 
-// Vitrina de la comunidad si el backend no responde (landing nunca queda vacío)
-const FALLBACK_TEMPLATES = [
-  { id: 'f1', name: '@contratos — responde citando la cláusula', category: 'Legal', icon: '📑', accent: '#586AD0',
-    description: 'Lee los contratos de tu Fuente legal y responde cualquier duda citando el párrafo exacto del documento.',
-    author_name: 'Equipo Afable', uses_count: 587,
-    flow: [{ app: 'Drive', icon: '📁', color: '#1A73E8' }, { app: 'Afable', icon: '✦', color: '#586AD0' }, { app: 'Slack', icon: '#️⃣', color: '#611f69' }] },
-  { id: 'f2', name: '@stock — avisa antes del quiebre', category: 'Inventario', icon: '📦', accent: '#34D399',
-    description: 'Vigila el stock donde lo llevas y le avisa al equipo antes de que un producto se agote.',
-    author_name: 'Tienda Norte', uses_count: 412,
-    flow: [{ app: 'Odoo', icon: '🟣', color: '#714B67' }, { app: 'Afable', icon: '✦', color: '#586AD0' }, { app: 'WhatsApp', icon: '💬', color: '#25D366' }] },
-  { id: 'f3', name: '@ventas — publica el resumen del día', category: 'Ventas', icon: '📈', accent: '#586AD0',
-    description: 'Cada mañana arma el resumen del día anterior y lo publica en la Sesion del equipo comercial.',
-    author_name: 'Comercial Andes', uses_count: 318,
-    flow: [{ app: 'Odoo', icon: '🟣', color: '#714B67' }, { app: 'Afable', icon: '✦', color: '#586AD0' }, { app: 'Sesion', icon: '🗂️', color: '#586AD0' }] },
+const SUGERENCIAS = [
+  '¿Qué hace Afable?',
+  '¿Puede emitir mis facturas?',
+  '¿Me ayuda con el F29?',
+  'Quiero una demostración',
 ];
 
-/* ─── Visuales de las narrativas (estilo tarjeta de producto flotante) ─── */
-
-function SystemsVisual() {
-  const pills = ['Notion', 'Slack', 'GitHub', 'PostgreSQL', 'HubSpot', 'Excel', 'MSSQL'];
-  return (
-    <div className="lp-n-card">
-      <div className="lp-n-card-head">Conexiones</div>
-      <div className="lp-sys-partners">
-        <span className="lp-sys-partner"><img src={odooLogo} alt="Odoo" /></span>
-        <span className="lp-sys-partner"><img src={sapLogo} alt="SAP Business One" /><b>B1</b></span>
-        <span className="lp-sys-partner lp-sys-partner--icono"><img src={driveLogo} alt="Google Drive" /></span>
-      </div>
-      <div className="lp-sys-pills">
-        {pills.map(p => <span key={p}>{p}</span>)}
-      </div>
-      <div className="lp-n-card-foot">+142 conectores más</div>
-    </div>
-  );
+// El modelo a veces marca negritas con **…**: se muestran como negrita y no como asteriscos.
+function ConNegritas({ texto }) {
+  return texto.split('**').map((parte, i) => (i % 2 ? <b key={i}>{parte}</b> : parte));
 }
 
-function AgentsVisual() {
-  const agents = [
-    { icon: '🧠', name: '@afable', meta: 'todo lo que la empresa comparte' },
-    { icon: '📑', name: '@contratos', meta: 'Fuente Legal · restringida' },
-    { icon: '📈', name: '@ventas', meta: 'Odoo + CRM · equipo comercial' },
-    { icon: '🎧', name: '@soporte', meta: 'tickets · en construcción' },
-  ];
-  return (
-    <div className="lp-n-card">
-      <div className="lp-n-card-head">Agentes de la empresa</div>
-      <div className="lp-file-rows">
-        {agents.map(a => (
-          <div key={a.name} className="lp-file-row">
-            <span className="lp-file-icon">{a.icon}</span>
-            <span className="lp-file-name">{a.name}</span>
-            <span className="lp-file-meta">{a.meta}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function TeamVisual() {
-  const members = [
-    { initials: 'CM', name: 'Carla', area: 'Editor', sees: 'Finanzas + Ventas' },
-    { initials: 'JR', name: 'Jorge', area: 'Miembro', sees: 'Ventas' },
-    { initials: 'PA', name: 'Paula', area: 'Admin', sees: 'Todos los Workspaces' },
-    { initials: 'DL', name: 'Diego', area: 'Miembro', sees: 'Inventario' },
-  ];
-  return (
-    <div className="lp-n-card">
-      <div className="lp-n-card-head">Personas y accesos</div>
-      <div className="lp-team-rows">
-        {members.map(m => (
-          <div key={m.name} className="lp-team-row">
-            <span className="lp-team-avatar">{m.initials}</span>
-            <span className="lp-team-name">{m.name} <em>· {m.area}</em></span>
-            <span className="lp-team-sees">{m.sees}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function TriggersVisual() {
-  const routines = [
-    { icon: '🗓️', name: 'Resumen de ventas', meta: 'programado · 08:00', state: '✓ en la Sesion' },
-    { icon: '🔔', name: 'Quiebre de stock', meta: 'evento · inventario', state: 'vigilando' },
-    { icon: '🪝', name: 'Ticket nuevo', meta: 'webhook · soporte', state: '12 hoy' },
-    { icon: '✋', name: 'Acción que escribe', meta: 'pide aprobación', state: '1 pendiente' },
-  ];
-  return (
-    <div className="lp-n-card">
-      <div className="lp-n-card-head">Disparadores activos</div>
-      <div className="lp-file-rows">
-        {routines.map(r => (
-          <div key={r.name} className="lp-file-row">
-            <span className="lp-file-icon">{r.icon}</span>
-            <span className="lp-file-name">{r.name}<em className="lp-routine-meta"> · {r.meta}</em></span>
-            <span className="lp-file-meta">{r.state}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export default function LandingPage() {
-  const navigate = useNavigate();
-
-  const [darkMode, setDarkMode] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const closeMenu = () => setMenuOpen(false);
-
-  // href real (se puede abrir en pestaña nueva) + navegación SPA en el clic normal
-  const goTo = (path) => (e) => {
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
-    e.preventDefault();
-    navigate(path);
-  };
-
-  const [formData, setFormData] = useState({ name: '', email: '', company: '', message: '' });
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [formError, setFormError] = useState(false);
-  const [openFaq, setOpenFaq] = useState(null);
-  const [templates, setTemplates] = useState(FALLBACK_TEMPLATES);
+/*
+ * El chat del hero, como el de askbond: una caja grande con el botón redondo de enviar.
+ * Es el mismo asistente de la landing anterior (`LandingLeadChat`, endpoint
+ * `/leads/chat/`): responde de verdad, sin login, y si el visitante quiere que lo
+ * contacten deja su correo como Lead.
+ */
+function ChatHero() {
+  const [mensajes, setMensajes] = useState([]);
+  const [texto, setTexto] = useState('');
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState(false);
+  const [segmento, setSegmento] = useState(null);
+  const [capturado, setCapturado] = useState(false);
+  const cuerpo = useRef(null);
 
   useEffect(() => {
-    fetch(`${API_URL}/agents/templates/?featured=1`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => { if (Array.isArray(data) && data.length) setTemplates(data.slice(0, 3)); })
-      .catch(() => {});
-  }, []);
+    if (cuerpo.current) cuerpo.current.scrollTop = cuerpo.current.scrollHeight;
+  }, [mensajes, cargando]);
 
-  const handleChange = (e) => setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setFormError(false);
+  const enviar = async (propio) => {
+    const contenido = (propio ?? texto).trim();
+    if (!contenido || cargando) return;
+    const siguientes = [...mensajes, { role: 'user', content: contenido }];
+    setMensajes(siguientes);
+    setTexto('');
+    setError(false);
+    setCargando(true);
     try {
-      const formId = import.meta.env.VITE_FORMSPREE_ID;
-      const res = await fetch(`https://formspree.io/f/${formId}`, {
+      const res = await fetch(`${API_URL}/leads/chat/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(formData),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: siguientes }),
       });
-      if (res.ok) {
-        setSubmitted(true);
-        setFormData({ name: '', email: '', company: '', message: '' });
-      } else {
-        setFormError(true);
-      }
+      if (!res.ok) throw new Error('estado');
+      const data = await res.json();
+      setMensajes((prev) => [...prev, { role: 'assistant', content: data.reply }]);
+      if (data.segment) setSegmento(data.segment);
+      if (data.lead_captured) setCapturado(true);
     } catch {
-      setFormError(true);
+      setError(true);
     } finally {
-      setSubmitting(false);
+      setCargando(false);
     }
   };
 
-  const faqs = [
-    {
-      q: '¿Qué es exactamente un agente?',
-      a: 'Un asistente de IA que tú configuras: le escribes sus instrucciones en español, eliges a qué datos de la empresa puede acceder, qué herramientas puede usar y con qué modelo piensa. Se llama con @su-nombre en cualquier conversación y responde con la información real de tu empresa, citando de dónde la sacó.',
-    },
-    {
-      q: '¿Esto reemplaza a mi equipo?',
-      a: 'No. Reemplazamos al que venía a implementar y se iba. El agente se hace cargo de buscar, cruzar y repetir; tu equipo se queda con el criterio y la decisión. Nadie deja de trabajar: cada persona trabaja con más alcance del que tenía sola.',
-    },
-    {
-      q: '¿Necesito saber programar?',
-      a: 'No. Los agentes se arman en pantalla, escribiendo en lenguaje natural lo que quieres que hagan. Si tu caso necesita una automatización más profunda entre sistemas, eso lo montamos nosotros con Workflow.',
-    },
-    {
-      q: '¿Qué puedo conectar?',
-      a: 'El sistema donde facturas o llevas el stock (Odoo, SAP), tus bases de datos, planillas y tu Google Drive. También puedes subir archivos directamente y organizarlos en carpetas. Si usas algo que no está en la lista, escríbenos y lo conectamos.',
-    },
-    {
-      q: '¿Cómo controlo quién ve qué?',
-      a: 'Son dos preguntas y se responden por separado. Qué PUEDE HACER cada persona lo dice su rol en la empresa: Miembro usa, Editor carga y conecta, Administrador manda. SOBRE QUÉ lo dice el Workspace: los abiertos los ve toda la empresa y a los restringidos entra solo quien agregues. Los agentes heredan lo mismo, así que nadie puede usar un agente para leer lo que él no puede leer.',
-    },
-    {
-      q: '¿No me sirve compartir la cuenta de IA que ya pago?',
-      a: 'Compartir una cuenta es entregar el historial completo. La otra persona ve todo lo que preguntaste antes, del trabajo y de lo tuyo, y queda usando la IA con tu nombre. En Afable cada uno entra con su propia cuenta y con el rol que le diste: el que llega tiene el contexto de la empresa desde el primer día sin ver tus conversaciones, y al que se va lo quitas y pierde el acceso en ese momento. Lo que la empresa sabe está cargado en Afable, no en la cuenta de una persona.',
-    },
-    {
-      q: '¿Dónde queda el trabajo del equipo?',
-      a: 'En Sesiones. Una Sesion es el trabajo en curso —un cliente, un cierre de mes, una busqueda— con sus conversaciones, sus tareas y sus archivos en el mismo lugar. Lo que uno pregunta ahí lo ve el resto, y una tarea puede quedar asignada a una persona o a un agente, que la ejecuta y deja el resultado a la vista.',
-    },
-    {
-      q: '¿Un agente puede ejecutar acciones, o solo responder?',
-      a: 'Puede ejecutar. Con sus herramientas conectadas escribe en tus sistemas, envía correos y dispara procesos. Y hay una regla que no se puede saltar: antes de cualquier acción que escriba, el agente te muestra qué va a hacer y espera tu aprobación.',
-    },
-    {
-      q: '¿Mis datos están seguros?',
-      a: 'Sí. Las credenciales se guardan cifradas, los datos de tus sistemas se consultan en vivo en el momento de cada pregunta, y tu información no se usa para entrenar modelos. Tu información sigue siendo tuya.',
-    },
-  ];
+  const alTeclear = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      enviar();
+    }
+  };
 
-  const narratives = [
-    {
-      key: 'conexiones',
-      title: <>Conecta tus<br />datos.</>,
-      text: 'Donde facturas, donde llevas el stock, tus bases de datos, tu Drive y los archivos que hoy viven sueltos en carpetas. Se conectan en minutos y se mantienen al día. No cambias nada de lo que ya usas: Afable trabaja encima.',
-      visual: <SystemsVisual />,
-    },
-    {
-      key: 'fuentes',
-      title: <>Cada area<br />ve lo suyo.</>,
-      text: 'Lo que la empresa sabe se carga una vez, y cada Workspace —Ventas, Finanzas, un cliente— decide qué parte alcanza y quién entra. Ventas no ve los contratos de personas, y sus agentes tampoco: cuando alguien no tiene acceso, el dato simplemente no llega a la respuesta.',
-      visual: <TeamVisual />,
-    },
-    {
-      key: 'agentes',
-      title: <>Crea tus<br />agentes.</>,
-      text: 'Sin escribir código: le dictas las instrucciones en español, eliges qué puede consultar, qué herramientas puede usar y con qué modelo piensa. Lo publicas para ti, para tu area o para toda la empresa, y desde ahí cualquiera lo llama con @su-nombre.',
-      visual: <AgentsVisual />,
-    },
-    {
-      key: 'disparadores',
-      title: <>Que trabajen<br />solos.</>,
-      text: 'Un horario, un aviso de otro sistema o algo que pasa en tus datos ponen al agente a trabajar sin que nadie abra la app: publica el resultado en la Sesion donde trabaja el equipo y deja anotado el pendiente. Y si la tarea escribe en un sistema, primero te muestra qué va a hacer y espera tu aprobación.',
-      visual: <TriggersVisual />,
-    },
-  ];
-
-  const memoryCards = [
-    { tag: '@ventas', line: 'Julio cerró en $412M · +12%', quote: '"¿Cómo venimos este mes?"' },
-    { tag: '@contratos', line: 'Cláusula 8.2 — confidencialidad', quote: '"¿Qué firmamos con este cliente?"' },
-    { tag: '@soporte', line: '14 tickets sin responder', quote: '"¿Qué quedó pendiente ayer?"' },
-    { tag: '@personas', line: 'Te quedan 12 días de vacaciones', quote: '"¿Cuántos días tengo disponibles?"' },
-  ];
+  const conversando = mensajes.length > 0;
 
   return (
-    <div className={`lp-page ${darkMode ? 'dark' : 'light'}`}>
-
-      {/* Nav */}
-      <nav className="lp-nav">
-        <div className="lp-logo"><Isotipo bgColor="#FFFFFF" /><span>Afable</span></div>
-
-        <div className="lp-nav-links">
-          <a href="#producto">Producto</a>
-          <span className="lp-nav-sep" />
-          <a href="#como-funciona">Cómo funciona</a>
-          <span className="lp-nav-sep" />
-          <a href="#precios">Precios</a>
-          <span className="lp-nav-sep" />
-          <a href="#workflow">Workflow</a>
-          <span className="lp-nav-sep" />
-          <a href="#faq">FAQ</a>
-        </div>
-
-        <div className="lp-nav-right">
-          <button
-            className="lp-theme-toggle"
-            onClick={() => setDarkMode(!darkMode)}
-            aria-label={darkMode ? 'Modo claro' : 'Modo oscuro'}
-          >
-            {darkMode ? (
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="4"/>
-                <line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/>
-                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-                <line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/>
-                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-              </svg>
+    <div className="lp-chat">
+      <div className={`lp-chat__caja${conversando ? ' is-conversando' : ''}`}>
+        {conversando && (
+          <div className="lp-chat__cuerpo" ref={cuerpo} aria-live="polite">
+            {mensajes.map((m, i) => (
+              <div key={i} className={`lp-msg${m.role === 'user' ? ' lp-msg--yo' : ' lp-msg--ia'}`}>
+                <ConNegritas texto={m.content} />
+              </div>
+            ))}
+            {cargando && <div className="lp-msg lp-msg--ia lp-chat__escribiendo"><span /><span /><span /></div>}
+            {segmento === 'saas' && !capturado && (
+              <div className="lp-chat__cta">
+                <Link to="/register" className="lp-btn lp-btn--principal">Crear cuenta</Link>
+              </div>
             )}
-          </button>
-          <button className="lp-btn-signin" onClick={() => navigate('/login')}>Iniciar sesión</button>
-          <button className="lp-btn-pill" onClick={() => navigate('/register')}>Comenzar gratis</button>
-        </div>
-
-        <button
-          className={`lp-hamburger${menuOpen ? ' open' : ''}`}
-          onClick={() => setMenuOpen((v) => !v)}
-          aria-label="Abrir menú"
-        >
-          <span /><span /><span />
-        </button>
-      </nav>
-
-      {menuOpen && (
-        <div className="lp-mobile-menu">
-          <a href="#producto" onClick={closeMenu}>Producto</a>
-          <a href="#como-funciona" onClick={closeMenu}>Cómo funciona</a>
-          <a href="#precios" onClick={closeMenu}>Precios</a>
-          <a href="#workflow" onClick={closeMenu}>Workflow</a>
-          <a href="#faq" onClick={closeMenu}>FAQ</a>
-          <button className="lp-btn-signin lp-btn-signin--mobile" onClick={() => { closeMenu(); navigate('/login'); }}>Iniciar sesión</button>
-          <button className="lp-btn-pill" onClick={() => { closeMenu(); navigate('/register'); }}>Comenzar gratis</button>
-        </div>
-      )}
-
-      {/* Hero: copy a la izquierda, escena a la derecha */}
-      <header className="lp-hero">
-        <div className="lp-hero-inner">
-          <div className="lp-hero-copy">
-            <h1>La IA de las empresas que <em>no tienen a nadie de tecnología.</em></h1>
-            <p className="lp-hero-sub">Suba sus documentos, conecte sus herramientas e invite a su equipo. Afable le arma los agentes que responden por usted: los contratos, las facturas, el informe del lunes.</p>
-            <div className="lp-hero-ctas">
-              <button className="lp-btn-pill lp-btn-pill--big" onClick={() => navigate('/register')}>Empezar gratis →</button>
-            </div>
-            <LandingLeadChat navigate={navigate} />
-            <div className="lp-hero-trust">Sin código · Sin consultor · Funciona con las herramientas que ya usa</div>
-          </div>
-          <div className="lp-hero-art">
-            <HeroScene />
-          </div>
-        </div>
-      </header>
-
-      {/* Demo del producto, protagonista bajo el hero — carrusel de 3 funciones */}
-      <section className="lp-stage" id="producto">
-        <HeroShowcase />
-      </section>
-
-      {/* Statement — el eslogan */}
-      <section className="lp-memory">
-        <h2 className="lp-display">No reemplazamos<br />al empleado.</h2>
-        <p className="lp-section-sub lp-center">Reemplazamos al que venía a implementar y se iba. Armar un repositorio ordenado y conectarle una IA no es difícil de ejecutar: es difícil saber qué separar, qué subir y qué conectar. Eso es lo que hace Afable, y es lo que hasta ahora había que contratar.</p>
-        <div className="lp-float-grid">
-          {memoryCards.map((c) => (
-            <div key={c.tag} className="lp-float-item">
-              <div className="lp-float-card">
-                <span className="lp-float-tag">{c.tag}</span>
-                <span className="lp-float-line">{c.line}</span>
+            {/* Quien pide una demostración puede agendarla él mismo, sin esperar el correo. */}
+            {segmento === 'workflow' && (
+              <div className="lp-chat__cta">
+                <a href="#agendar" className="lp-btn lp-btn--principal">Agendar una demostración</a>
               </div>
-              <div className="lp-float-quote">{c.quote}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Narrativas alternadas */}
-      <section className="lp-narratives" id="como-funciona">
-        {narratives.map((n, i) => (
-          <div key={n.key} className={`lp-narrative${i % 2 ? ' reverse' : ''}`}>
-            <div className="lp-n-visual">{n.visual}</div>
-            <div className="lp-n-copy">
-              <h2 className="lp-display">{n.title}</h2>
-              <p>{n.text}</p>
-              <button className="lp-btn-ghost" onClick={() => navigate('/register')}>Comenzar →</button>
-            </div>
+            )}
+            {capturado && <div className="lp-chat__aviso"><Check size={14} /> Listo, el equipo lo contactará por correo.</div>}
+            {error && <div className="lp-chat__aviso lp-chat__aviso--error">No pudimos responder ahora. Intente de nuevo.</div>}
           </div>
-        ))}
-      </section>
-
-      {/* Explorar — vitrina de la comunidad */}
-      <section className="lp-explore" id="explorar">
-        <h2 className="lp-display lp-center">Empieza con agentes<br />que ya funcionan.</h2>
-        <p className="lp-section-sub lp-center">Una comunidad que comparte sus agentes. Tómalos como punto de partida, apúntalos a tus propios datos y adáptalos a tu empresa — sin empezar de cero.</p>
-        <div className="lp-explore-grid">
-          {templates.map((tpl) => {
-            const accent = tpl.accent || '#586AD0';
-            return (
-              <div
-                key={tpl.id}
-                className="lp-explore-card"
-                onClick={() => navigate('/register')}
-                style={{ '--accent': accent }}
-              >
-                <div className="lp-explore-flow">
-                  <ProcessFlow flow={tpl.flow} accent={accent} dark={darkMode} />
-                </div>
-                <div className="lp-explore-body">
-                  <div className="lp-explore-head">
-                    <span className="lp-explore-icon">{tpl.icon}</span>
-                    <span className="lp-explore-name">{tpl.name}</span>
-                  </div>
-                  <p className="lp-explore-desc">{tpl.description}</p>
-                  <div className="lp-explore-foot">
-                    <span className="lp-explore-meta">{tpl.author_name} · {tpl.uses_count} usos</span>
-                    <span className="lp-explore-cta">Comencemos →</span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Seguridad — statement */}
-      <section className="lp-security">
-        <h2 className="lp-display">Tus datos siguen<br />siendo tuyos.</h2>
-        <p className="lp-section-sub lp-center">Cada persona entra solo a los Workspaces que le corresponden, y cada agente consulta solo lo que le asignaste. Las credenciales se guardan cifradas, los datos se leen en vivo en el momento de cada pregunta, y ninguna acción que escriba en tus sistemas se ejecuta sin tu aprobación.</p>
-        <div className="lp-security-chips">
-          <span>Credenciales cifradas</span>
-          <span>Datos consultados en vivo, no almacenados</span>
-          <span>Permisos por Fuente y por rol</span>
-          <span>Aprobación humana para escribir</span>
-        </div>
-      </section>
-
-      {/* Precios */}
-      <section className="lp-pricing" id="precios">
-        <h2 className="lp-display lp-center">Tu equipo con IA,<br />desde hoy.</h2>
-        <p className="lp-section-sub lp-center">Creas tu cuenta, conectas tus datos y armas tus agentes tú mismo. Todos los planes incluyen 14 días gratis y no piden tarjeta de crédito para empezar. En Chile pagas en pesos con tu tarjeta; desde afuera, en dólares con PayPal.</p>
-        <div className="lp-plans">
-          <div className="lp-plan">
-            <div className="lp-plan-name">Starter</div>
-            <div className="lp-plan-price">US$99 <span>/ mes</span></div>
-            <div className="lp-plan-clp">o $99.000 al mes en pesos</div>
-            <div className="lp-plan-desc">Para equipos que están creando sus primeros agentes.</div>
-            <ul className="lp-plan-feat">
-              <li>3 agentes activos</li>
-              <li>10 conexiones de datos</li>
-              <li>500 preguntas al mes</li>
-              <li>Workspaces abiertos y restringidos</li>
-              <li>Disparadores programados</li>
-              <li>Soporte por correo</li>
-            </ul>
-            <button className="lp-btn-ghost lp-btn-ghost--full" onClick={() => navigate('/register')}>Empezar gratis</button>
-          </div>
-          <div className="lp-plan featured">
-            <div className="lp-plan-badge">Más popular</div>
-            <div className="lp-plan-name">Growth</div>
-            <div className="lp-plan-price">US$299 <span>/ mes</span></div>
-            <div className="lp-plan-clp">o $299.000 al mes en pesos</div>
-            <div className="lp-plan-desc">Para equipos que ya trabajan con sus agentes todos los días.</div>
-            <ul className="lp-plan-feat">
-              <li>Todo en Starter</li>
-              <li>15 agentes activos</li>
-              <li>50 conexiones de datos</li>
-              <li>3.000 preguntas al mes</li>
-              <li>Sesiones de trabajo del equipo</li>
-              <li>Disparadores por webhook y evento</li>
-              <li>Roles y permisos por Workspace</li>
-              <li>Soporte prioritario</li>
-            </ul>
-            <button className="lp-btn-pill lp-btn-pill--full" onClick={() => navigate('/register')}>Empezar gratis</button>
-          </div>
-          <div className="lp-plan">
-            <div className="lp-plan-name">Enterprise</div>
-            <div className="lp-plan-price">A conversar</div>
-            <div className="lp-plan-desc">Para empresas con requerimientos específicos de escala o seguridad.</div>
-            <ul className="lp-plan-feat">
-              <li>Todo en Growth</li>
-              <li>Conectores a medida</li>
-              <li>Modelos y claves propias</li>
-              <li>SSO / SAML</li>
-              <li>SLA garantizado</li>
-              <li>Onboarding dedicado</li>
-            </ul>
-            <button className="lp-btn-ghost lp-btn-ghost--full" onClick={() => { document.getElementById('contacto').scrollIntoView({ behavior: 'smooth' }); }}>Hablar con ventas</button>
-          </div>
-        </div>
-      </section>
-
-      {/* Workflow — automatizaciones a medida */}
-      <section className="lp-workflow" id="workflow">
-        <div className="lp-offer-band">
-          <div className="lp-offer-card">
-            <span className="lp-offer-tag lp-offer-tag--wf">Workflow</span>
-            <h3>Conoce Workflow</h3>
-            <p className="lp-offer-lead">Automatizaciones a medida, potenciadas con nuestra IA.</p>
-            <p>Hay procesos que ninguna plataforma trae listos: los que cruzan tres sistemas, los que tienen las reglas de tu empresa metidas en el medio, los que hoy alguien hace a mano cada semana. Esos los diseñamos y los montamos nosotros — y quedan conectados a tus agentes, para que la parte que necesita criterio la resuelva la IA y el resto corra solo.</p>
-            <div className="lp-workflow-points">
-              <span>Lo diseña y lo monta nuestro equipo</span>
-              <span>Conectado a los agentes de tu empresa</span>
-              <span>Corriendo 24/7, sin que abras la app</span>
-            </div>
-            <button className="lp-btn-pill" onClick={() => { const el = document.getElementById('asistente'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }}>Cuéntanos tu proceso →</button>
-          </div>
-        </div>
-      </section>
-
-      {/* FAQ minimalista */}
-      <section className="lp-faq" id="faq">
-        <h2 className="lp-display lp-center">Preguntas frecuentes.</h2>
-        <div className="lp-faq-list">
-          {faqs.map((item, i) => (
-            <div key={i} className={`lp-faq-item${openFaq === i ? ' open' : ''}`}>
-              <button className="lp-faq-q" onClick={() => setOpenFaq(openFaq === i ? null : i)}>
-                <span>{item.q}</span>
-                <span className="lp-faq-plus" aria-hidden="true">{openFaq === i ? '−' : '+'}</span>
-              </button>
-              {openFaq === i && <div className="lp-faq-a">{item.a}</div>}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Contacto */}
-      <section className="lp-contact-section" id="contacto">
-        <div className="lp-contact-inner">
-          <div className="lp-contact-copy">
-            <h2 className="lp-display">Listo para darle IA<br />a tu equipo?</h2>
-            <p>Cuéntanos con qué datos trabaja tu equipo y qué tarea les come el día. Armamos contigo el primer agente — y el equipo lo empieza a usar ese mismo día.</p>
-            <div className="lp-contact-bullets">
-              <div className="lp-contact-bullet">✓ Armamos contigo tu primer agente</div>
-              <div className="lp-contact-bullet">✓ Tu equipo con acceso desde el primer día</div>
-              <div className="lp-contact-bullet">✓ Tus datos quedan bajo tu control</div>
-            </div>
-            <button className="lp-btn-pill lp-btn-pill--big" onClick={() => navigate('/register')} style={{ marginTop: 28 }}>
-              Empezar gratis →
-            </button>
-          </div>
-          <form className="lp-contact-form" onSubmit={handleSubmit}>
-            <input
-              type="text" name="name" placeholder="Tu nombre"
-              value={formData.name} onChange={handleChange} required
-            />
-            <input
-              type="email" name="email" placeholder="Tu email de trabajo"
-              value={formData.email} onChange={handleChange} required
-            />
-            <input
-              type="text" name="company" placeholder="Tu empresa (opcional)"
-              value={formData.company} onChange={handleChange}
-            />
+        )}
+        {!capturado && (
+          <div className="lp-chat__entrada">
             <textarea
-              name="message" placeholder="¿En qué podemos ayudarte?"
-              rows={4} value={formData.message} onChange={handleChange} required
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              onKeyDown={alTeclear}
+              placeholder={conversando ? 'Escriba su respuesta…' : 'Pregúntele a Afable lo que necesita su empresa…'}
+              rows={conversando ? 1 : 3}
+              disabled={cargando}
+              aria-label="Escríbale a Afable"
             />
             <button
-              type="submit" className="lp-btn-pill lp-btn-pill--full"
-              disabled={submitting}
+              type="button"
+              className="lp-chat__enviar"
+              onClick={() => enviar()}
+              disabled={cargando || !texto.trim()}
+              aria-label="Enviar"
             >
-              {submitting ? 'Enviando...' : 'Enviar mensaje'}
+              <ArrowUp size={16} />
             </button>
-            {submitted && <p className="lp-form-success">¡Mensaje enviado! Te contactaremos pronto.</p>}
-            {formError && <p className="lp-form-error">Hubo un error al enviar. Intenta de nuevo.</p>}
-          </form>
+          </div>
+        )}
+      </div>
+      {!conversando && (
+        <div className="lp-chat__sugerencias">
+          {SUGERENCIAS.map((q) => (
+            <button key={q} type="button" onClick={() => enviar(q)}>{q}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/*
+ * Agendar una reunión de 20 minutos con Alexis, con el embed en línea de Cal.com. Es el
+ * mismo código que entrega Cal ("inline embed"), pasado a React: el cargador se agrega una
+ * sola vez y el calendario se dibuja al montar la sección.
+ */
+const CAL_LINK = 'alexis-gonzalez-ymenrm/20min';
+const CAL_NS = '20min';
+
+function cargarCal() {
+  /* eslint-disable */
+  (function (C, A, L) { let p = function (a, ar) { a.q.push(ar); }; let d = C.document; C.Cal = C.Cal || function () { let cal = C.Cal; let ar = arguments; if (!cal.loaded) { cal.ns = {}; cal.q = cal.q || []; d.head.appendChild(d.createElement("script")).src = A; cal.loaded = true; } if (ar[0] === L) { const api = function () { p(api, arguments); }; const namespace = ar[1]; api.q = api.q || []; if (typeof namespace === "string") { cal.ns[namespace] = cal.ns[namespace] || api; p(cal.ns[namespace], ar); p(cal, ["initNamespace", namespace]); } else p(cal, ar); return; } p(cal, ar); }; })(window, "https://app.cal.com/embed/embed.js", "init");
+  /* eslint-enable */
+}
+
+function AgendarDemo() {
+  useEffect(() => {
+    cargarCal();
+    const { Cal } = window;
+    if (!Cal.ns?.[CAL_NS]) {
+      Cal('init', CAL_NS, { origin: 'https://app.cal.com' });
+      Cal.config = Cal.config || {};
+      Cal.config.forwardQueryParams = true;
+    }
+    Cal.ns[CAL_NS]('inline', {
+      elementOrSelector: '#lp-cal-20min',
+      config: { layout: 'month_view', useSlotsViewOnSmallScreen: 'true', theme: 'light' },
+      calLink: CAL_LINK,
+    });
+    Cal.ns[CAL_NS]('ui', { theme: 'light', hideEventTypeDetails: false, layout: 'month_view' });
+  }, []);
+
+  return <div id="lp-cal-20min" className="lp-cal" />;
+}
+
+// La cinta de integraciones, copiada de sintropix.com (sección `#integraciones`): los
+// mismos SVG de bancos y servicios (bajados de sintropix.com/logos el 15-10-2026, en
+// `assets/logos/integraciones/`) con las mismas alturas, más SAP, Odoo, Drive y Excel, que
+// ya estaban en el proyecto.
+const LOGOS = [
+  { src: sapLogo, alt: 'SAP Business One', h: 22 },
+  { src: odooLogo, alt: 'Odoo', h: 20 },
+  { src: santanderLogo, alt: 'Banco Santander', h: 21 },
+  { src: bancoChileLogo, alt: 'Banco de Chile', h: 17 },
+  { src: bciLogo, alt: 'BCI', h: 27 },
+  { src: biceLogo, alt: 'Banco BICE', h: 13 },
+  { src: itauLogo, alt: 'Itaú', h: 31 },
+  { src: bbvaLogo, alt: 'BBVA', h: 28 },
+  { src: mercadoPagoLogo, alt: 'Mercado Pago', h: 28 },
+  { src: global66Logo, alt: 'Global66', h: 19 },
+  { src: driveLogo, alt: 'Google Drive', h: 26 },
+  { src: excelLogo, alt: 'Excel', h: 26 },
+  { src: bukLogo, alt: 'Buk', h: 30 },
+  { src: rindeGastosLogo, alt: 'Rinde Gastos', h: 18 },
+  { src: hubspotLogo, alt: 'HubSpot', h: 22 },
+  { src: stripeLogo, alt: 'Stripe', h: 26 },
+  { src: salesforceLogo, alt: 'Salesforce', h: 24 },
+];
+
+const LINKS = [
+  { href: '#como-funciona', label: 'Cómo funciona' },
+  { href: '#agentes',       label: 'Agentes' },
+  { href: '#modulos',       label: 'Módulos' },
+  { href: '#preguntas',     label: 'Preguntas' },
+  { href: '#a-medida',      label: 'Proyectos' },
+  { href: '#agendar',       label: 'Agendar demo' },
+];
+
+function MenuPrincipal() {
+  const [conScroll, setConScroll] = useState(false);
+  const [abierto, setAbierto] = useState(false);
+
+  // La pastilla de fondo aparece recién al bajar: arriba el menú flota sobre el hero.
+  useEffect(() => {
+    const alMover = () => setConScroll(window.scrollY > 12);
+    alMover();
+    window.addEventListener('scroll', alMover, { passive: true });
+    return () => window.removeEventListener('scroll', alMover);
+  }, []);
+
+  return (
+    <header className={`lp-nav${conScroll ? ' lp-nav--scroll' : ''}`}>
+      <div className="lp-nav__inner">
+        <div className="lp-nav__bg" aria-hidden="true" />
+        <Link to="/" className="lp-nav__marca" aria-label="Afable, inicio"><Logo size={24} /></Link>
+        <nav className={`lp-nav__menu${abierto ? ' is-open' : ''}`}>
+          <div className="lp-nav__links">
+            {LINKS.map((l) => (
+              <a key={l.href} href={l.href} className="lp-nav__link" onClick={() => setAbierto(false)}>
+                {l.label}
+              </a>
+            ))}
+          </div>
+          <div className="lp-nav__botones">
+            <Link to="/login" className="lp-btn lp-btn--secundario">Ingresar</Link>
+            <Link to="/register" className="lp-btn lp-btn--principal">Crear cuenta</Link>
+          </div>
+        </nav>
+        <button
+          type="button"
+          className="lp-nav__burger"
+          aria-label={abierto ? 'Cerrar menú' : 'Abrir menú'}
+          aria-expanded={abierto}
+          onClick={() => setAbierto((v) => !v)}
+        >
+          {abierto ? <X size={20} /> : <Menu size={20} />}
+        </button>
+      </div>
+    </header>
+  );
+}
+
+const MOVIMIENTOS = [
+  { fecha: '14 oct', origen: 'Banco', detalle: 'Transferencia Comercial Andes', monto: '$148.750', estado: 'Conciliado' },
+  { fecha: '14 oct', origen: 'Venta', detalle: 'Factura N° 1043', monto: '$148.750', estado: 'Emitida' },
+  { fecha: '13 oct', origen: 'Compra', detalle: 'Factura proveedor N° 88213', monto: '$412.000', estado: 'Por confirmar' },
+  { fecha: '13 oct', origen: 'Banco', detalle: 'Pago arriendo oficina', monto: '$950.000', estado: 'Conciliado' },
+  { fecha: '12 oct', origen: 'Venta', detalle: 'Factura N° 1042', monto: '$63.070', estado: 'Emitida' },
+];
+
+// Un pastel por estado, como las etiquetas de Sintropix.
+const ESTADOS = { Conciliado: 'ok', Emitida: 'info', 'Por confirmar': 'pend' };
+
+const PASOS = [
+  { titulo: 'Llega la factura', texto: 'Adjunte el PDF o el XML en el chat.' },
+  { titulo: 'Afable la lee', texto: 'Proveedor, fecha, neto, IVA y total: cinco campos.' },
+  { titulo: 'La cruza con el banco', texto: 'Busca el pago y la marca como conciliada.' },
+  { titulo: 'Queda registrada', texto: 'Lista para el libro y para el F29, sin digitar.' },
+];
+
+const PREGUNTAS = [
+  {
+    p: '¿Tengo que dejar el sistema que uso hoy?',
+    r: 'No. Afable se conecta a donde hoy factura y lleva la contabilidad, y trabaja sobre eso.',
+  },
+  {
+    p: '¿Qué puedo pedirle en el chat?',
+    r: 'Todo lo del ERP: facturar, registrar compras, conciliar el banco, revisar ventas y preparar el F29. Lo que cambia algo le pide confirmación.',
+  },
+  {
+    p: '¿Cómo cargo mis datos del SII?',
+    r: 'Afable le muestra paso a paso cómo bajar el Registro de Compras y Ventas y las boletas de honorarios, y los carga ahí mismo.',
+  },
+  {
+    p: '¿Qué es un agente de Afable?',
+    r: 'Es la IA de cada módulo: conoce sus datos, hace el trabajo que le pida y le pide confirmación antes de cambiar algo.',
+  },
+  {
+    p: '¿Afable hace cosas sin que yo lo sepa?',
+    r: 'Solo lo que usted dejó activado como automatización. Cada una se ve, se pausa y se revisa en su módulo.',
+  },
+];
+
+export default function LandingPage() {
+  return (
+    <div className="lp">
+      <MenuPrincipal />
+
+      {/* 1 · Hero animado por scroll: el titular da paso al inicio de Afable armado
+          (mecánica del hero de sintropix.com; detalle en HeroAnimado.jsx). */}
+      <HeroAnimado>
+          <span className="lp-eyebrow"><Sparkles size={14} /> <span className="lp-eyebrow__texto">Pregúntele a Afable</span></span>
+          {/* "con IA." en su propia línea: el titular queda más angosto y no se monta sobre las
+              tarjetas que flotan a los lados en el hero animado. */}
+          <h1 className="lp-h1">Opere su empresa<br /><span className="lp-degradado">con IA.</span></h1>
+          <p className="lp-lead">El ERP que las personas quieren usar.</p>
+          <ChatHero />
+          <a href="#como-funciona" className="lp-btn lp-btn--texto lp-hero__mas">Ver cómo funciona <ArrowRight size={15} /></a>
+      </HeroAnimado>
+
+      {/* 3 · Con qué se integra (réplica de la franja de sintropix.com) */}
+      <section className="lp-logos" id="integraciones">
+        <div className="lp-wrap lp-logos__wrap">
+          <h2 className="lp-logos__titulo">Integrado a las herramientas que ya usa.</h2>
+          <div className="lp-logos__marco">
+            <div className="lp-logos__ventana">
+              {/* La lista va dos veces: la cinta se corre la mitad y vuelve a empezar sin salto. */}
+              <div className="lp-logos__cinta">
+                {[...LOGOS, ...LOGOS].map((l, i) => (
+                  <img key={i} src={l.src} alt={i < LOGOS.length ? l.alt : ''}
+                    aria-hidden={i >= LOGOS.length} style={{ height: l.h }} />
+                ))}
+              </div>
+            </div>
+            <div className="lp-logos__mas">
+              <a href="#agendar">Más integraciones <ArrowRight size={16} /></a>
+            </div>
+          </div>
+          <div className="lp-logos__mas-movil"><a href="#agendar">Más integraciones <ArrowRight size={16} /></a></div>
         </div>
       </section>
 
-      {/* Footer */}
+      {/* 4 · Un agente detrás de cada módulo (25-10-2026), justo bajo las integraciones desde el 27-10-2026. */}
+      <section className="lp-seccion lp-seccion--fog" id="agentes">
+        <div className="lp-wrap">
+          <h2 className="lp-h2">Un agente detrás de cada módulo.</h2>
+          <p className="lp-lead">
+            Usted dirige. Cada agente trabaja en su módulo, le muestra lo que hace y le pide confirmación antes
+            de cambiar algo.
+          </p>
+          <AgentesAnimados />
+        </div>
+      </section>
+
+      {/* 2 · Así trabaja: los cuatro capítulos en bucle */}
+      <section className="lp-seccion lp-seccion--escena" id="como-funciona">
+        <div className="lp-wrap lp-wrap--ancho">
+          <h2 className="lp-h2 lp-centro">Así trabaja Afable.</h2>
+          <EscenaPrincipal />
+        </div>
+      </section>
+
+      {/* 4 · El problema. En escritorio la frase ya aparece en el hero animado. */}
+      <section className="lp-seccion lp-solo-sin-hero-animado">
+        <div className="lp-wrap lp-centro">
+          <h2 className="lp-h2">Todo su ERP, desde un chat.</h2>
+          <p className="lp-lead lp-lead--centro">
+            Factura, concilia el banco, registra las compras y revisa sus números pidiéndolo en el
+            chat. Lo que cambia algo se confirma con un botón.
+          </p>
+        </div>
+      </section>
+
+      {/* 5 · Lo que hoy le quita el día, resuelto (25-10-2026). */}
+      <section className="lp-seccion">
+        <div className="lp-wrap">
+          <h2 className="lp-h2">Lo que hoy le quita el día, resuelto.</h2>
+          <DoloresAnimados />
+        </div>
+      </section>
+
+      {/* 6 · Vea cómo avanza su empresa: el registro en vivo */}
+      <section className="lp-seccion lp-seccion--fog">
+        <div className="lp-wrap">
+          <h2 className="lp-h2">Vea cómo avanza su empresa.</h2>
+          <p className="lp-lead">
+            Cada factura, pago y movimiento queda registrado al momento, y el panel le dice qué necesita su atención.
+          </p>
+          <RegistroEnVivo movimientos={MOVIMIENTOS} estados={ESTADOS} />
+          <p className="lp-nota">Movimientos de una empresa de ejemplo.</p>
+        </div>
+      </section>
+
+      {/* 7 · Módulo | Agente */}
+      <section className="lp-seccion" id="modulos">
+        <div className="lp-wrap lp-dos">
+          <div>
+            <h2 className="lp-h2">Cada módulo: el ERP y su agente.</h2>
+            <p className="lp-lead">
+              En <b>Módulo</b> trabaja como en cualquier ERP. En <b>Agente</b> conversa con el agente de ese
+              módulo y ve lo que hace solo.
+            </p>
+          </div>
+          <ModosAnimados />
+        </div>
+      </section>
+
+      {/* 5b · Escena animada: facturar desde el chat */}
+      <section className="lp-seccion" id="facturar">
+        <div className="lp-wrap lp-dos">
+          <div>
+            <h2 className="lp-h2">Facture desde el chat.</h2>
+            <p className="lp-lead">
+              Pídalo como se lo diría a alguien, o pida facturar un pedido de venta. Afable emite la
+              factura electrónica y la deja registrada en Ventas.
+            </p>
+            <p className="lp-nota">Empresa de ejemplo.</p>
+          </div>
+          <EscenaFacturar />
+        </div>
+      </section>
+
+      {/* 8 · Pasos verificables */}
+      <section className="lp-seccion">
+        <div className="lp-wrap">
+          <h2 className="lp-h2">De la factura al registro, paso a paso.</h2>
+          <ol className="lp-pasos">
+            {PASOS.map((p, i) => (
+              <li key={p.titulo} className="lp-paso">
+                <span className="lp-paso__n">{i === PASOS.length - 1 ? <Check size={14} /> : i + 1}</span>
+                <h3>{p.titulo}</h3>
+                <p>{p.texto}</p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* 9 · Bloque oscuro: el chat */}
+      <section className="lp-seccion lp-oscuro" id="chat">
+        <div className="lp-wrap lp-dos">
+          <div>
+            <h2 className="lp-h2">Pregúntele a <span className="lp-degradado">su empresa.</span></h2>
+            <p className="lp-lead">
+              Afable responde con los datos de su empresa, no con estimaciones. Y si le pide que
+              haga algo, lo hace.
+            </p>
+          </div>
+          <div className="lp-oscuro__chat">
+            <div className="lp-msg lp-msg--yo">¿Cuánto vendimos en septiembre?</div>
+            <div className="lp-msg lp-msg--ia">
+              $18.420.500 neto, un 6% más que agosto. Comercial Andes fue el cliente con más compras.
+            </div>
+            <div className="lp-oscuro__fuentes">Empresa de ejemplo · <FileText size={13} /> 214 facturas · <Receipt size={13} /> Libro de ventas · <Landmark size={13} /> Banco</div>
+          </div>
+        </div>
+      </section>
+
+      {/* Agendar: reunión de 20 minutos por Cal.com */}
+      <section className="lp-seccion" id="agendar">
+        <div className="lp-wrap">
+          <div className="lp-centro">
+            <h2 className="lp-h2">Agende una demostración.</h2>
+            <p className="lp-lead lp-lead--centro">
+              20 minutos para ver Afable con los datos de su empresa. Elija el día y la hora que
+              le acomoden.
+            </p>
+          </div>
+          <AgendarDemo />
+        </div>
+      </section>
+
+      {/* 10 · Preguntas */}
+      <section className="lp-seccion" id="preguntas">
+        <div className="lp-wrap lp-preguntas">
+          <h2 className="lp-h2">Preguntas antes de empezar.</h2>
+          {PREGUNTAS.map((q) => (
+            <details key={q.p} className="lp-pregunta">
+              <summary>{q.p}</summary>
+              <p>{q.r}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      {/* 11 · Cierre */}
+      <section className="lp-seccion lp-seccion--fog">
+        <div className="lp-wrap lp-centro">
+          <h2 className="lp-h2">Opere su empresa con IA.</h2>
+          <div className="lp-acciones lp-acciones--centro">
+            <Link to="/register" className="lp-btn lp-btn--grande lp-btn--principal">Crear cuenta</Link>
+            <Link to="/login" className="lp-btn lp-btn--grande lp-btn--secundario">Ingresar</Link>
+          </div>
+        </div>
+      </section>
+
+      {/* 14 · Afable Proyectos: la IA de Afable sobre los sistemas que la empresa ya tiene (SAP, Oracle,
+          Odoo), como proyecto a medida aparte de la suscripción. */}
+      <section className="lp-medida" id="a-medida">
+        <div className="lp-wrap">
+          <div className="lp-medida__tarjeta">
+            <div className="lp-medida__brillo" aria-hidden="true" />
+            <div className="lp-medida__texto">
+              <span className="lp-medida__etiqueta"><Sparkles size={13} /> Afable Proyectos</span>
+              <h2 className="lp-h2">¿Su empresa ya trabaja con SAP, Oracle u Odoo?</h2>
+              <p className="lp-lead">
+                Le damos a sus sistemas la IA de Afable: agentes, automatizaciones y chat sobre los procesos que ya
+                tiene. Es un proyecto a medida, aparte de la suscripción.
+              </p>
+            </div>
+            <a href="#agendar" className="lp-btn lp-btn--grande lp-medida__boton">
+              Agendar una reunión <ArrowRight size={16} />
+            </a>
+          </div>
+        </div>
+      </section>
+
       <footer className="lp-footer">
-        <div className="lp-footer-grid">
-
-          <div className="lp-footer-brand">
-            <div className="lp-footer-logo"><Isotipo size={18} bgColor="#FFFFFF" /><span>Afable</span></div>
-            <p className="lp-footer-tagline">La IA de su empresa.</p>
-            <ul className="lp-footer-contact">
-              <li><a href="mailto:hi@getafable.com">hi@getafable.com</a></li>
-              <li>
-                <a href="https://wa.me/56955181000" target="_blank" rel="noopener noreferrer">
-                  +569 5518 1000
-                </a>
-              </li>
-            </ul>
+        <div className="lp-wrap lp-footer__grid">
+          <div>
+            <Logo size={22} />
+            <p>El ERP que las personas quieren usar.</p>
           </div>
-
-          <div className="lp-footer-col">
+          <div>
             <h4>Producto</h4>
-            <ul>
-              <li><a href="#producto">Qué es Afable</a></li>
-              <li><a href="#como-funciona">Cómo funciona</a></li>
-              <li><a href="#explorar">Agentes</a></li>
-              <li><a href="#precios">Precios</a></li>
-              <li><a href="#workflow">Workflow</a></li>
-            </ul>
+            <a href="#modulos">Ventas</a>
+            <a href="#modulos">Compras</a>
+            <a href="#modulos">Contabilidad</a>
+            <a href="#modulos">Automatizaciones</a>
           </div>
-
-          <div className="lp-footer-col">
-            <h4>Conexiones</h4>
-            <ul>
-              <li><a href="#producto">Odoo</a></li>
-              <li><a href="#producto">SAP Business One</a></li>
-              <li><a href="#producto">SQL Server</a></li>
-              <li><a href="#producto">PostgreSQL</a></li>
-              <li><a href="#producto">Google Drive</a></li>
-              <li><a href="#producto">Excel y CSV</a></li>
-              <li><a className="lp-footer-more" href="#contacto">Pedir una conexión →</a></li>
-            </ul>
-          </div>
-
-          <div className="lp-footer-col">
-            <h4>Soporte</h4>
-            <ul>
-              <li><a href="#faq">Preguntas frecuentes</a></li>
-              <li><a href="#contacto">Contacto</a></li>
-              <li>
-                <a href="https://wa.me/56955181000" target="_blank" rel="noopener noreferrer">
-                  WhatsApp
-                </a>
-              </li>
-              <li><a href="/login" onClick={goTo('/login')}>Iniciar sesión</a></li>
-              <li><a href="/register" onClick={goTo('/register')}>Comenzar gratis</a></li>
-            </ul>
-          </div>
-
-        </div>
-
-        <div className="lp-footer-bottom">
-          <span className="lp-footer-copy">© 2026 Afable · Hecho en Chile</span>
-          <div className="lp-footer-legal">
-            <a href="/privacidad" onClick={goTo('/privacidad')}>Privacidad</a>
-            <a href="/terminos" onClick={goTo('/terminos')}>Términos</a>
-            <a href="/seguridad" onClick={goTo('/seguridad')}>Seguridad</a>
+          <div>
+            <h4>Empresa</h4>
+            <Link to="/seguridad">Seguridad</Link>
+            <Link to="/privacidad">Privacidad</Link>
+            <Link to="/terminos">Términos</Link>
           </div>
         </div>
+        <div className="lp-wrap lp-footer__base">© 2026 Afable</div>
       </footer>
-
-      {/* WhatsApp Floating Button */}
-      <a
-        href="https://wa.me/56955181000"
-        className="lp-wsp-float"
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="Contactar por WhatsApp"
-      >
-        <svg viewBox="0 0 24 24" fill="currentColor">
-          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-1.061-1.623-.075-.015-.458-.064-.73.05-.272.114-1.078.693-1.078 1.693s.73 1.97 1.156 2.503c.426.533 1.438 2.316 3.486 3.203.487.213.868.341 1.164.436.488.155.933.133 1.285.08.392-.058 1.207-.493 1.376-.967.17-.474.17-.88.12-.966-.05-.087-.184-.139-.481-.288zM12 0c-6.627 0-12 5.373-12 12 0 2.113.547 4.095 1.507 5.823l-1.507 5.488 5.617-1.474c1.674.887 3.58 1.391 5.601 1.391 6.627 0 12-5.373 12-12s-5.373-12-12-12zm.173 21.644c-1.901 0-3.69-.49-5.244-1.346l-.376-.206-3.292.863.878-3.197-.226-.361c-.933-1.488-1.427-3.213-1.427-5.018 0-5.18 4.214-9.394 9.394-9.394 5.18 0 9.394 4.214 9.394 9.394s-4.214 9.394-9.394 9.394z"/>
-        </svg>
-      </a>
-
     </div>
   );
 }

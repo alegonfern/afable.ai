@@ -1,0 +1,491 @@
+/*
+ * Escenas animadas de la landing (23-10-2026), al estilo de sintropix.com.
+ * Viven dentro de `.lp`, así que usan sus variables (--borde, --negro, --color, …).
+ */
+.esc {
+  display: flex; flex-direction: column; overflow: hidden;
+  border: 1px solid var(--borde); border-radius: 16px; background: #fff;
+  box-shadow: rgba(4, 23, 43, 0.05) 0 0 0 1px, rgba(0, 0, 0, 0.08) 0 24px 48px -12px;
+  font-size: 13px; letter-spacing: -0.01em;
+}
+.esc__barra {
+  display: flex; align-items: center; gap: 6px; padding: 10px 14px;
+  border-bottom: 1px solid var(--borde); background: var(--fog);
+}
+.esc__barra > span { width: 9px; height: 9px; border-radius: 50%; background: #d9dce5; }
+.esc__barra em { margin-left: 10px; font-style: normal; font-size: 12px; color: var(--texto-3); }
+.esc__vivo {
+  display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
+  font-style: normal; font-size: 12px; color: var(--ok);
+}
+.esc__vivo b {
+  width: 7px; height: 7px; border-radius: 50%; background: #12b76a;
+  box-shadow: 0 0 0 0 rgba(18, 183, 106, 0.5); animation: esc-pulso 1.8s ease-out infinite;
+}
+@keyframes esc-pulso { to { box-shadow: 0 0 0 6px rgba(18, 183, 106, 0); } }
+
+/* Alto fijo y anclado abajo: lo nuevo empuja hacia arriba, como en un chat, sin que
+   la página salte mientras corre la escena. */
+.esc__chat {
+  display: flex; flex-direction: column; justify-content: flex-end; gap: 10px;
+  height: 470px; padding: 20px; overflow: hidden;
+}
+.esc__chat .lp-msg { max-width: 92%; }
+.esc__escribiendo {
+  display: inline-flex; align-self: flex-start; align-items: center; gap: 4px; padding: 10px 14px;
+  border-radius: 14px 14px 14px 4px; background: var(--superficie-alt);
+}
+.esc__escribiendo > :first-child { margin-right: 6px; }
+.esc__escribiendo .esc__punto { width: 6px; height: 6px; border-radius: 50%; background: var(--color); }
+.esc__respuesta { display: flex; flex-direction: column; gap: 10px; }
+.esc__registro {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--texto-2);
+}
+.esc__registro svg { color: var(--color); }
+
+/* La factura dentro del chat. */
+.esc-fact {
+  width: 92%; border: 1px solid var(--borde); border-radius: 12px; background: #fff;
+  transition: box-shadow .5s ease-out, border-color .5s ease-out;
+}
+.esc-fact--emitida { border-color: #a6dcbf; box-shadow: 0 0 0 4px rgba(215, 237, 224, 0.7); }
+.esc-fact__cab {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 14px; border-bottom: 1px solid var(--borde);
+}
+.esc-fact__tipo { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: var(--texto); }
+.esc-fact__tipo svg { color: var(--color); }
+.esc-fact__estado { display: inline-flex; align-items: center; gap: 4px; }
+.esc-fact__estado--borrador { background: var(--superficie-alt); color: var(--texto-2); }
+.esc-fact__estado--enviando { background: #d3e3fc; color: #1f4fa3; }
+.esc-fact__estado--emitida { background: var(--ok-fondo); color: var(--ok); }
+.esc-gira { animation: esc-gira 0.9s linear infinite; }
+/* La tarjeta de pasos (como PasosDelChat en la app) y el signo girando junto a un estado. */
+.esc-pasos {
+  align-self: flex-start; display: flex; flex-direction: column; gap: 6px; min-width: 240px; padding: 10px 14px;
+  border: 1px solid var(--borde); border-radius: 12px; background: #fff; font-size: 12.5px; color: var(--texto-2);
+}
+.esc-pasos__cab { display: inline-flex; align-items: center; gap: 8px; color: var(--texto-2); }
+.esc-pasos__paso { display: flex; align-items: center; gap: 8px; }
+.esc-pasos__ok { color: var(--ok); }
+.lp-estado > span[aria-hidden="true"], .esp-auto__corriendo > span[aria-hidden="true"] { margin-right: 2px; }
+.esp-auto__corriendo { color: var(--color) !important; }
+@keyframes esc-gira { to { transform: rotate(360deg); } }
+.esc-fact__cliente { display: flex; flex-direction: column; padding: 10px 14px 4px; }
+.esc-fact__cliente b { font-weight: 600; color: var(--texto); }
+.esc-fact__cliente span { font-size: 12px; color: var(--texto-3); }
+.esc-fact__lineas { padding: 4px 14px; }
+.esc-fact__linea {
+  display: grid; grid-template-columns: 1fr auto 90px; gap: 10px; padding: 7px 0;
+  border-bottom: 1px dashed var(--borde); color: var(--texto);
+}
+.esc-fact__linea b { text-align: right; font-weight: 500; font-variant-numeric: tabular-nums; }
+.esc-fact__cant { color: var(--texto-3); font-variant-numeric: tabular-nums; }
+.esc-fact__totales { padding: 6px 14px 10px; }
+.esc-fact__totales div {
+  display: flex; justify-content: space-between; padding: 2px 0; color: var(--texto-2);
+  font-variant-numeric: tabular-nums;
+}
+.esc-fact__total { margin-top: 4px; padding-top: 6px !important; border-top: 1px solid var(--borde); color: var(--texto) !important; }
+.esc-fact__total b { font-size: 15px; font-weight: 600; }
+.esc-fact__sii { height: 3px; border-radius: 0 0 12px 12px; background: var(--superficie-alt); overflow: hidden; }
+.esc-fact__sii span { display: block; height: 100%; background: var(--degradado); }
+.esc-fact--emitida .esc-fact__sii span { background: #12b76a; }
+
+/* La caja de escribir, con el texto que se va tecleando. */
+.esc__entrada {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin: 0 20px 20px; padding: 10px 10px 10px 14px; border: 1px solid var(--borde); border-radius: 12px;
+}
+.esc__texto { min-height: 20px; color: var(--texto); }
+.esc__texto.is-vacio { color: var(--texto-3); }
+.esc__cursor {
+  display: inline-block; width: 1.5px; height: 14px; margin-left: 1px; vertical-align: -2px;
+  background: var(--texto); animation: esc-cursor 1s steps(1) infinite;
+}
+@keyframes esc-cursor { 50% { opacity: 0; } }
+.esc__enviar {
+  display: inline-flex; flex-shrink: 0; padding: 6px; border-radius: 8px;
+  background: var(--negro); color: #fff; opacity: .35; transition: opacity .2s;
+}
+.esc__enviar.is-listo { opacity: 1; }
+
+@media (max-width: 767px) {
+  .esc__chat { height: 500px; padding: 14px; }
+  .esc__entrada { margin: 0 14px 14px; }
+  .esc-fact, .esc__chat .lp-msg { width: 100%; max-width: 100%; }
+  .esc-fact__linea { grid-template-columns: 1fr 80px; }
+  .esc-fact__cant { display: none; }
+}
+
+/* ── El hero animado por scroll (HeroAnimado) ─────────────────────────────────
+   2,4 pantallas de alto con la vista fija. Las piezas copian las medidas de la app:
+   Contabilidad › Resumen (Numeros.jsx), la barra lateral y el chat lateral. */
+.hx { position: relative; height: 240vh; margin-top: -76px; }
+.hx__fijo {
+  position: sticky; top: 0; height: 100vh; overflow: hidden; isolation: isolate;
+  display: flex; align-items: center; justify-content: center; padding-top: 230px; padding-bottom: 10px;
+}
+.hx__escena { position: relative; }
+.hx__texto, .hx__frase {
+  position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; text-align: center; padding: 0 24px;
+}
+.hx__texto .lp-lead { margin-left: auto; margin-right: auto; }
+.hx__texto .lp-chat__cuerpo { max-height: 200px; }
+.hx__frase { pointer-events: none; }
+.hx__frase .lp-h2 { max-width: 760px; }
+
+.hx-lienzo { position: relative; font-size: 13px; }
+.hx-pieza { position: absolute; }
+.hx-pieza__contenido { position: relative; height: 100%; }
+/* El marco de la pieza suelta: se apaga al llegar a su lugar. */
+.hx-marco {
+  position: absolute; inset: 0; border: 1px solid var(--borde); border-radius: 14px; background: #fff;
+  box-shadow: rgba(4, 23, 43, 0.05) 0 0 0 1px, rgba(0, 0, 0, 0.1) 0 18px 30px -12px;
+}
+.hx-derecha { display: flex; justify-content: flex-end; }
+
+/* La ventana de la app. */
+.hx-ventana {
+  position: absolute; inset: 0; border: 1px solid var(--borde); border-radius: 16px; background: #fafafa; overflow: hidden;
+  box-shadow: rgba(4, 23, 43, 0.05) 0 0 0 1px, rgba(0, 0, 0, 0.1) 0 20px 25px -5px;
+}
+.hx-ventana__lado { position: absolute; top: 0; bottom: 0; left: 0; border-right: 1px solid var(--borde); background: #fbfbfa; }
+.hx-ventana__cab { position: absolute; top: 0; right: 0; border-bottom: 1px solid var(--borde); background: #fff; }
+.hx-ventana__pag { position: absolute; border-bottom: 1px solid var(--borde); }
+.hx-ventana__lat { position: absolute; right: 0; bottom: 0; border-left: 1px solid var(--borde); background: #fff; }
+
+/* Barra lateral (Drawer). */
+.hx-lado { display: flex; flex-direction: column; height: 100%; padding: 12px 8px; }
+.hx-lado__logo {
+  display: flex; align-items: center; justify-content: space-between; padding: 2px 6px 12px;
+  margin-bottom: 8px; border-bottom: 1px solid var(--borde); color: var(--texto-3);
+}
+.hx-lado__titulo {
+  padding: 6px 8px 6px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--texto-2);
+}
+.hx-lado__item { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 6px; color: var(--texto-2); font-size: 13.5px; }
+.hx-lado__item span { flex: 1; }
+.hx-lado__item > svg:last-child { color: var(--texto-3); }
+.hx-lado__item.is-activo { background: rgba(11, 11, 15, 0.07); color: var(--texto); font-weight: 500; box-shadow: inset 2px 0 0 var(--color); }
+.hx-lado__sub { display: flex; flex-direction: column; margin: 3px 0 3px 18px; }
+.hx-lado__sub span { padding: 4px 8px; border-left: 1px solid var(--borde); font-size: 12.5px; color: var(--texto-3); }
+.hx-lado__sub span.is-activo { border-left: 2px solid var(--color); color: var(--texto); font-weight: 500; }
+.hx-lado__cuenta {
+  display: flex; align-items: center; gap: 8px; margin-top: auto; padding: 10px 6px 0;
+  border-top: 1px solid var(--borde); font-size: 12px; color: var(--texto-2);
+}
+.hx-lado__cuenta i {
+  display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
+  border-radius: 50%; background: var(--negro); color: #fff; font-style: normal; font-size: 10px;
+}
+
+/* Barra de arriba: íconos, el selector al centro (estilo Kapso) y el chat a la derecha. */
+.hx-cab { position: relative; display: flex; align-items: center; height: 100%; padding: 0 16px; }
+.hx-cab__iconos { display: flex; align-items: center; gap: 14px; color: var(--texto-2); }
+.hx-cab__iconos--der { margin-left: auto; }
+.hx-cab__iconos i { display: inline-flex; padding: 4px; border-radius: 6px; background: rgba(11, 11, 15, 0.07); color: var(--texto); }
+.hx-cab__selector {
+  position: absolute; left: 50%; transform: translateX(-50%); display: flex; gap: 2px; padding: 3px;
+  border-radius: 9px; background: rgba(11, 11, 15, 0.06); font-size: 12.5px; color: var(--texto-2);
+}
+.hx-cab__selector b, .hx-cab__selector span { padding: 4px 12px; border-radius: 7px; font-weight: 500; }
+.hx-cab__selector b { background: #fff; color: var(--texto); box-shadow: 0 1px 2px rgba(11, 11, 15, 0.1); }
+.hx-pag { display: flex; align-items: center; gap: 10px; height: 100%; padding: 0 20px; }
+.hx-pag__volver {
+  display: inline-flex; padding: 4px; border: 1px solid var(--borde); border-radius: 6px; background: #fff; color: var(--texto-2);
+}
+.hx-pag__migas { color: var(--texto-3); }
+.hx-pag__migas i { margin: 0 5px; font-style: normal; }
+.hx-pag__migas b { font-size: 15px; font-weight: 600; color: var(--texto); }
+
+/* Resumen de Contabilidad. */
+.hx-meses { display: flex; gap: 8px; height: 100%; align-items: center; padding: 0 2px; }
+.hx-meses span { padding: 4px 12px; border: 1px solid var(--borde); border-radius: 999px; background: #fff; color: var(--texto-2); font-size: 12.5px; }
+.hx-meses span.is-activo { border-color: transparent; background: rgba(11, 11, 15, 0.08); color: var(--texto); font-weight: 500; }
+.hx-tarjeta { position: absolute; border: 1px solid var(--borde); border-radius: 14px; background: #fff; }
+.hx-tarjeta__cab {
+  display: flex; align-items: baseline; justify-content: space-between; height: 46px; padding: 14px 20px 0;
+  border-bottom: 1px solid var(--borde);
+}
+.hx-tarjeta__cab b { font-family: var(--font-display); font-size: 18px; font-weight: 600; }
+.hx-tarjeta__cab span { font-size: 12px; color: var(--texto-2); }
+.hx-divisor { position: absolute; width: 1px; background: var(--borde); }
+.hx-divisor--h { height: 1px; }
+.hx-etiqueta { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--texto-2); }
+.hx-cifra { display: flex; flex-direction: column; height: 100%; padding: 18px 20px; }
+.hx-cifra__valor {
+  margin-top: 6px; font-family: var(--font-display); font-size: 21px; font-weight: 600;
+  letter-spacing: -0.02em; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--texto);
+}
+.hx-cifra--grande .hx-cifra__valor { font-size: 30px; color: var(--color); }
+.hx-chip {
+  align-self: flex-start; margin-top: 4px; padding: 1px 8px; border-radius: 999px;
+  background: rgba(11, 11, 15, 0.05); font-size: 11px; color: var(--texto);
+}
+.hx-barras { margin-top: auto; }
+.hx-barras__fila { display: flex; align-items: flex-end; gap: 3px; height: 50px; }
+.hx-barras__fila span { flex: 1; border-radius: 3px 3px 0 0; background: rgba(11, 11, 15, 0.16); }
+.hx-barras__fila span.is-elegido { background: var(--color); }
+.hx-barras__fila span.is-vacio { background: rgba(11, 11, 15, 0.05); }
+.hx-barras__eje { display: flex; justify-content: space-between; margin-top: 4px; font-size: 10.5px; color: var(--texto-3); }
+.hx-fila {
+  display: grid; grid-template-columns: 170px 130px 1fr; gap: 8px; align-items: center;
+  height: 100%; padding: 0 20px; line-height: 1.4;
+}
+.hx-fila b { font-family: var(--font-display); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.hx-fila > span:last-child { font-size: 12px; color: var(--texto-2); }
+.hx-fila em { font-style: normal; font-weight: 500; color: var(--color); white-space: nowrap; }
+.hx-fila em svg { vertical-align: -2px; }
+
+/* Chat lateral (ChatLateral). */
+.hx-ventana__lat { display: flex; flex-direction: column; justify-content: space-between; padding: 12px 16px 16px; }
+.hx-lat__nueva { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; color: var(--texto-2); }
+.hx-lat__yo {
+  max-width: 85%; padding: 8px 12px; border-radius: 12px; background: rgba(11, 11, 15, 0.05);
+  font-size: 13px; color: var(--texto);
+}
+.hx-lat__ia { padding: 10px 2px; font-size: 13px; line-height: 1.6; color: var(--texto); }
+.hx-lat__ia b { font-weight: 600; }
+.hx-pieza .hx-lat__ia { padding: 14px 14px; }
+.hx-lat__entrada {
+  display: flex; align-items: center; justify-content: space-between; padding: 9px 9px 9px 12px;
+  border: 1px solid var(--borde); border-radius: 12px; color: var(--texto-3);
+}
+.hx-lat__entrada i { display: inline-flex; padding: 6px; border-radius: 8px; background: var(--negro); color: #fff; }
+
+/* La pantalla ya armada (celular y "reducir movimiento"). */
+.hx-fijo {
+  margin: 48px 0 72px; border: 1px solid var(--borde); border-radius: 16px; background: #fff; overflow: hidden;
+  box-shadow: rgba(4, 23, 43, 0.05) 0 0 0 1px, rgba(0, 0, 0, 0.08) 0 24px 48px -12px; font-size: 13px;
+}
+.hx-fijo > .hx-cab { height: 48px; border-bottom: 1px solid var(--borde); }
+.hx-fijo > .hx-pag { height: 50px; border-bottom: 1px solid var(--borde); }
+.hx-fijo { background: #fafafa; }
+.hx-fijo__cuerpo { display: grid; grid-template-columns: 1fr 280px; gap: 16px 20px; padding: 18px 20px; }
+.hx-fijo__cuerpo > .hx-meses, .hx-fijo__cuerpo > .hx-fijo__meses { grid-column: 1 / -1; }
+/* Celular: las barras de cada cifra crecen cuando la cifra entra (ver PantallaFija). */
+.hx-fijo--animada .hx-barras__fila span { transform: scaleY(0); transform-origin: bottom; transition: transform 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
+.hx-fijo--animada .is-dentro .hx-barras__fila span { transform: scaleY(1); }
+.hx-fijo--animada .is-dentro .hx-barras__fila span:nth-child(n+4) { transition-delay: 0.05s; }
+.hx-fijo--animada .is-dentro .hx-barras__fila span:nth-child(n+8) { transition-delay: 0.1s; }
+.hx-fijo__lat .esc__escribiendo { align-self: flex-start; }
+.hx-tarjeta--fija { position: static; }
+.hx-fijo__cifras { display: grid; grid-template-columns: 1.4fr 1fr 1fr; }
+.hx-fijo__cifras > div + div { border-left: 1px solid var(--borde); }
+.hx-fijo__cifras .hx-cifra { height: 196px; }
+.hx-fijo__filas { border-top: 1px solid var(--borde); }
+.hx-fijo__filas .hx-fila { height: auto; padding: 12px 20px; }
+.hx-fijo__lat { display: flex; flex-direction: column; gap: 10px; }
+@media (max-width: 991px) {
+  .hx-fijo__cuerpo { grid-template-columns: 1fr; }
+  .hx-cab__selector { position: static; transform: none; margin: 0 auto; }
+}
+@media (max-width: 767px) {
+  .hx-fijo__cuerpo { padding: 14px; }
+  .hx-cab__iconos { display: none; }
+  .hx-fijo__cifras { grid-template-columns: 1fr; }
+  .hx-fijo__cifras > div + div { border-left: 0; border-top: 1px solid var(--borde); }
+  .hx-fijo__cifras .hx-cifra { height: 170px; }
+  .hx-fijo__cifras .hx-cifra__valor { font-size: 24px; }
+  .hx-fila { grid-template-columns: 1fr auto; }
+  .hx-fila > span:last-child { grid-column: 1 / -1; }
+}
+
+/* ── La animación principal (EscenaPrincipal) ─────────────────────────────────
+   Usa la ventana de la landing (.lp-app y sus partes) y le suma lo que se mueve. */
+.esp { margin: 64px 0 88px; }
+.esp .esp__ventana { margin: 0; }
+.esp__cuerpo { height: 470px; min-height: 0; }
+.esp__centro { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.esp__vista { flex: 1; min-height: 0; }
+/* El hilo crece hacia arriba y lo viejo se pierde bajo un difuminado, como un chat real. */
+.esp__hilo {
+  display: flex; flex-direction: column; justify-content: flex-end; gap: 10px;
+  padding: 20px 20px 12px; overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 56px);
+  mask-image: linear-gradient(to bottom, transparent, #000 56px);
+}
+.esp__hilo .lp-msg { max-width: 88%; flex-shrink: 0; }
+.esp__hilo .esc__respuesta, .esp__hilo .esc__escribiendo { flex-shrink: 0; }
+.esp__hilo .esc-fact { width: 88%; }
+.esp__entrada { margin: 0 20px 18px; }
+
+/* Selector Módulo / Automatización, con la pastilla que se desliza. */
+.esp-switch {
+  display: flex; gap: 2px; margin-bottom: 14px; padding: 3px; border-radius: 9px;
+  background: rgba(11, 11, 15, 0.04); font-size: 11.5px; color: var(--texto-3);
+}
+.esp-switch span { position: relative; flex: 1; text-align: center; padding: 4px 6px; border-radius: 6px; font-weight: 500; }
+.esp-switch span.is-activo { color: var(--texto); }
+.esp-switch em { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 3px; font-style: normal; }
+.esp-switch em svg { color: var(--color); }
+.esp-switch__pastilla {
+  position: absolute; inset: 0; border-radius: 6px; background: #fff;
+  box-shadow: 0 1px 2px rgba(11, 11, 15, 0.12);
+}
+.esp-item { position: relative; }
+.esp-destello { position: absolute; inset: 0; border-radius: 6px; background: rgba(88, 106, 208, 0.18); pointer-events: none; }
+
+/* Capítulo 0: las filas conciliadas. */
+.esp-conc { width: 88%; border: 1px solid var(--borde); border-radius: 12px; background: #fff; overflow: hidden; }
+.esp-conc__fila {
+  display: grid; grid-template-columns: 1fr auto 104px; gap: 10px; align-items: center;
+  padding: 8px 12px; border-top: 1px solid var(--borde);
+}
+.esp-conc__fila:first-child { border-top: 0; }
+.esp-conc__texto { display: flex; flex-direction: column; min-width: 0; }
+.esp-conc__texto b { font-weight: 500; color: var(--texto); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.esp-conc__texto small { font-size: 11.5px; color: var(--texto-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.esp-conc__monto { font-variant-numeric: tabular-nums; color: var(--texto); }
+.esp-conc .lp-estado { display: inline-flex; align-items: center; justify-content: center; gap: 3px; font-size: 11px; }
+.esp-estado--gris { background: var(--superficie-alt); color: var(--texto-3); }
+.esp-conc__pie { padding: 8px 12px; border-top: 1px solid var(--borde); font-size: 12px; color: var(--texto-3); }
+.esp-conc__pie b { color: var(--ok); font-weight: 600; }
+
+/* Capítulo 2: la respuesta del runway, con sus barras. */
+.esp-runway { width: 88%; }
+.esp-runway p { margin: 0 0 10px; }
+.esp-resalta { padding: 0 3px; border-radius: 3px; background: var(--color-suave); color: var(--color); }
+.esp-runway__fila { margin-top: 8px; }
+.esp-runway__fila > div:first-child { display: flex; justify-content: space-between; font-size: 12px; color: var(--texto-2); font-variant-numeric: tabular-nums; }
+.esp-runway__barra { height: 6px; margin-top: 4px; border-radius: 3px; background: rgba(11, 11, 15, 0.06); overflow: hidden; }
+.esp-runway__barra span { display: block; height: 100%; border-radius: 3px; background: var(--degradado); }
+.esp-runway__fuentes { margin-top: 10px; font-size: 11.5px; color: var(--texto-3); }
+
+/* Panel derecho. */
+.esp-ok { display: inline-flex; align-items: center; gap: 4px; color: var(--ok) !important; }
+.esp-runway-kpi { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 0 0; }
+.esp-runway-kpi span { color: var(--texto-2); }
+.esp-runway-kpi b { font-family: var(--font-display); font-size: 20px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+
+/* Capítulo 3: las automatizaciones con su interruptor. */
+.esp-auto { padding: 20px; }
+.esp-auto__titulo { margin-bottom: 10px; font-size: 12px; font-weight: 600; color: var(--texto); }
+.esp-auto__fila {
+  display: flex; align-items: center; gap: 12px; padding: 12px; margin-bottom: 8px;
+  border: 1px solid var(--borde); border-radius: 12px; background: #fff;
+}
+.esp-auto__icono {
+  display: inline-flex; flex-shrink: 0; padding: 8px; border-radius: 8px;
+  background: var(--color-suave); color: var(--color);
+}
+.esp-auto__texto { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.esp-auto__texto b { font-weight: 500; color: var(--texto); }
+.esp-auto__texto small { font-size: 11.5px; color: var(--texto-3); }
+.esp-auto__texto .esp-auto__ultima { display: inline-flex; align-items: center; gap: 4px; margin-top: 2px; color: var(--ok); }
+.esp-interruptor {
+  display: flex; flex-shrink: 0; width: 34px; height: 20px; padding: 2px; border-radius: 999px;
+  background: #d9dce5; transition: background-color .3s ease-out;
+}
+.esp-interruptor i { width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(11, 11, 15, 0.2); }
+.esp-interruptor.is-on { justify-content: flex-end; background: var(--negro); }
+
+/* Los capítulos bajo la ventana. */
+.esp-caps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 20px; }
+.esp-caps button {
+  display: flex; flex-direction: column; gap: 10px; padding: 0; border: 0; background: none;
+  font: inherit; font-size: 13.5px; font-weight: 500; text-align: left; color: var(--texto-3);
+  cursor: pointer; transition: color .3s;
+}
+.esp-caps button:hover, .esp-caps button.is-activo { color: var(--texto); }
+.esp-caps button:focus-visible { outline: 2px solid var(--color); outline-offset: 4px; border-radius: 4px; }
+.esp-caps__barra { display: block; height: 2px; border-radius: 1px; background: var(--borde); overflow: hidden; }
+.esp-caps__barra span { display: block; height: 100%; background: var(--texto); }
+
+@media (max-width: 991px) {
+  .esp__cuerpo { height: auto; }
+  .esp__centro { height: 480px; }
+}
+@media (max-width: 767px) {
+  .esp__hilo { padding: 14px 14px 10px; }
+  .esp__entrada { margin: 0 14px 14px; }
+  .esp__hilo .lp-msg, .esp__hilo .esc-fact, .esp-conc, .esp-runway { width: 100%; max-width: 100%; }
+  .esp-conc__fila { grid-template-columns: 1fr auto; }
+  .esp-conc__monto { display: none; }
+  .esp-auto { padding: 14px; }
+  .esp-caps { grid-template-columns: 1fr 1fr; gap: 14px 12px; }
+}
+
+/* Ubicación en la landing. */
+.lp-seccion--escena { padding-bottom: 24px; }
+.lp-seccion--escena .esp { margin: 48px 0 0; }
+@media (min-width: 1024px) and (prefers-reduced-motion: no-preference) {
+  .lp-solo-sin-hero-animado { display: none; }
+}
+@media (max-width: 767px) {
+  .hx-tarjeta__cab { height: auto; flex-direction: column; gap: 2px; padding: 14px 20px 10px; }
+}
+
+/* ── EscenasChicas: los dos modos y el registro en vivo (25-10-2026) ── */
+.lp-modos__switch.esm-switch span { position: relative; background: transparent; color: var(--texto-3); padding: 0; }
+.lp-modos__switch.esm-switch span em { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 10px; font-style: normal; font-weight: 500; transition: color .3s; }
+.lp-modos__switch.esm-switch span.is-activo em { color: #fff; }
+.lp-modos__switch.esm-switch span.is-activo em svg { color: #B4A6F7; }
+.esm-switch__pastilla { position: absolute; inset: 0; border-radius: 8px; background: var(--negro); }
+.esm-estado { margin-left: 12px; display: inline-flex; align-items: center; gap: 8px; }
+.esm-corriendo { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--color); }
+.esm-ok { color: var(--ok); }
+.esm-flecha { margin-left: 12px; color: var(--texto-3); }
+.lp-modos .lp-modos__fila em { margin-left: auto; }
+.esm-vivo-cab { display: inline-flex; align-items: center; gap: 8px; }
+.esm-vivo { display: inline-flex; align-items: center; gap: 5px; font-style: normal; font-size: 11px; color: var(--ok); font-weight: 500; }
+.esm-vivo b { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); animation: esm-late 1.4s ease-in-out infinite; }
+@keyframes esm-late { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.7); } }
+.lp-estado > span[aria-hidden="true"] { vertical-align: -1px; margin-right: 3px; }
+@media (prefers-reduced-motion: reduce) { .esm-vivo b { animation: none; } }
+.esm-registro { min-height: calc(46px + var(--esm-filas) * 50px); }
+@media (max-width: 767px) { .esm-registro { min-height: calc(40px + var(--esm-filas) * 70px); } }
+
+/* Los cuatro agentes y los dolores resueltos (25-10-2026, EscenasAgentes.jsx). */
+.esm-agentes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 40px; }
+.esm-agente { display: flex; flex-direction: column; gap: 10px; padding: 22px; border: 1px solid var(--borde); border-radius: 16px;
+  background: #fff; transition: border-color .4s, box-shadow .4s, transform .4s; }
+.esm-agente.is-trabajando { border-color: rgba(88, 106, 208, 0.45); transform: translateY(-3px);
+  box-shadow: 0 0 0 4px rgba(88, 106, 208, 0.08), 0 18px 40px -20px rgba(88, 106, 208, 0.55); }
+.esm-agente__cab { display: flex; align-items: center; gap: 10px; }
+.esm-agente__cab b { font-family: var(--font-display); font-weight: 600; font-size: 16px; letter-spacing: -0.02em; }
+.esm-agente__icono { width: 34px; height: 34px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center;
+  background: var(--color-suave); color: var(--color); }
+.esm-agente p { margin: 0; color: var(--texto-2); font-size: 14px; line-height: 1.55; flex: 1; }
+.esm-agente__estado { min-height: 20px; font-size: 12.5px; }
+.esm-agente__trabaja { display: inline-flex; align-items: center; gap: 6px; color: var(--color); font-weight: 500; }
+.esm-agente__atento { display: inline-flex; align-items: center; gap: 6px; color: var(--texto-3); }
+.esm-agente__atento i { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+.esm-dolores { display: flex; flex-direction: column; margin-top: 36px; border: 1px solid var(--borde); border-radius: 16px; background: #fff; overflow: hidden; }
+.esm-dolor { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: center; padding: 18px 22px; font-size: 15px; }
+.esm-dolor + .esm-dolor { border-top: 1px solid var(--borde); }
+.esm-dolor__problema { color: var(--texto); transition: color .5s; }
+.esm-dolor.is-resuelto .esm-dolor__problema { color: var(--texto-3); text-decoration: line-through; text-decoration-color: rgba(11, 11, 15, 0.3); }
+.esm-dolor__solucion { display: inline-flex; align-items: center; gap: 8px; font-weight: 500; color: var(--texto); }
+.esm-dolor__solucion svg { color: var(--ok); flex-shrink: 0; }
+@media (max-width: 991px) { .esm-agentes { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 639px) {
+  .esm-agentes { grid-template-columns: 1fr; }
+  .esm-dolor { grid-template-columns: 1fr; gap: 6px; }
+}
+/* Quién habla en cada capítulo de "Así trabaja Afable" (25-10-2026). */
+.esp-agente { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; font-size: 11.5px; font-weight: 600;
+  color: var(--texto-2); letter-spacing: 0.01em; }
+.esc-pasos__cab b { color: var(--color); font-weight: 600; }
+
+/* El hero con movimiento propio (26-10-2026): la pregunta que se escribe, la fila que se ilumina. */
+.hx-cursor {
+  display: inline-block; width: 1.5px; height: 1em; margin-left: 2px; vertical-align: -2px;
+  background: var(--texto); animation: hx-parpadeo 1s steps(2) infinite;
+}
+@keyframes hx-parpadeo { 50% { visibility: hidden; } }
+.hx-resalte {
+  position: absolute; inset: 2px 0; border-radius: 10px; pointer-events: none;
+  background: color-mix(in srgb, var(--color) 9%, transparent);
+  box-shadow: inset 3px 0 0 var(--color);
+}
+.hx-lado__ajustes { margin-top: auto; }
+.hx-lado__ajustes + .hx-lado__cuenta { margin-top: 0; }
+
+/* Las piezas del hero se mueven en cada cuadro: que el navegador las anime en su propia capa. */
+.hx .hx-pieza, .hx .hx-ventana { will-change: transform, opacity; }
+.hx .hx-barras__fila span { will-change: transform; }

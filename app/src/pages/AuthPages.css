@@ -8,10 +8,10 @@
   --v-bg: #f5f5f5;
   --v-surface: #ffffff;
   --v-border: rgba(0, 0, 0, 0.09);
-  --v-border-focus: rgba(88, 106, 208, 0.5);
-  --v-purple: #586AD0;
-  --v-purple-hover: #2F42A6;
-  --v-purple-light: #586AD0;
+  --v-border-focus: color-mix(in srgb, var(--af-acento) 50%, transparent);
+  --v-purple: var(--af-acento);
+  --v-purple-hover: var(--af-acento-hover);
+  --v-purple-light: var(--af-acento);
   --v-text: rgba(0, 0, 0, 0.87);
   --v-muted: rgba(0, 0, 0, 0.50);
   --v-input-bg: rgba(0, 0, 0, 0.03);
@@ -21,10 +21,10 @@
   --v-bg: #1a1a1a;
   --v-surface: #242424;
   --v-border: rgba(255, 255, 255, 0.08);
-  --v-border-focus: rgba(88, 106, 208, 0.5);
-  --v-purple: #586AD0;
-  --v-purple-hover: #2F42A6;
-  --v-purple-light: #9BA6E3;
+  --v-border-focus: color-mix(in srgb, var(--af-acento) 50%, transparent);
+  --v-purple: var(--af-acento);
+  --v-purple-hover: var(--af-acento-hover);
+  --v-purple-light: var(--af-acento-suave);
   --v-text: #e8e8e8;
   --v-muted: #8b8b8b;
   --v-input-bg: rgba(255, 255, 255, 0.04);
@@ -132,7 +132,7 @@
 
 .auth-input:focus {
   border-color: var(--v-border-focus);
-  box-shadow: 0 0 0 2px rgba(88, 106, 208, 0.12);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--af-acento) 12%, transparent);
 }
 
 .auth-input.has-toggle {
@@ -346,11 +346,58 @@
   width: 48px;
   height: 48px;
   border-radius: 10px;
-  background: rgba(88, 106, 208, 0.1);
-  border: 1px solid rgba(88, 106, 208, 0.2);
+  background: color-mix(in srgb, var(--af-acento) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--af-acento) 20%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
   margin: 0 auto 1.25rem;
   color: var(--v-purple-light);
+}
+
+/* ── Con pintura de fondo (ingreso y registro, 30-10-2026) ──────────────────
+   La pintura cubre toda la pantalla, apenas oscurecida en los bordes, y la tarjeta
+   del formulario flota encima, translúcida y con desenfoque. Ver AuthFondo.jsx. */
+.auth-page--pintura { position: relative; isolation: isolate; overflow: hidden; padding-bottom: 4rem; background: #1a1a1a; }
+.auth-fondo { position: fixed; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; }
+.auth-page--pintura::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.05) 0%, rgba(0, 0, 0, 0.35) 100%);
+}
+.auth-page--pintura .auth-card {
+  background: color-mix(in srgb, var(--v-surface) 86%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(1.1);
+  backdrop-filter: blur(18px) saturate(1.1);
+  border: 1px solid color-mix(in srgb, var(--v-surface) 60%, transparent);
+  border-radius: 16px;
+  padding: 2.5rem 2.5rem 2.25rem;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.4) inset, 0 30px 80px -20px rgba(0, 0, 0, 0.55);
+}
+.auth-fondo__credito {
+  position: absolute; right: 20px; bottom: 16px; z-index: 0;
+  font-size: 12px; font-style: italic; letter-spacing: 0.01em; color: rgba(255, 255, 255, 0.82);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+}
+/* El formulario a la derecha, cuando la obra tiene su figura al centro (registro). */
+@media (min-width: 1024px) {
+  .auth-page--derecha { justify-content: flex-end; padding-right: 9vw; }
+  /* La dama ocupa la mitad izquierda y se funde con el fondo oscuro del propio cuadro. */
+  .auth-page--derecha { background: #14110e; }
+  .auth-page--derecha .auth-fondo {
+    width: 62%; object-position: 50% 22% !important;
+    -webkit-mask-image: linear-gradient(to right, #000 70%, transparent);
+    mask-image: linear-gradient(to right, #000 70%, transparent);
+  }
+}
+@media (max-width: 600px) {
+  .auth-page--pintura .auth-card { padding: 2rem 1.5rem 1.75rem; }
+  .auth-fondo__credito { left: 16px; right: 16px; text-align: center; }
+}
+
+/* Texto de ayuda bajo un campo (no tenía estilo y salía como párrafo grande). */
+.auth-hint { margin: 0.375rem 0 0; font-size: 0.78rem; line-height: 1.4; color: var(--v-muted); }
+/* El formulario a la derecha sobre un plano a pantalla completa (registro, 30-10-2026). */
+@media (min-width: 1024px) {
+  .auth-page--lado { justify-content: flex-end; padding-right: 9vw; }
+  .auth-page--lado .auth-fondo { object-position: 30% 50% !important; }
 }

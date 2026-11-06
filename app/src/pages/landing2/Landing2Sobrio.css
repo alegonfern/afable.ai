@@ -1,0 +1,95 @@
+/*
+ * Landing 2 sobria (30-10-2026, pedido de Alexis: "quita todo lo índigo, quiero que sea sobrio";
+ * el color no calzaba con las pinturas). Blanco, negro y grises neutros, sin índigo ni degradados.
+ *
+ * Todo va bajo `.lp.lp2`: Vite junta el CSS de todas las páginas y la landing original usa las mismas
+ * clases (lp-*, hx-*, esp-*, esm-*), así que cambiar las reglas copiadas la cambiaría también.
+ */
+
+.lp.lp2 {
+  --color: #0b0b0f;
+  --color-2: #3a3a3e;
+  --color-suave: rgba(11, 11, 15, 0.06);
+  --degradado: linear-gradient(#0b0b0f, #0b0b0f);
+  --af-color: #0b0b0f;
+  --af-color-suave: rgba(11, 11, 15, 0.06);
+  /* Grises neutros (los de antes tiraban a azul). */
+  --texto-2: #5b5b60;
+  --texto-3: #8e8e93;
+  --borde: #e6e5e2;
+  --fog: #f6f6f4;
+  --superficie-alt: #f2f2f0;
+}
+
+/* "con IA." y "su empresa.": en gris, sin degradado. */
+.lp.lp2 .lp-oscuro .lp-degradado { background: linear-gradient(#fff, #fff); -webkit-background-clip: text; background-clip: text; }
+
+/* Lo que iba en índigo (30-10-2026): mismo color que el texto de al lado, en cursiva. Vale para la
+   landing y para las pantallas de ejemplo (cifras destacadas, "Corriendo", el agente trabajando…). */
+.lp.lp2 .lp-degradado,
+.lp.lp2 .lp-eyebrow,
+.lp.lp2 .hx-cifra--grande .hx-cifra__valor,
+.lp.lp2 .hx-fila em,
+.lp.lp2 .hx-fila b[style],
+.lp.lp2 .esp-auto__corriendo,
+.lp.lp2 .esp-resalta,
+.lp.lp2 .esm-corriendo,
+.lp.lp2 .esm-agente__trabaja,
+.lp.lp2 .esc-pasos__cab b { font-style: italic; }
+/* Las letras inclinadas de "con IA." no deben quedar cortadas por el recorte del texto. */
+.lp.lp2 .lp-degradado { padding-right: 0.08em; }
+.lp.lp2 .lp-chat__caja:focus-within, .lp.lp2 .lp-chat__sugerencias button:hover { border-color: #c8c7c3; }
+
+/* Botón principal: negro plano, sin el halo de color. */
+.lp.lp2 .lp-btn--principal, .lp.lp2 .lp-btn--principal:hover { box-shadow: none; }
+.lp.lp2 .lp-btn--principal:hover { background: var(--negro-hover); }
+
+/* Etiqueta y chat. */
+.lp.lp2 .lp-eyebrow { color: var(--texto); background: #fff; border-color: var(--borde); }
+.lp.lp2 .lp-eyebrow__texto { background: none; color: var(--texto); }
+.lp.lp2 .lp-chat__caja { box-shadow: 0 1px 2px rgba(11, 11, 15, 0.04), 0 24px 48px -24px rgba(11, 11, 15, 0.25); }
+.lp.lp2 .lp-chat__caja:focus-within { border-color: #c8c7c3; box-shadow: 0 1px 2px rgba(11, 11, 15, 0.04), 0 24px 56px -20px rgba(11, 11, 15, 0.35); }
+
+/* Bloque oscuro y selector Módulo | Agente. */
+.lp.lp2 .lp-oscuro .lp-msg--ia { box-shadow: inset 2px 0 0 rgba(255, 255, 255, 0.5); }
+.lp.lp2 .lp-oscuro__chat { box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.1), 0 24px 64px -24px rgba(0, 0, 0, 0.6); }
+.lp.lp2 .lp-modos__switch span svg,
+.lp.lp2 .lp-modos__switch.esm-switch span.is-activo em svg { color: rgba(255, 255, 255, 0.75); }
+.lp.lp2 .lp-medida__boton:hover { background: #f2f2f0; box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.15); }
+
+/* Escenas animadas. */
+.lp.lp2 .esp-destello { background: rgba(11, 11, 15, 0.08); }
+.lp.lp2 .esm-agente.is-trabajando {
+  border-color: rgba(11, 11, 15, 0.35);
+  box-shadow: 0 0 0 4px rgba(11, 11, 15, 0.05), 0 18px 40px -20px rgba(11, 11, 15, 0.35);
+}
+.lp.lp2 .esc-fact__estado--enviando { background: #ecebe8; color: var(--texto); }
+.lp.lp2 .esc__barra > span, .lp.lp2 .esp-caps__barra { background: #dcdbd7; }
+
+/* Pie de página invertido (30-10-2026, como harvey.ai): fondo negro. Arriba el cierre a la izquierda y los
+   enlaces a la derecha; abajo la marca y el año. */
+.lp.lp2 .lp2-pie { margin-top: 0; padding: 104px 0 36px; border-top: 0; background: var(--negro); color: #fff; font-size: 14px; }
+.lp2-pie__arriba { display: grid; grid-template-columns: 1.4fr 1fr; gap: 64px; align-items: start; }
+.lp.lp2 .lp2-pie .lp-h2 { color: #fff; font-size: clamp(36px, 4.6vw, 60px); line-height: 1.04; letter-spacing: -0.03em; }
+.lp.lp2 .lp2-pie .lp-degradado { background: linear-gradient(#fff, #fff); -webkit-background-clip: text; background-clip: text; }
+.lp2-pie__cierre .lp-acciones { margin-top: 36px; }
+.lp.lp2 .lp2-pie__principal { background: #fff; color: var(--negro) !important; border-color: #fff; }
+.lp.lp2 .lp2-pie__principal:hover { background: #e9e8e4; }
+.lp.lp2 .lp2-pie__secundario { background: transparent; color: #fff !important; border-color: rgba(255, 255, 255, 0.3); }
+.lp.lp2 .lp2-pie__secundario:hover { background: rgba(255, 255, 255, 0.08); }
+.lp2-pie__enlaces { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; padding-top: 10px; }
+.lp.lp2 .lp2-pie h4 { margin: 0 0 14px; font-size: 13px; font-weight: 500; color: rgba(255, 255, 255, 0.45); }
+.lp.lp2 .lp2-pie__enlaces a { display: block; margin-bottom: 10px; color: rgba(255, 255, 255, 0.78); transition: color .2s; }
+.lp.lp2 .lp2-pie__enlaces a:hover { color: #fff; }
+.lp2-pie__base {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 88px; padding-top: 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12); font-size: 13px; color: rgba(255, 255, 255, 0.5);
+}
+.lp2-pie__anio { margin-left: auto; }
+.lp.lp2 .lp2-pie .lp2-creditos { padding-top: 14px; padding-bottom: 0; color: rgba(255, 255, 255, 0.32); }
+@media (max-width: 767px) {
+  .lp.lp2 .lp2-pie { padding-top: 72px; }
+  .lp2-pie__arriba { grid-template-columns: 1fr; gap: 48px; }
+  .lp2-pie__base { margin-top: 56px; }
+  .lp2-pie__anio { margin-left: 0; }
+}
