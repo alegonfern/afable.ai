@@ -7,6 +7,7 @@ import { toast } from 'react-toastify';
 import { api } from '../services/api';
 import { authService } from '../services/auth';
 import { Logo } from '../components/Logo';
+import AuthFondo from './AuthFondo';
 import './AuthPages.css';
 
 export default function Login() {
@@ -55,7 +56,8 @@ export default function Login() {
   };
 
   return (
-    <div className="auth-page">
+    <div className="auth-page auth-page--pintura">
+      <AuthFondo pintura="ingreso" />
       <div className="auth-card">
         {/* Brand */}
         <Link to="/" className="auth-brand">

@@ -65,9 +65,20 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'email', 'first_name', 'last_name', 'avatar_url',
-            'role', 'department', 'objectives', 'response_style', 'date_joined',
+            'role', 'department', 'telefono', 'objectives', 'response_style', 'date_joined',
         ]
         read_only_fields = ['id', 'email', 'date_joined']
+
+    def validate_telefono(self, value):
+        """Se guarda como lo pide WhatsApp: solo dígitos con el código de país (56912345678)."""
+        digitos = ''.join(ch for ch in value or '' if ch.isdigit())
+        if not digitos:
+            return ''
+        if len(digitos) == 9 and digitos.startswith('9'):      # celular chileno sin el 56
+            digitos = '56' + digitos
+        if not 10 <= len(digitos) <= 15:
+            raise serializers.ValidationError('Escriba el número con código de país, por ejemplo +56 9 1234 5678.')
+        return digitos
 
     def get_avatar_url(self, obj):
         if obj.avatar:

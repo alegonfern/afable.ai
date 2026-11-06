@@ -18,6 +18,9 @@ class User(AbstractUser):
     google_avatar_url = models.URLField(blank=True)
     role           = models.CharField(max_length=100, blank=True)
     department     = models.CharField(max_length=100, blank=True)
+    # Para los avisos por WhatsApp de las automatizaciones (22-10-2026). Con código de país:
+    # +56912345678. Vacío = a esta persona no le llegan por WhatsApp.
+    telefono       = models.CharField(max_length=20, blank=True)
     objectives     = models.TextField(blank=True)
     response_style = models.CharField(max_length=20, choices=RESPONSE_STYLES, default='ejecutivo')
 

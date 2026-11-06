@@ -44,7 +44,7 @@ export default function ForgotPassword() {
           </div>
           <h2>Revise su correo</h2>
           <p>
-            Enviamos un enlace de recuperación a <strong style={{ color: '#9BA6E3' }}>{sentTo}</strong>.
+            Enviamos un enlace de recuperación a <strong style={{ color: 'var(--af-acento-suave)' }}>{sentTo}</strong>.
             Puede tardar unos minutos.
           </p>
           <Link className="auth-strong-link" to="/login">← Volver a iniciar sesión</Link>

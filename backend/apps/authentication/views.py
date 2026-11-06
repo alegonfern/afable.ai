@@ -1,3 +1,4 @@
+import logging
 from urllib.parse import urlencode
 import requests as http_requests
 from django.conf import settings
@@ -18,6 +19,8 @@ from .serializers import (
     ChangePasswordSerializer, PasswordResetRequestSerializer,
     PasswordResetConfirmSerializer, UserContextSerializer,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _tokens_for_user(user):
@@ -80,11 +83,16 @@ class GoogleLoginCallbackView(APIView):
         if token_resp.status_code != 200:
             return redirect(f'{settings.FRONTEND_URL}/login?error=google_token')
 
+        # Margen de reloj (30-10-2026): sin él, google-auth no tolera ni un segundo de desfase y un
+        # servidor que va atrás de Google (el Docker local iba 1,4 s) rechaza el token recién emitido
+        # con "Token used too early".
         try:
             claims = google_id_token.verify_oauth2_token(
-                token_resp.json()['id_token'], google_auth_requests.Request(), settings.GOOGLE_CLIENT_ID
+                token_resp.json()['id_token'], google_auth_requests.Request(), settings.GOOGLE_CLIENT_ID,
+                clock_skew_in_seconds=10,
             )
-        except ValueError:
+        except ValueError as e:
+            logger.warning('Login con Google: id_token rechazado: %s', e)
             return redirect(f'{settings.FRONTEND_URL}/login?error=google_invalid')
 
         email = claims.get('email')

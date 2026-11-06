@@ -1067,3 +1067,156 @@ class ElArchivoNoSaleSinPermisoTests(BaseArchivos):
             if doc['url']:
                 self.assertNotIn('/media/', doc['url'])
                 self.assertIn(f"/archivos/documentos/{doc['id']}/archivo/", doc['url'])
+
+
+class PublicacionesTests(PermisosBase):
+    """Nadie publica por su cuenta: se propone y alguien acepta.
+
+    Es el circuito que une el trabajo de cada uno. Lo que se comprueba acá es que un
+    archivo que vivía en la carpeta privada de una persona —y que nadie más veía— quede
+    a la vista del resto SOLO después de que alguien lo acepte, y que ese alguien pueda
+    corregir dónde va.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from services.estructura_inicial import carpeta_personal, crear_estructura
+
+        self.root = crear_estructura(self.org, creado_por=self.user)
+        self.destino = Carpeta.objects.create(
+            organization=self.org, name='Operaciones', parent=self.root,
+        )
+        self.mia = carpeta_personal(self.org, self.ana)
+        self.informe = CompanyDocument.objects.create(
+            organization=self.org, title='Entregas de la semana', file='e.md',
+            content_type='text/markdown', editable=True, carpeta=self.mia,
+            uploaded_by=self.ana, extracted_text='Lunes: 12 entregas.',
+        )
+
+    def pedir(self, destino=None, quien=None, nota='Le sirve a Ventas.'):
+        self.como(quien or self.ana)
+        return self.client.post(
+            f'{URL}publicaciones/',
+            {
+                **self.q(), 'documento': self.informe.id,
+                'destino': (destino or self.destino).id, 'nota': nota,
+            },
+            format='json',
+        )
+
+    def test_lo_que_esta_en_mi_carpeta_privada_no_lo_ve_nadie_mas(self):
+        self.assertNotIn('Entregas de la semana', self.visibles(self.beto))
+
+    def test_se_pide_publicar_y_queda_esperando(self):
+        r = self.pedir()
+        self.assertEqual(r.status_code, 201)
+        self.assertEqual(r.data['estado'], 'pendiente')
+        self.assertEqual(r.data['destino']['name'], 'Operaciones')
+        # Pedirlo no lo mueve: sigue siendo privado hasta que alguien acepte.
+        self.informe.refresh_from_db()
+        self.assertEqual(self.informe.carpeta_id, self.mia.id)
+        self.assertNotIn('Entregas de la semana', self.visibles(self.beto))
+
+    def test_quien_pide_no_se_aprueba_solo(self):
+        solicitud = self.pedir().data
+        self.como(self.ana)
+        r = self.client.post(
+            f'{URL}publicaciones/{solicitud["id"]}/',
+            {**self.q(), 'accion': 'aprobar'}, format='json',
+        )
+        self.assertEqual(r.status_code, 403)
+
+    def test_el_administrador_la_ve_en_su_bandeja(self):
+        self.pedir()
+        self.como(self.user)
+        r = self.client.get(f'{URL}publicaciones/', {**self.q(), 'bandeja': 1})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(len(r.data), 1)
+        self.assertEqual(r.data[0]['solicitada_por']['name'], 'ana@afable.test')
+
+        # Un miembro común no tiene nada que resolver.
+        self.como(self.beto)
+        r = self.client.get(f'{URL}publicaciones/', {**self.q(), 'bandeja': 1})
+        self.assertEqual(r.data, [])
+
+    def test_al_aprobarla_el_resto_del_equipo_lo_ve(self):
+        solicitud = self.pedir().data
+        self.como(self.user)
+        r = self.client.post(
+            f'{URL}publicaciones/{solicitud["id"]}/',
+            {**self.q(), 'accion': 'aprobar'}, format='json',
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data['estado'], 'aprobada')
+        self.informe.refresh_from_db()
+        self.assertEqual(self.informe.carpeta_id, self.destino.id)
+        self.assertIn('Entregas de la semana', self.visibles(self.beto))
+
+    def test_quien_aprueba_puede_corregir_el_destino(self):
+        otra = Carpeta.objects.create(
+            organization=self.org, name='Logistica', parent=self.root,
+        )
+        solicitud = self.pedir().data
+        self.como(self.user)
+        r = self.client.post(
+            f'{URL}publicaciones/{solicitud["id"]}/',
+            {**self.q(), 'accion': 'aprobar', 'destino': otra.id}, format='json',
+        )
+        self.assertEqual(r.status_code, 200)
+        # El destino propuesto queda registrado; el final es el corregido.
+        self.assertEqual(r.data['destino']['name'], 'Operaciones')
+        self.assertEqual(r.data['destino_final']['name'], 'Logistica')
+        self.informe.refresh_from_db()
+        self.assertEqual(self.informe.carpeta_id, otra.id)
+
+    def test_al_rechazarla_el_archivo_se_queda_donde_estaba(self):
+        solicitud = self.pedir().data
+        self.como(self.user)
+        r = self.client.post(
+            f'{URL}publicaciones/{solicitud["id"]}/',
+            {**self.q(), 'accion': 'rechazar', 'respuesta': 'Ya existe uno igual.'},
+            format='json',
+        )
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.data['estado'], 'rechazada')
+        self.assertEqual(r.data['respuesta'], 'Ya existe uno igual.')
+        self.informe.refresh_from_db()
+        self.assertEqual(self.informe.carpeta_id, self.mia.id)
+        self.assertNotIn('Entregas de la semana', self.visibles(self.beto))
+
+    def test_no_se_pide_dos_veces_el_mismo_archivo(self):
+        self.pedir()
+        r = self.pedir()
+        self.assertEqual(r.status_code, 409)
+        self.assertIn('solicitud', r.data)
+
+    def test_una_solicitud_resuelta_no_se_vuelve_a_resolver(self):
+        solicitud = self.pedir().data
+        self.como(self.user)
+        cuerpo = {**self.q(), 'accion': 'aprobar'}
+        self.client.post(f'{URL}publicaciones/{solicitud["id"]}/', cuerpo, format='json')
+        r = self.client.post(f'{URL}publicaciones/{solicitud["id"]}/', cuerpo, format='json')
+        self.assertEqual(r.status_code, 409)
+
+    def test_nadie_propone_un_archivo_ajeno(self):
+        self.como(self.beto)
+        r = self.client.post(
+            f'{URL}publicaciones/',
+            {**self.q(), 'documento': self.informe.id, 'destino': self.destino.id},
+            format='json',
+        )
+        self.assertEqual(r.status_code, 403)
+
+    def test_no_se_propone_a_una_carpeta_que_no_se_ve(self):
+        # `rrhh` es restringida y de otro: para Ana no existe.
+        r = self.pedir(destino=self.rrhh)
+        self.assertEqual(r.status_code, 403)
+
+    def test_cada_uno_ve_sus_propias_solicitudes(self):
+        self.pedir()
+        self.como(self.ana)
+        r = self.client.get(f'{URL}publicaciones/', self.q())
+        self.assertEqual(len(r.data), 1)
+        self.como(self.beto)
+        r = self.client.get(f'{URL}publicaciones/', self.q())
+        self.assertEqual(r.data, [])

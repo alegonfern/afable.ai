@@ -248,7 +248,7 @@ class LaIdentidadViveEnUnSoloLugarTests(TestCase):
             'name': 'Meridian Nautic',
             'sector': 'turismo',
             'employees': '12',
-            'rut': '76.999.888-1',
+            'rut': '76.999.888-8',
             'description': 'Gestión náutica en Palma de Mallorca.',
         })
         self.assertEqual(r.status_code, 200)
@@ -256,7 +256,7 @@ class LaIdentidadViveEnUnSoloLugarTests(TestCase):
         empresa.refresh_from_db()
         self.assertEqual(empresa.name, 'Meridian Nautic')
         self.assertEqual(empresa.sector, 'turismo')
-        self.assertEqual(empresa.rut, '76.999.888-1')
+        self.assertEqual(empresa.rut, '76999888-8')  # validado y como lo pide el SII
         self.assertIn('Palma de Mallorca', empresa.description)
 
     def test_dos_empresas_del_mismo_dueno_no_se_pisan(self):

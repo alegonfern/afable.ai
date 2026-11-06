@@ -20,10 +20,16 @@ class MemberUserSerializer(serializers.ModelSerializer):
 
     full_name = serializers.SerializerMethodField()
     avatar_url = serializers.SerializerMethodField()
+    # Si puede recibir los avisos de las automatizaciones por WhatsApp (tiene teléfono en su
+    # perfil). El número no se muestra: basta con saber si le llegará.
+    tiene_whatsapp = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'avatar_url']
+        fields = ['id', 'email', 'first_name', 'last_name', 'full_name', 'avatar_url', 'tiene_whatsapp']
+
+    def get_tiene_whatsapp(self, obj):
+        return bool(obj.telefono)
 
     def get_full_name(self, obj):
         return obj.get_full_name() or obj.email
@@ -70,6 +76,17 @@ class EmpresaSerializer(serializers.ModelSerializer):
         # arriba, los dos valores son el mismo.
         read_only_fields = ['id', 'slug', 'created_at', 'organization_id']
         extra_kwargs = {'logo': {'write_only': True, 'required': False, 'allow_null': True}}
+
+    def validate_rut(self, value):
+        """El RUT de la empresa es el de sus facturas: se guarda como lo pide el SII (12345678-K)."""
+        if not (value or '').strip():
+            return ''
+        from apps.dte.nucleo import ErrorDTE
+        from apps.dte.nucleo.rut import normalizar
+        try:
+            return normalizar(value)
+        except ErrorDTE:
+            raise serializers.ValidationError('Ese RUT no es válido: revise el dígito verificador.')
 
     def get_my_role(self, obj):
         """El rol de quien pide, para que el frontend sepa qué mostrar.

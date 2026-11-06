@@ -98,7 +98,7 @@ export default function InvitationAcceptPage() {
   if (cargando) {
     return (
       <Marco>
-        <CircularProgress size={24} sx={{ color: '#586AD0' }} />
+        <CircularProgress size={24} sx={{ color: 'var(--af-acento)' }} />
       </Marco>
     );
   }

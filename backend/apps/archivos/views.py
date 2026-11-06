@@ -944,3 +944,205 @@ def _ids(valor):
         except (TypeError, ValueError):
             continue
     return limpios
+
+
+# ---------------------------------------------------------------------------
+# Solicitudes de publicación
+# ---------------------------------------------------------------------------
+
+
+def serializar_solicitud(solicitud):
+    """Una solicitud, con lo justo para la bandeja y para la ficha del archivo."""
+    doc = solicitud.document
+    quien = solicitud.solicitada_por
+    return {
+        'id': solicitud.id,
+        'documento': {'id': doc.id, 'title': doc.title},
+        'solicitada_por': {
+            'id': quien.id,
+            'name': quien.get_full_name() or quien.email,
+        },
+        'destino': {'id': solicitud.destino_id, 'name': solicitud.destino.name},
+        'destino_final': (
+            {'id': solicitud.destino_final_id, 'name': solicitud.destino_final.name}
+            if solicitud.destino_final_id else None
+        ),
+        'nota': solicitud.nota,
+        'estado': solicitud.estado,
+        'respuesta': solicitud.respuesta,
+        'created_at': solicitud.created_at,
+        'resolved_at': solicitud.resolved_at,
+    }
+
+
+def _puede_resolver(user, carpeta, membership):
+    """Quién acepta una publicación: quien puede editar la carpeta de destino.
+
+    Es el administrador y también el editor. Si solo aprobara el administrador —que en
+    una empresa chica es el dueño, y está ocupado— la carpeta de la empresa se quedaría
+    esperando, que es exactamente como mueren los repositorios internos.
+    """
+    from .models import NIVEL_EDICION, ORDEN_DE_NIVELES
+    from .permisos import nivel_sobre_carpeta
+
+    nivel = nivel_sobre_carpeta(user, carpeta, membership)
+    return nivel is not None and ORDEN_DE_NIVELES[nivel] >= ORDEN_DE_NIVELES[NIVEL_EDICION]
+
+
+class PublicacionesView(APIView):
+    """GET/POST /api/v1/archivos/publicaciones/ — pedir llevar un archivo al repositorio.
+
+    `GET` devuelve las solicitudes propias; `GET ?bandeja=1`, las pendientes que esta
+    persona puede resolver, que es lo que necesita ver quien aprueba.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        org, error = _org(request)
+        if error:
+            return error
+        from .models import PUBLICACION_PENDIENTE, SolicitudDePublicacion
+
+        solicitudes = (
+            SolicitudDePublicacion.objects
+            .filter(document__organization=org)
+            .select_related('document', 'solicitada_por', 'destino', 'destino_final')
+        )
+        if request.query_params.get('bandeja'):
+            membership = getattr(request, 'membership', None)
+            solicitudes = [
+                s for s in solicitudes.filter(estado=PUBLICACION_PENDIENTE)
+                if _puede_resolver(request.user, s.destino, membership)
+            ]
+        else:
+            solicitudes = list(solicitudes.filter(solicitada_por=request.user))
+
+        return Response([serializar_solicitud(s) for s in solicitudes])
+
+    def post(self, request):
+        org, error = _org(request)
+        if error:
+            return error
+        from .models import PUBLICACION_PENDIENTE, SolicitudDePublicacion
+        from .permisos import nivel_sobre_carpeta, puede_editar
+
+        membership = getattr(request, 'membership', None)
+
+        doc = CompanyDocument.objects.filter(
+            organization=org, pk=request.data.get('documento'),
+        ).first()
+        if doc is None:
+            return Response(
+                {'detail': 'El archivo no existe.'}, status=status.HTTP_404_NOT_FOUND,
+            )
+        if not puede_editar(request.user, doc, membership):
+            return Response(
+                {'detail': 'Solo puedes proponer archivos tuyos.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        destino = Carpeta.objects.filter(
+            organization=org, pk=request.data.get('destino'),
+        ).first()
+        if destino is None:
+            return Response(
+                {'detail': 'La carpeta de destino no existe.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Proponer una carpeta que no ve sería adivinar dónde va.
+        if nivel_sobre_carpeta(request.user, destino, membership) is None:
+            return Response(
+                {'detail': 'No tienes acceso a esa carpeta.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if destino.id == doc.carpeta_id:
+            return Response(
+                {'detail': 'El archivo ya está en esa carpeta.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        abierta = SolicitudDePublicacion.objects.filter(
+            document=doc, estado=PUBLICACION_PENDIENTE,
+        ).select_related('document', 'solicitada_por', 'destino', 'destino_final').first()
+        if abierta is not None:
+            return Response(
+                {
+                    'detail': 'Este archivo ya está esperando respuesta.',
+                    'solicitud': serializar_solicitud(abierta),
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        solicitud = SolicitudDePublicacion.objects.create(
+            document=doc, solicitada_por=request.user, destino=destino,
+            nota=(request.data.get('nota') or '')[:300],
+        )
+        return Response(serializar_solicitud(solicitud), status=status.HTTP_201_CREATED)
+
+
+class PublicacionDetailView(APIView):
+    """POST /api/v1/archivos/publicaciones/<id>/ — aprobar o rechazar.
+
+    El destino se puede corregir al aprobar: quien sabe dónde va cada cosa lo arregla en
+    el momento, y no dos meses después.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk):
+        org, error = _org(request)
+        if error:
+            return error
+        from .models import PUBLICACION_PENDIENTE, SolicitudDePublicacion
+
+        membership = getattr(request, 'membership', None)
+        solicitud = (
+            SolicitudDePublicacion.objects
+            .filter(document__organization=org, pk=pk)
+            .select_related('document', 'solicitada_por', 'destino', 'destino_final')
+            .first()
+        )
+        if solicitud is None:
+            return Response(
+                {'detail': 'La solicitud no existe.'}, status=status.HTTP_404_NOT_FOUND,
+            )
+        if solicitud.estado != PUBLICACION_PENDIENTE:
+            return Response(
+                {'detail': 'Esta solicitud ya está resuelta.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if not _puede_resolver(request.user, solicitud.destino, membership):
+            return Response(
+                {'detail': 'No puedes resolver publicaciones a esa carpeta.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        accion = request.data.get('accion')
+        if accion == 'rechazar':
+            solicitud.rechazar(request.user, (request.data.get('respuesta') or '')[:300])
+            return Response(serializar_solicitud(solicitud))
+        if accion != 'aprobar':
+            return Response(
+                {'detail': 'La acción es "aprobar" o "rechazar".'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        destino = solicitud.destino
+        if request.data.get('destino'):
+            destino = Carpeta.objects.filter(
+                organization=org, pk=request.data['destino'],
+            ).first()
+            if destino is None:
+                return Response(
+                    {'detail': 'La carpeta de destino no existe.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if not _puede_resolver(request.user, destino, membership):
+                return Response(
+                    {'detail': 'No puedes publicar en esa carpeta.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+        solicitud.aprobar(request.user, destino)
+        return Response(serializar_solicitud(solicitud))

@@ -7,13 +7,19 @@ from .views import (
     ExportarPdfView,
     VistaView,
     CarpetaDetailView, CarpetaListCreateView, ContenidoView, DocumentoDetailView,
-    CompartirView, ExploradorView, SubirView, VersionDetailView, VersionesView,
+    CompartirView, ExploradorView, PublicacionDetailView, PublicacionesView, SubirView,
+    VersionDetailView, VersionesView,
 )
 
 urlpatterns = [
     path('', ExploradorView.as_view(), name='explorador'),
     path('subir/', SubirView.as_view(), name='subir'),
     path('compartir/', CompartirView.as_view(), name='compartir'),
+    path('publicaciones/', PublicacionesView.as_view(), name='publicaciones'),
+    path(
+        'publicaciones/<int:pk>/',
+        PublicacionDetailView.as_view(), name='publicacion',
+    ),
     path('carpetas/', CarpetaListCreateView.as_view(), name='carpetas'),
     path('carpetas/<int:pk>/', CarpetaDetailView.as_view(), name='carpeta'),
     path('documentos/<int:pk>/', DocumentoDetailView.as_view(), name='documento'),
