@@ -42,7 +42,14 @@ runs:
         LLAVE: ${{ inputs.llave }}
       run: |
         mkdir -p ~/.ssh
-        printf '%s\n' "$LLAVE" > ~/.ssh/despliegue
+        # tr quita los \r que quedan si la llave se copió desde Windows.
+        printf '%s\n' "$LLAVE" | tr -d '\r' > ~/.ssh/despliegue
         chmod 600 ~/.ssh/despliegue
+        if ! ssh-keygen -y -f ~/.ssh/despliegue > /dev/null; then
+          echo "::error::El secreto VPS_SSH_KEY no es una llave privada válida (vacío, incompleto o es la pública). Debe ir completo, con las líneas BEGIN y END."
+          exit 1
+        fi
+        echo "Huella de la llave (debe ser SHA256:2CIk9xup8u+DKJ34DdOb+qId0WG9CkF/eIIzxxqPSWI):"
+        ssh-keygen -lf ~/.ssh/despliegue
         echo "187.127.21.114 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIETuxPyzlImzCp9yhqyyhsqKdAy2kkj5/moDzTsRCr+f" > ~/.ssh/known_hosts
         ssh -i ~/.ssh/despliegue -o BatchMode=yes root@187.127.21.114 "${{ inputs.ambiente }} ${GITHUB_SHA}" < paquete.tgz
