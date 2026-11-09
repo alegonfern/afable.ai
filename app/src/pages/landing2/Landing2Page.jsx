@@ -386,10 +386,9 @@ export default function Landing2Page() {
       {/* 3 · Un agente detrás de cada módulo (25-10-2026): la respuesta de Afable. */}
       <section className="lp-seccion lp-seccion--fog" id="agentes">
         <div className="lp-wrap">
-          <h2 className="lp-h2">Un agente detrás de cada módulo.</h2>
+          <h2 className="lp-h2">Un especialista en cada área.</h2>
           <p className="lp-lead">
-            Usted dirige. Cada agente trabaja en su módulo, le muestra lo que hace y le pide confirmación antes
-            de cambiar algo.
+            Ventas, Compras, Contabilidad, Finanzas: a cada uno le puede pedir que gestione cosas por usted.
           </p>
           <AgentesAnimados />
         </div>
