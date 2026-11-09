@@ -1,0 +1,48 @@
+name: Desplegar Afable
+description: Compila el frontend, arma el paquete (backend/ + dist/) y lo entrega al servidor.
+
+inputs:
+  ambiente:
+    description: produccion o staging
+    required: true
+  llave:
+    description: Llave privada SSH que solo puede correr /opt/afable/bin/desplegar.sh
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: "24"
+        cache: npm
+        cache-dependency-path: app/package-lock.json
+
+    - name: Compilar el frontend
+      shell: bash
+      working-directory: app
+      env:
+        VITE_API_URL: /api/v1
+      run: |
+        npm ci
+        npm run build
+
+    - name: Armar el paquete
+      shell: bash
+      run: |
+        mkdir -p paquete
+        git archive HEAD backend | tar -x -C paquete
+        cp -r app/build paquete/dist   # Vite compila en app/build (outDir)
+        tar -czf paquete.tgz -C paquete backend dist
+        ls -lh paquete.tgz
+
+    - name: Entregar al servidor
+      shell: bash
+      env:
+        LLAVE: ${{ inputs.llave }}
+      run: |
+        mkdir -p ~/.ssh
+        printf '%s\n' "$LLAVE" > ~/.ssh/despliegue
+        chmod 600 ~/.ssh/despliegue
+        echo "187.127.21.114 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIETuxPyzlImzCp9yhqyyhsqKdAy2kkj5/moDzTsRCr+f" > ~/.ssh/known_hosts
+        ssh -i ~/.ssh/despliegue -o BatchMode=yes root@187.127.21.114 "${{ inputs.ambiente }} ${GITHUB_SHA}" < paquete.tgz

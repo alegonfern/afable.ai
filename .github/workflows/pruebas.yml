@@ -1,5 +1,6 @@
 # Pruebas automáticas: corren en cada push a cualquier rama y en cada pull request.
 # Si algo falla, GitHub marca el commit en rojo. No despliega nada.
+# En main y staging no se disparan solas: las llama despliegue.yml (así no corren dos veces).
 #
 # No usa claves reales: los tests no las necesitan (las llamadas a IA, correo y pagos
 # están simuladas). SECRET_KEY de abajo solo existe para que Django arranque.
@@ -8,10 +9,12 @@ name: Pruebas
 
 on:
   push:
+    branches-ignore: [main, staging]
   pull_request:
+  workflow_call:
 
 concurrency:
-  group: pruebas-${{ github.ref }}
+  group: pruebas-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

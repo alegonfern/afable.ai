@@ -1,0 +1,47 @@
+# Despliegue automático, como Odoo.sh:
+#   rama staging → staging.afable.ai, al tiro, mientras las pruebas corren en paralelo (rápido para
+#                  desarrollo constante: un push y en ~3 minutos está arriba).
+#   rama main    → afable.ai, solo si las pruebas pasan. Respalda la base antes de migrar.
+#
+# El frontend se compila aquí; al servidor llega un paquete con backend/ y dist/ que recibe
+# /opt/afable/bin/desplegar.sh. La llave (secreto VPS_SSH_KEY) solo puede correr ese script.
+
+name: Despliegue
+
+on:
+  push:
+    branches: [main, staging]
+  workflow_dispatch:
+
+jobs:
+  pruebas:
+    uses: ./.github/workflows/pruebas.yml
+
+  staging:
+    name: Desplegar en staging
+    if: github.ref == 'refs/heads/staging'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency: { group: despliegue-staging, cancel-in-progress: true }
+    environment: { name: staging, url: https://staging.afable.ai }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/desplegar
+        with:
+          ambiente: staging
+          llave: ${{ secrets.VPS_SSH_KEY }}
+
+  produccion:
+    name: Desplegar en producción
+    if: github.ref == 'refs/heads/main'
+    needs: pruebas
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency: { group: despliegue-produccion, cancel-in-progress: false }
+    environment: { name: produccion, url: https://afable.ai }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/desplegar
+        with:
+          ambiente: produccion
+          llave: ${{ secrets.VPS_SSH_KEY }}
