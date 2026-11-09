@@ -6,6 +6,7 @@ import { motion, useScroll, useTransform, useReducedMotion } from 'framer-motion
  * Alexis): solo la parte de dentro del isotipo, sin la baldosa, y gira a medida que se baja la
  * página (una vuelta cada 800 px; vuelve al subir). Negro; pasa a blanco cuando queda sobre el pie
  * de página negro (`.lp2-pie`). No intercepta clics.
+ * (09-11-2026: comentario de prueba del despliegue automático a staging.)
  */
 const LADO = 24; // distancia al borde, en px
 
