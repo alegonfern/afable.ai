@@ -307,7 +307,7 @@ const PREGUNTAS = [
   },
   {
     p: '¿Qué puedo pedirle en el chat?',
-    r: 'Todo lo del ERP: facturar, registrar compras, conciliar el banco, revisar ventas y preparar el F29. Lo que cambia algo le pide confirmación.',
+    r: 'Las tareas administrativas: facturar, registrar compras, conciliar el banco, revisar ventas y preparar el F29. Lo que cambia algo le pide confirmación.',
   },
   {
     p: '¿Cómo cargo mis datos del SII?',
@@ -336,14 +336,14 @@ export default function Landing2Page() {
         fondo={fondos.hero}
         titulo={(
           <>
-            <h1 className="lp-h1">Opere su empresa<br /><span className="lp-degradado">con IA.</span></h1>
+            <h1 className="lp-h1">Agentes de IA para la<br /><span className="lp-degradado">gestión interna</span> de empresas.</h1>
           </>
         )}
         lado={(
           <>
             <p className="lp-lead">
-              Afable es una plataforma de agentes de IA que automatiza tareas administrativas para que su equipo se
-              centre en lo importante.
+              Afable es una plataforma de agentes de IA para empresas. Ayuda en las tareas administrativas y
+              repetitivas para que las personas se centren en lo importante.
             </p>
             <div className="lp-acciones">
               <Link to="/register" className="lp-btn lp-btn--grande lp-btn--principal">Crear cuenta</Link>
@@ -407,9 +407,9 @@ export default function Landing2Page() {
       <section className="lp-seccion lp-seccion--fog" id="modulos">
         <div className="lp-wrap lp-dos">
           <div>
-            <h2 className="lp-h2">Cada módulo: el ERP y su agente.</h2>
+            <h2 className="lp-h2">Cada módulo y su agente.</h2>
             <p className="lp-lead">
-              En <b>Módulo</b> trabaja como en cualquier ERP. En <b>Agente</b> conversa con el agente de ese
+              En <b>Módulo</b> trabaja el formulario del módulo. En <b>Agente</b> conversa con el agente de ese
               módulo y ve lo que hace solo.
             </p>
           </div>
@@ -479,7 +479,7 @@ export default function Landing2Page() {
           ya tiene (Afable Proyectos). Cada tarjeta lleva una pintura con un recorte de pantalla delante. */}
       <section className="lp-seccion" id="a-medida">
         <div className="lp-wrap">
-          <h2 className="lp-h2">Con su ERP o sin él.</h2>
+          <h2 className="lp-h2">Con su sistema actual o sin él.</h2>
           <div className="lp2-caminos">
             <div className="lp2-camino">
               <MarcoPintado fondo={fondos.afable} className="lp2-camino__imagen"><RecorteLoQueHizoHoy /></MarcoPintado>
@@ -544,7 +544,7 @@ export default function Landing2Page() {
       <footer className="lp-footer lp2-pie">
         <div className="lp-wrap lp2-pie__arriba">
           <div className="lp2-pie__cierre">
-            <h2 className="lp-h2">Opere su empresa<br /><span className="lp-degradado">con IA.</span></h2>
+            <h2 className="lp-h2">Agregue agentes a la <span className="lp-degradado">gestión diaria</span> de su empresa.</h2>
             <div className="lp-acciones">
               <Link to="/register" className="lp-btn lp-btn--grande lp2-pie__principal">Crear cuenta</Link>
               <Link to="/login" className="lp-btn lp-btn--grande lp2-pie__secundario">Ingresar</Link>
@@ -568,7 +568,7 @@ export default function Landing2Page() {
         </div>
         <div className="lp-wrap lp2-pie__base">
           <LogoNegro size={22} claro />
-          <span>El ERP que las personas quieren usar.</span>
+          <span>Agentes de IA para la gestión interna de empresas.</span>
           <span className="lp2-pie__anio">© 2026 Afable</span>
         </div>
         <div className="lp-wrap lp2-creditos">
