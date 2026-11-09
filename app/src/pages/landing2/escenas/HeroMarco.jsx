@@ -90,20 +90,31 @@ export const FONDOS = {
   perforadora: { src: perforadora, credito: 'Perforadora de tarjetas del censo (c. 1940). National Archives, EE. UU.', posicion: '50% 40%' },
   babbage: { src: babbage, credito: 'Máquina diferencial de Babbage, Harper’s New Monthly Magazine (1864)', posicion: '50% 30%' },
   central: { src: central, credito: 'Central telefónica de la policía de Nueva York (1909). Bain Collection, Library of Congress', posicion: '50% 40%' },
+  // Clips de la NASA en bucle (08-11-2026), en public/videos/: 8 s, 1280 px, sin audio. El póster
+  // .jpg es el primer cuadro y queda como imagen con "reducir movimiento".
+  'v-rover': { src: '/videos/rover.jpg', video: '/videos/rover.mp4', credito: 'Animación del descenso del Perseverance en Marte. NASA/JPL-Caltech', posicion: '50% 50%' },
+  'v-motor': { src: '/videos/motor.jpg', video: '/videos/motor.mp4', credito: 'Prueba de un motor RS-25 en el Stennis Space Center (2022). NASA', posicion: '50% 50%' },
+  'v-control': { src: '/videos/control.jpg', video: '/videos/control.mp4', credito: 'Control de misión durante el programa Apolo. NASA/JSC', posicion: '50% 50%' },
+  'v-espejo': { src: '/videos/espejo.jpg', video: '/videos/espejo.mp4', credito: 'El espejo primario del telescopio James Webb. NASA/Chris Gunn', posicion: '50% 50%' },
 };
 
-// Qué imagen va en cada lugar según el tema. Por defecto, ingeniería a color (01-11-2026);
-// `?tema=davinci`, `?tema=automatizacion` y `?tema=pinturas` dejan comparar con las series anteriores.
+// Filtro "sobrio" sobre los videos (elegido por Alexis el 08-11-2026 entre sobrio, cálido, b/n y oscuro):
+// baja la saturación para que el color no compita con la página en blanco y negro.
+const FILTRO_VIDEO = 'saturate(0.55) contrast(1.05) brightness(0.95)';
+
+// Qué va en cada lugar según el tema. Por defecto, videos de la NASA (08-11-2026); `?tema=ingenieria`
+// (las fotos a color del 01-11), `?tema=davinci`, `?tema=automatizacion` y `?tema=pinturas` dejan comparar.
 const TEMAS = {
   ingenieria: { hero: 'rover', escena: 'motor', chat: 'control', afable: 'espejo', proyectos: 'plataforma' },
   davinci: { hero: 'volante', escena: 'engranaje', chat: 'madrid', afable: 'carro', proyectos: 'tanques' },
   pinturas: { hero: 'oficina', escena: 'raboteurs', chat: 'bolsa', afable: 'hammershoi', proyectos: 'laminador' },
   automatizacion: { hero: 'tarjetas', escena: 'central', chat: 'perforadora', afable: 'babbage', proyectos: 'operadoras' },
+  video: { hero: 'v-rover', escena: 'v-motor', chat: 'v-control', afable: 'v-espejo', proyectos: 'plataforma' },
 };
 
 export function useFondos() {
   const tema = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('tema') : null;
-  return TEMAS[tema] || TEMAS.ingenieria;
+  return TEMAS[tema] || TEMAS.video;
 }
 
 // El movimiento de cámara de cada plano (30-10-2026): un acercamiento lento y un desplazamiento hacia donde
@@ -125,8 +136,14 @@ const CAMARA = {
 export function FondoPintado({ fondo }) {
   const f = FONDOS[fondo] || FONDOS.oficina;
   const c = CAMARA[fondo];
+  const reducido = useReducedMotion();
   const estilo = { objectPosition: f.posicion };
+  if (f.video) estilo.filter = FILTRO_VIDEO;
   if (c) Object.assign(estilo, { '--cam-x': c.x, '--cam-y': c.y, '--cam-s': c.s, '--cam-t': c.t });
+  // Video en bucle sin sonido; con "reducir movimiento" queda el primer cuadro como imagen.
+  if (f.video && !reducido) {
+    return <video className="hm-fondo" src={f.video} poster={f.src} autoPlay muted loop playsInline preload="metadata" aria-hidden="true" style={estilo} />;
+  }
   return <img className={`hm-fondo${c ? ' hm-fondo--camara' : ''}`} src={f.src} alt="" aria-hidden="true" loading="lazy" style={estilo} />;
 }
 
