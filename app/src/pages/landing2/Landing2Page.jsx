@@ -185,7 +185,7 @@ function cargarCal() {
   /* eslint-enable */
 }
 
-function AgendarDemo() {
+export function AgendarDemo() {
   useEffect(() => {
     cargarCal();
     const { Cal } = window;
@@ -209,7 +209,7 @@ function AgendarDemo() {
 // mismos SVG de bancos y servicios (bajados de sintropix.com/logos el 15-10-2026, en
 // `assets/logos/integraciones/`) con las mismas alturas, más SAP, Odoo, Drive y Excel, que
 // ya estaban en el proyecto.
-const LOGOS = [
+export const LOGOS = [
   { src: sapLogo, alt: 'SAP Business One', h: 22 },
   { src: odooLogo, alt: 'Odoo', h: 20 },
   { src: santanderLogo, alt: 'Banco Santander', h: 21 },
@@ -238,7 +238,7 @@ const LINKS = [
   { href: '#agendar',       label: 'Agendar demo' },
 ];
 
-function MenuPrincipal() {
+export function MenuPrincipal({ links = LINKS }) {
   const [conScroll, setConScroll] = useState(false);
   const [abierto, setAbierto] = useState(false);
 
@@ -257,7 +257,7 @@ function MenuPrincipal() {
         <Link to="/" className="lp-nav__marca" aria-label="Afable, inicio"><LogoNegro size={24} /></Link>
         <nav className={`lp-nav__menu${abierto ? ' is-open' : ''}`}>
           <div className="lp-nav__links">
-            {LINKS.map((l) => (
+            {links.map((l) => (
               <a key={l.href} href={l.href} className="lp-nav__link" onClick={() => setAbierto(false)}>
                 {l.label}
               </a>

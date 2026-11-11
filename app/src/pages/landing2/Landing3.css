@@ -1,0 +1,106 @@
+/* Lo propio de la landing principal (11-11-2026). El resto viene de la landing 2. */
+
+/* Tabla de contraste: ERP tradicional vs Afable. */
+.lp3-tabla {
+  margin-top: 40px; border: 1px solid var(--borde, rgba(11, 11, 15, 0.1)); border-radius: 16px;
+  background: #fff; overflow: hidden;
+}
+.lp3-tabla__fila {
+  display: grid; grid-template-columns: 1fr 1.3fr 1.3fr; gap: 16px; align-items: center;
+  padding: 18px 24px; border-top: 1px solid var(--borde, rgba(11, 11, 15, 0.08)); font-size: 16px;
+}
+.lp3-tabla__fila:first-child { border-top: 0; }
+.lp3-tabla__cab { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--texto-3); }
+.lp3-tabla__tema { font-weight: 600; }
+.lp3-tabla__antes { display: flex; align-items: center; gap: 8px; color: var(--texto-3); }
+.lp3-tabla__afable { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--texto); }
+.lp3-tabla__antes svg { flex: none; color: var(--texto-3); }
+.lp3-tabla__afable svg { flex: none; }
+
+/* El testimonio bajo las formas de uso. */
+.lp3-cita { margin: 48px auto 0; max-width: 760px; text-align: center; }
+.lp3-cita blockquote {
+  margin: 0; font-family: var(--font-display); font-size: 26px; font-style: italic; line-height: 1.35;
+  letter-spacing: -0.015em; color: var(--texto);
+}
+.lp3-cita figcaption { margin-top: 14px; font-size: 15px; color: var(--texto-3); }
+.lp3-cita figcaption b { color: var(--texto-2); font-weight: 600; }
+@media (max-width: 720px) { .lp3-cita blockquote { font-size: 21px; } }
+
+@media (max-width: 720px) {
+  .lp3-tabla__fila { grid-template-columns: 1fr 1fr; padding: 16px; font-size: 15px; }
+  .lp3-tabla__tema { grid-column: 1 / -1; }
+  .lp3-tabla__cab span:first-child { display: none; }
+}
+
+/* Las ilustraciones de colores en lugar de la foto con recorte, en "Dos formas de usar Afable". */
+.lp2-camino .lp3-ilus { padding: 0; overflow: hidden; }
+.lp3-ilus svg { display: block; width: 100%; height: 100%; }
+
+/* Tres formas en vez de dos: tres columnas en escritorio, una en móvil (regla de la landing 2). */
+@media (min-width: 981px) {
+  .lp3-caminos { grid-template-columns: repeat(3, 1fr); }
+  .lp3-caminos .lp2-camino__imagen { height: 240px; }
+  .lp3-caminos .lp2-camino__texto { padding: 28px 28px 32px; }
+}
+
+/* Cómo funciona: tres pasos en vez de cuatro. */
+@media (min-width: 768px) { .lp3-pasos { grid-template-columns: repeat(3, 1fr); } }
+
+/* Pasos animados: el paso encendido se ve pleno y su barra superior se llena durante su turno. */
+.lp3-paso { position: relative; transition: opacity .4s ease; opacity: .5; }
+.lp3-paso.is-activo { opacity: 1; }
+.lp3-paso__barra {
+  position: absolute; top: -1px; left: 0; right: 0; height: 3px; background: var(--texto);
+  transform: scaleX(0); transform-origin: left;
+}
+.lp3-paso.is-activo .lp3-paso__barra { animation: lp3-llenar var(--turno, 3.6s) linear forwards; }
+@keyframes lp3-llenar { to { transform: scaleX(1); } }
+.lp3-paso__dibujo {
+  height: 160px; margin-bottom: 18px; border-radius: 12px; background: var(--fog); overflow: hidden;
+  display: flex; align-items: center; justify-content: center; padding: 6px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lp3-paso { opacity: 1; }
+  .lp3-paso.is-activo .lp3-paso__barra { animation: none; }
+}
+
+/* Color (11-11-2026): el check de la columna Afable va en el verde de "listo" de la app (--ok). */
+.lp3-tabla__afable svg.lucide { color: var(--ok); }
+
+/* MCP: sección oscura, sin el degradado índigo de la landing 2; lo destacado va en cursiva blanca. */
+.lp3-oscuro .lp-h2 em { font-style: italic; color: #fff; }
+.lp3-oscuro .lp-medida__etiqueta { margin-bottom: 16px; }
+.lp3-mcp { display: flex; flex-direction: column; gap: 18px; }
+.lp3-mcp__ias { display: flex; flex-wrap: wrap; gap: 8px; }
+.lp3-mcp__ia {
+  padding: 7px 14px; border-radius: 999px; font-size: 14px; font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.18); color: rgba(255, 255, 255, 0.55);
+  transition: background .3s ease, color .3s ease, border-color .3s ease;
+}
+.lp3-mcp__ia.is-activa { background: #fff; color: var(--negro); border-color: #fff; }
+.lp3-mcp__puente { display: flex; align-items: center; gap: 10px; }
+.lp3-mcp__linea { position: relative; flex: 1; height: 1px; background: rgba(255, 255, 255, 0.25); }
+.lp3-mcp__linea i {
+  position: absolute; top: -3px; width: 7px; height: 7px; margin-left: -3px; border-radius: 50%; background: #fff;
+}
+.lp3-mcp__etiqueta {
+  padding: 4px 10px; border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  color: #fff; border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.lp3-mcp__puente svg { flex: none; background: #fff; border-radius: 10px; }
+.lp3-mcp__chat {
+  min-height: 190px; padding: 22px; border-radius: 16px;
+  background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.lp3-mcp__desde { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.5); margin-bottom: 14px; }
+.lp3-mcp__yo {
+  margin-left: auto; width: fit-content; max-width: 85%; padding: 10px 14px; border-radius: 14px 14px 4px 14px;
+  background: #fff; color: var(--negro); font-size: 15px;
+}
+.lp3-mcp__afable {
+  display: flex; align-items: flex-start; gap: 10px; margin-top: 12px; max-width: 90%; padding: 10px 14px;
+  border-radius: 14px 14px 14px 4px; background: rgba(255, 255, 255, 0.1); color: #fff; font-size: 15px; line-height: 1.45;
+}
+.lp3-mcp__afable svg { flex: none; margin-top: 3px; background: #fff; border-radius: 4px; }
+.lp3-mcp__nota { margin-top: 14px; font-size: 12px; color: rgba(255, 255, 255, 0.4); }

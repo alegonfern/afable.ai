@@ -16,6 +16,7 @@ import GoogleAuthCallback from './pages/GoogleAuthCallback';
 // Publico
 import LandingPage from './pages/LandingPage';
 import Landing2Page from './pages/landing2/Landing2Page';
+import Landing3Page from './pages/landing2/Landing3Page';
 import InvitationAcceptPage from './pages/InvitationAcceptPage';
 import PrivacidadPage from './pages/legal/PrivacidadPage';
 import TerminosPage from './pages/legal/TerminosPage';
@@ -78,10 +79,13 @@ export default function App() {
           <Route path="/reset-password"  element={<ResetPassword />} />
           <Route path="/auth/google/callback" element={<GoogleAuthCallback />} />
 
-          {/* 30-10-2026: la landing 2 (hero con marco, Leonardo, sobria) pasa a ser la principal; la
-              anterior queda de respaldo en /landing-backup. /landing2 lleva a la principal. */}
-          <Route path="/" element={<Landing2Page />} />
+          {/* 11-11-2026: la landing simplificada (el primer ERP agéntico; plataforma, API, agentes propios y
+              MCP) pasa a ser la principal. La landing 2 queda en /landing-anterior y la primera en
+              /landing-backup. /landing2 y /landing-nueva llevan a la principal. */}
+          <Route path="/" element={<Landing3Page />} />
+          <Route path="/landing-anterior" element={<Landing2Page />} />
           <Route path="/landing-backup" element={<LandingPage />} />
+          <Route path="/landing-nueva" element={<Navigate to="/" replace />} />
           <Route path="/landing2" element={<Navigate to="/" replace />} />
           <Route path="/invitacion/:token" element={<InvitationAcceptPage />} />
           <Route path="/privacidad" element={<PrivacidadPage />} />
