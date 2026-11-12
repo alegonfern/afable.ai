@@ -9,8 +9,9 @@ import {
   Send, Paperclip, AtSign, User, Sparkles,
   Database, FileText, TrendingUp, BarChart2, Users,
   Copy, ThumbsUp, ChevronDown, AlertCircle, RefreshCw,
-  ArrowUpRight, X, Plug, GitBranch, Pencil, ArrowUp,
+  ArrowUpRight, X, Plug, GitBranch, Pencil, ArrowUp, Mic, Square,
 } from 'lucide-react';
+import { hayDictado, useDictado, leerEnVoz, callar } from '../services/voz';
 import { useNavigate, useLocation, useOutletContext } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { AfableMark } from '../components/Logo';
@@ -432,6 +433,8 @@ export default function ChatPage() {
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  // Si la pregunta se dictó, la respuesta se lee en voz alta al terminar.
+  const responderEnVoz = useRef(false);
   const messagesBoxRef = useRef(null);
   const thinkIntervalRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -532,6 +535,7 @@ export default function ChatPage() {
   const sendMessage = useCallback(async (text) => {
     const msg = (text || input).trim();
     if (!msg || loading) return;
+    callar();
     setInput('');
     pedirPermisoDeAvisos();
 
@@ -654,6 +658,10 @@ export default function ChatPage() {
                 }
                 return m;
               }));
+              if (responderEnVoz.current) {
+                responderEnVoz.current = false;
+                leerEnVoz(fallback || accumulated);
+              }
               if (data.artefactos?.length) setRefrescoDoc((n) => n + 1);
               setRefrescoPanel((n) => n + 1);
               const conversacion = convActual;
@@ -756,6 +764,12 @@ export default function ChatPage() {
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
+
+  // Dictado: lo que se va entendiendo aparece en el cuadro y, al dejar de hablar, se envía.
+  const dictado = useDictado({
+    alCambiar: (texto) => setInput(texto),
+    alTerminar: (texto) => { responderEnVoz.current = true; sendMessage(texto); },
+  });
 
   return (
     <Box sx={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
@@ -883,6 +897,22 @@ export default function ChatPage() {
                   <Paperclip size={15} />
                 </IconButton>
               </Tooltip>
+              {hayDictado && (
+                <Tooltip title={dictado.escuchando ? 'Detener' : 'Hablar con Afable'}>
+                  <span>
+                    <IconButton size="small" disabled={loading}
+                      onClick={dictado.escuchando ? dictado.detener : dictado.empezar}
+                      aria-label={dictado.escuchando ? 'Detener el dictado' : 'Hablar con Afable'}
+                      sx={dictado.escuchando
+                        ? { color: '#b42318', bgcolor: 'rgba(180,35,24,0.08)', p: 0.5,
+                          animation: 'afPulsoVoz 1.2s ease-in-out infinite',
+                          '@keyframes afPulsoVoz': { '0%,100%': { boxShadow: '0 0 0 0 rgba(180,35,24,0.25)' }, '50%': { boxShadow: '0 0 0 5px rgba(180,35,24,0)' } } }
+                        : { color: 'text.disabled', '&:hover': { color: 'text.secondary' }, p: 0.5 }}>
+                      {dictado.escuchando ? <Square size={13} fill="currentColor" /> : <Mic size={15} />}
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              )}
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
 
