@@ -6,8 +6,9 @@ import { Volume2, VolumeX, X } from 'lucide-react';
  * Video de bienvenida de la landing (12-11-2026, "Bienvenida Afable v2 (con música)", Fernanda).
  * Aparece como modal al entrar a afable.ai, una sola vez por navegador (se recuerda en localStorage;
  * `?bienvenida` lo muestra siempre, para revisarlo). Se cierra con la X, con Escape o tocando fuera.
- * Los navegadores no dejan reproducir con sonido sin un clic: parte en silencio con un botón grande
- * para activar el sonido; al activarlo vuelve al inicio.
+ * Intenta partir con sonido. Si el navegador lo bloquea (sin un clic previo en el sitio), parte en
+ * silencio y el sonido se activa solo al primer clic, toque o tecla, volviendo al inicio; el botón
+ * "Ver con sonido" queda visible mientras tanto.
  */
 
 const CLAVE = 'afable-bienvenida-vista';
@@ -55,6 +56,32 @@ export default function BienvenidaModal() {
     };
   }, [abierto]);
 
+  // Al abrir intenta reproducir CON sonido. Si el navegador lo bloquea (pasa en la primera visita),
+  // parte en silencio y el sonido se activa solo al primer clic, toque o tecla en la página.
+  useEffect(() => {
+    if (!abierto) return undefined;
+    const v = video.current;
+    if (!v) return undefined;
+    let quitar = () => {};
+    v.muted = false;
+    v.play().then(() => setSilencio(false)).catch(() => {
+      v.muted = true;
+      v.play().catch(() => {});
+      setSilencio(true);
+      const alPrimerGesto = () => {
+        quitar();
+        v.muted = false;
+        v.currentTime = 0;
+        v.play().catch(() => {});
+        setSilencio(false);
+      };
+      const eventos = ['pointerdown', 'keydown', 'touchstart'];
+      eventos.forEach((e) => document.addEventListener(e, alPrimerGesto, { once: true, capture: true }));
+      quitar = () => eventos.forEach((e) => document.removeEventListener(e, alPrimerGesto, { capture: true }));
+    });
+    return () => quitar();
+  }, [abierto]);
+
   const activarSonido = () => {
     const v = video.current;
     if (!v) return;
@@ -81,7 +108,7 @@ export default function BienvenidaModal() {
             initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8 }}
             transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}>
             <video ref={video} className="lp3-bienvenida__video" src="/videos/bienvenida.mp4" poster="/videos/bienvenida.jpg"
-              autoPlay muted playsInline controls={!silencio} preload="auto" />
+              playsInline controls={!silencio} preload="auto" />
             {silencio && (
               <button type="button" className="lp3-bienvenida__sonido" onClick={activarSonido}>
                 <Volume2 size={18} /> Ver con sonido
