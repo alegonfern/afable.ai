@@ -6,6 +6,7 @@ import { ConApps, ConErp, SinSistema } from './escenas/Ilustraciones';
 import { AgentesAnimados } from './escenas/EscenasAgentes';
 import PasosAnimados from './escenas/PasosAnimados';
 import McpAnimado from './escenas/McpAnimado';
+import BienvenidaModal from './escenas/BienvenidaModal';
 import LogoNegro from './escenas/LogoNegro';
 import AsteriscoGiratorio from './escenas/AsteriscoGiratorio';
 import { AgendarDemo, LOGOS, MenuPrincipal } from './Landing2Page';
@@ -73,6 +74,7 @@ export default function Landing3Page() {
     <div className="lp lp2 lp3">
       <MenuPrincipal links={LINKS} />
       <AsteriscoGiratorio />
+      <BienvenidaModal />
 
       {/* 1 · Hero: titular, el primer ERP agéntico y las dos puertas de entrada. */}
       <HeroMarco
